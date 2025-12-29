@@ -124,12 +124,14 @@ source(file.path(base_path, "validation/validation.R"))
 # Dependencies: core/utilities.R, validation/validation.R
 #
 # Contents:
-#   callspernight.R  - calculate_recording_hours(), generate_calls_per_night_template(),
+#   callspernight.R    - calculate_recording_hours(), generate_calls_per_night_template(),
 #                        apply_schedule(), save_callspernight_with_version()
 #   detector_mapping.R - load_detector_mapping(), apply_detector_names(),
 #                        generate_mapping_template()
-#   summarization.R    - calculate_coefficient_of_variation(), 
-#                        create_effort_summary_table(), save_master_with_timestamp()
+#   summarization.R    - create_detector_activity_summary(), create_study_summary(),
+#                        calculate_variance_components(), create_species_summary_by_detector(),
+#                        create_species_accumulation_summary(), create_hourly_activity_summary(),
+#                        calculate_coefficient_of_variation(), create_effort_summary_table()
 # -----------------------------------------------------------------------------
 
 source(file.path(base_path, "analysis/callspernight.R"))
@@ -140,16 +142,20 @@ source(file.path(base_path, "analysis/summarization.R"))
 # =============================================================================
 # LAYER 6: OUTPUT
 # =============================================================================
-# Visualizations and report generation helpers.
+# Visualizations, GT tables, and report generation helpers.
 #
 # Dependencies: core/utilities.R, analysis/summarization.R
 #
 # Contents:
 #   visualization.R - plot_recording_effort_heatmap(), plot_activity_over_time(),
 #                     plot_correlation_heatmap(), plot_synchrony(), etc.
+#   tables.R        - format_detector_summary_gt(), format_species_summary_gt(),
+#                     format_study_summary_gt(), format_hourly_summary_gt(),
+#                     save_gt_table()
 # -----------------------------------------------------------------------------
 
 source(file.path(base_path, "output/visualization.R"))
+source(file.path(base_path, "output/tables.R"))
 
 
 # =============================================================================
@@ -163,13 +169,15 @@ message("
 
  Layer 1: core/
           ├── utilities.R
-          └── schema_detection.R
+          ├── schema_detection.R
+          └── config.R
 
  Layer 2: ingestion/
           └── ingestion.R
 
  Layer 3: standardization/
-          └── standardization.R
+          ├── standardization.R
+          └── datetime_conversion.R
 
  Layer 4: validation/
           └── validation.R
@@ -180,7 +188,8 @@ message("
           └── summarization.R
 
  Layer 6: output/
-          └── visualization.R
+          ├── visualization.R
+          └── tables.R
 
 ================================================================================
  Ready. Run your workflow scripts.

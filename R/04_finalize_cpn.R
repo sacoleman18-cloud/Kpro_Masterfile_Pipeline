@@ -198,9 +198,13 @@ source("R/functions/load_all.R")
 # Load required libraries
 # ------------------------------------------------------------------------------
 
-library(tidyverse)
-library(lubridate)
-library(hms)
+library(dplyr)      # For %>%, mutate(), select(), filter(), etc.
+library(tidyr)      # For replace_na(), pivot_wider(), etc.
+library(readr)      # For read_csv(), write_csv()
+library(lubridate)  # For date/time parsing (mdy_hms, mdy_hm, etc.)
+library(hms)        # For time parsing (as_hms)
+library(here)       # For path management
+library(stringr)    # For string operations (str_extract, etc.)
 
 # ------------------------------------------------------------------------------
 # Initialize logging
@@ -926,41 +930,73 @@ message("\n┌──────────────────────
 message("│          STAGE 4.5: Validate & Save                           │")
 message("└────────────────────────────────────────────────────────────────┘\n")
 
-# Reorder columns (no detector_id in user-facing output)
+# Reorder columns for final dataset
+message("Finalizing column structure...")
 calls_per_night_final <- calls_per_night_final %>%
-  select(Detector, Night, CallsPerNight, 
-         RecordingHours, StartDateTime, EndDateTime, Status, CallsPerHour)
+  select(Detector, Night, CallsPerNight, RecordingHours, 
+         StartDateTime, EndDateTime, Status, CallsPerHour)
 
-# Validate master schema
-message("Validating master schema...")
+# Validate required columns exist
+message("\nValidating CallsPerNight structure...")
+required_cols <- c("Detector", "Night", "CallsPerNight", "RecordingHours", 
+                   "StartDateTime", "EndDateTime", "Status", "CallsPerHour")
+missing_cols <- setdiff(required_cols, names(calls_per_night_final))
 
-# Note: enforce_master_schema expects DetectorID and detector_id
-# Add them back temporarily for validation, then remove
-detector_id_mapping <- kpro_master %>%
-  select(Detector, detector_id) %>%
-  distinct()
+if (length(missing_cols) > 0) {
+  stop(sprintf("Final dataset missing required columns: %s", 
+               paste(missing_cols, collapse = ", ")))
+}
 
-calls_per_night_validated <- calls_per_night_final %>%
-  left_join(detector_id_mapping, by = "Detector") %>%
+message("  ✓ All required columns present")
+
+# Enforce column types
+calls_per_night_final <- calls_per_night_final %>%
   mutate(
-    DetectorID = detector_id,
-    DateTime = as.POSIXct(paste(Night, "12:00:00"), tz = "UTC")
-  ) %>%
-  select(Detector, DetectorID, Night, DateTime, CallsPerNight, Status, everything()) %>%
-  select(-detector_id)  # Remove lowercase version
+    Detector = as.character(Detector),
+    Night = as.Date(Night),
+    CallsPerNight = as.numeric(CallsPerNight),
+    RecordingHours = as.numeric(RecordingHours),
+    StartDateTime = as.character(StartDateTime),
+    EndDateTime = as.character(EndDateTime),
+    Status = as.character(Status),
+    CallsPerHour = as.numeric(CallsPerHour)
+  )
 
-# Apply validation
-calls_per_night_validated <- enforce_master_schema(calls_per_night_validated)
+message("  ✓ Column types enforced")
 
-message("✓ Schema validation passed")
+# Validate data quality with validate_calls_per_night()
+message("\nValidating CallsPerNight data quality...")
+
+# Check for problematic CallsPerNight values
+problematic <- validate_calls_per_night(calls_per_night_final, max_calls = 10000)
+
+if (nrow(problematic) > 0) {
+  warning(sprintf(
+    "%d row(s) have unusual CallsPerNight values (NA, negative, or > 10,000)",
+    nrow(problematic)
+  ))
+  
+  message("\n  ⚠️ Unusual values detected:")
+  message(sprintf("    Rows with NA CallsPerNight: %d", 
+                  sum(is.na(problematic$CallsPerNight))))
+  message(sprintf("    Rows with negative CallsPerNight: %d", 
+                  sum(problematic$CallsPerNight < 0, na.rm = TRUE)))
+  message(sprintf("    Rows with CallsPerNight > 10,000: %d", 
+                  sum(problematic$CallsPerNight > 10000, na.rm = TRUE)))
+  message("    These rows are KEPT in the dataset but may need review")
+} else {
+  message("  ✓ All CallsPerNight values within normal range")
+}
+
+message("\n✓ Data validation passed")
 
 # Save with auto-incrementing version
 message("\nSaving final CallsPerNight dataset...")
 
 final_file <- save_callspernight_with_version(
-  data = calls_per_night_validated,
+  data = calls_per_night_final,
   base_name = "CallsPerNight_final",
-  output_dir = "outputs"
+  output_dir = "results/csv"  # Final deliverable goes to results/
 )
 
 message(sprintf("✓ Final file saved: %s", basename(final_file)))
@@ -983,10 +1019,10 @@ if (total_edits > 0) {
 message(sprintf("  ✓ Final dataset: %s", basename(final_file)))
 
 message("\nDataset summary:")
-message(sprintf("  Detectors: %d", length(unique(calls_per_night_validated$Detector))))
-message(sprintf("  Nights: %d", length(unique(calls_per_night_validated$Night))))
+message(sprintf("  Detectors: %d", length(unique(calls_per_night_final$Detector))))
+message(sprintf("  Nights: %d", length(unique(calls_per_night_final$Night))))
 message(sprintf("  Total rows: %s", 
-                format(nrow(calls_per_night_validated), big.mark = ",")))
+                format(nrow(calls_per_night_final), big.mark = ",")))
 
 # Status breakdown
 message("\nRecording status:")
