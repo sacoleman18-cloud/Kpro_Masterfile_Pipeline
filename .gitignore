@@ -1,0 +1,148 @@
+# ==============================================================================
+# R PROJECT GITIGNORE - KPro Masterfile Pipeline (Workflow 04)
+# ==============================================================================
+
+# R ENVIRONMENT & IDE
+# ==============================================================================
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+.Rproj.user/*
+*.Rproj
+.RProject
+
+# RSTUDIO SPECIFIC
+.rstudio/
+rsconnect/
+
+# ==============================================================================
+# DATA FILES - KEEP PERSONAL DATA PRIVATE
+# ==============================================================================
+
+# Raw input data (your personal data - DO NOT COMMIT)
+# Keep folder structure, but ignore all contents
+data/raw/*
+!data/raw/.gitkeep
+
+# Sample data IS OK to commit (for reproducibility)
+# data/sample_data/  <-- INTENTIONALLY NOT IGNORED
+
+# ==============================================================================
+# OUTPUTS & RESULTS (Generated, Versioned Separately)
+# ==============================================================================
+
+# CSV outputs (versioned with timestamps/v#)
+outputs/
+results/
+results/csv/
+
+# Plots & visualizations (regenerated)
+figures/
+plots/
+graphics/
+
+# Reports & documents (generated from Quarto/RMarkdown)
+reports/
+*.html
+*.pdf
+
+# ==============================================================================
+# LOGS & DIAGNOSTIC FILES
+# ==============================================================================
+
+logs/
+logs/*.txt
+*.log
+audit_results.txt
+pipeline_log.txt
+error_log.txt
+
+# ==============================================================================
+# TEMPORARY & BACKUP FILES
+# ==============================================================================
+
+*.tmp
+*.bak
+*.backup
+*~
+*.swp
+*.swo
+*.swn
+*.[0-9]
+
+# CSV backups (from editing)
+*.csv~
+*.csv.bak
+
+# Partial/incomplete files
+*.partial
+*.incomplete
+
+# ==============================================================================
+# OS-SPECIFIC FILES
+# ==============================================================================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ==============================================================================
+# IDE & EDITOR ARTIFACTS
+# ==============================================================================
+
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vim/
+.emacs.d/
+
+# ==============================================================================
+# COMPILED & BINARY FILES (if any R packages built locally)
+# ==============================================================================
+
+*.o
+*.so
+*.dylib
+*.dll
+
+# ==============================================================================
+# NODE & DEPENDENCY MANAGEMENT (if using Quarto/JS)
+# ==============================================================================
+
+node_modules/
+package-lock.json
+
+# ==============================================================================
+# ENVIRONMENT FILES (Secrets, Credentials)
+# ==============================================================================
+
+.env
+.env.local
+.env.*.local
+secrets/
+credentials/
+
+# ==============================================================================
+# GIT & VERSION CONTROL
+# ==============================================================================
+
+.git/
+.gitignore~
+
+# ==============================================================================
+# PYTHON (if using reticulate or external Python)
+# ==============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/

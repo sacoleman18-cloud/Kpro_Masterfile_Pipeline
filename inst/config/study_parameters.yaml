@@ -1,0 +1,26 @@
+config_version: 1
+study_parameters:
+  study_name: SchmeeckleBatStudy
+  start_date: '2025-10-04'
+  end_date: '2025-10-31'
+  detector_mapping:
+    245AAA0666BC08AE: LPI
+    245AAA0666BC1507: LPE
+    247475035FDF1A0D: SMI
+    247AA5015FDF19F3: SME
+    248D9B025FDF0B90: MCO
+    249C600164F3532A: SMO
+    24A04F085FDF0C84: MCI
+    24A04F085FDF19C0: MCE
+    24E144036484A442: LPO
+  timezone: America/Chicago
+  external_data_sources: F:/Schmeeckle analyzed 102725
+processing_options:
+  advanced_scheduling: no
+  recording_start: '18:00:00'
+  recording_end: '07:00:00'
+  intended_hours: 13
+output_preferences:
+  master_filename: final_master.csv
+  callspernight_filename: CallsPerNight_final.csv
+  save_directory: results/csv
