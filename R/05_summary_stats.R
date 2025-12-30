@@ -3,204 +3,150 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Generate comprehensive descriptive summary statistics and formatted tables
-# from CallsPerNight final data and Master file. Creates publication-ready
-# GT tables for detector performance, species composition, and temporal
-# activity patterns.
+# Generate comprehensive descriptive summary statistics for bat acoustic data.
+# Creates detector-level summaries, study-wide overviews, species composition,
+# temporal patterns, and publication-ready GT tables.
+#
+# This workflow is DESCRIPTIVE ONLY - no statistical inference or hypothesis
+# testing. All outputs are meant for data exploration and reporting.
 #
 # WORKFLOW POSITION
 # -----------------
 # This is Workflow 05 in the processing pipeline:
-#   01_ingest_raw_data.R       → Load & intro-standardize raw CSVs
-#   02_standardize.R           → Transform to master schema
+#   01_ingest_raw_data.R  → Load & intro-standardize raw CSVs
+#   02_standardize.R      → Transform to master schema
+#   [OPTIONAL: Manual ID in Kaleidoscope]
 #   03_generate_cpn_template.R → Generate template for editing
 #   [USER: Edit template in Excel]
-#   04_finalize_cpn.R          → Process edited template
-#   05_summary_stats.R         → [THIS SCRIPT] Generate summary statistics
+#   04_finalize_cpn.R     → Process edited template
+#   05_summary_stats.R    → [THIS SCRIPT] Generate summary statistics
+#   06_generate_report.R  → Create final report (if applicable)
 #
 # INPUTS
 # ------
-# Required Files:
-#   - outputs/04_CallsPerNight_Final_vX.csv (most recent version)
-#   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv (most recent)
-#
-# Optional (from memory if running sequentially):
+# In Memory (preferred):
 #   - calls_per_night_final (from Workflow 04)
-#   - kpro_master (from Workflow 02)
+#   - kpro_master (from Workflow 02/03)
 #
-# DATA SOURCES AND THEIR PURPOSES
-# --------------------------------
-# **CallsPerNight_final** (aggregated, one row per detector-night):
-#   - Detector activity metrics (calls per hour, variability)
-#   - Recording effort metrics (hours, success rate)
-#   - Variance decomposition (between/within detector)
-#
-# **Master file** (row-level, one row per call):
-#   - Species composition and proportions
-#   - Species accumulation over time
-#   - Hourly activity profiles
+# OR Checkpoints (fallback):
+#   - results/csv/CallsPerNight_final_vX.csv (most recent version)
+#   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv
 #
 # PROCESSING STAGES
 # -----------------
 # Stage 5.1: Load Data
-#   - Locate and load most recent CallsPerNight_final
-#   - Locate and load most recent Master file
-#   - Validate required columns present
+#   - Loads CallsPerNight_final (from memory or checkpoint)
+#   - Loads Master file (from memory or checkpoint)
+#   - Validates required columns
+#   - Type coercion for Date/numeric columns
 #
 # Stage 5.2: Detector Activity Summary
-#   - Create comprehensive per-detector summary
-#   - Effort, activity, and variability metrics
+#   - Creates comprehensive per-detector summary
+#   - Effort, activity, variability metrics
 #
 # Stage 5.3: Study-Wide Summary
-#   - Create single-row study overview
+#   - Single-row study overview
 #   - Total calls, hours, detector-nights
+#   - Mean CPH, CV, success rates
 #
 # Stage 5.4: Variance Components
-#   - Decompose variance into between/within detector
-#   - Generate plain-English interpretation
+#   - Between/within detector variance decomposition
+#   - Plain-English interpretation
 #
 # Stage 5.5: Species Composition
-#   - Summarize species counts per detector
-#   - Calculate proportions within detector and across study
+#   - Species counts per detector
+#   - Top species identification
 #
 # Stage 5.6: Species Accumulation
-#   - Track cumulative species richness over study period
-#   - Identify when new species were first detected
+#   - Cumulative species richness over time
+#   - Plateau detection
 #
 # Stage 5.7: Hourly Activity Profiles
-#   - Create overall study hourly profile
-#   - Create per-detector hourly profiles
-#   - Identify peak activity hours
+#   - Study-wide hourly profile
+#   - Per-detector hourly profiles
+#   - Peak hour identification
 #
 # Stage 5.8: Format GT Tables
-#   - Apply consistent styling to all summary tibbles
-#   - Create publication-ready tables
+#   - Applies consistent styling to all summaries
+#   - Creates publication-ready tables
 #
 # Stage 5.9: Export Outputs
-#   - Save GT tables as PNG (standalone viewing)
-#   - Save GT tables as HTML (Quarto embedding)
-#   - Save summary tibbles as RDS (programmatic access)
-#   - Save all summaries to Excel workbook
+#   - PNG export (if webshot2 installed)
+#   - HTML export (always)
+#   - Excel workbook (if openxlsx installed)
+#   - RDS file (always)
 #
 # Stage 5.10: Summary Report
-#   - Log processing summary
-#   - Report key findings
+#   - Console output with study overview
+#   - Lists all outputs created
 #
 # OUTPUTS
 # -------
 # Files Created:
-#   results/figures/
-#     - detector_activity_summary.png
-#     - study_summary.png
-#     - species_composition.png
-#     - hourly_activity.png
-#
-#   results/tables/
-#     - summary_statistics_YYYYMMDD.xlsx (multi-sheet workbook)
-#
-#   results/rds/
-#     - summary_data_YYYYMMDD.rds (list of all summary tibbles)
-#
-#   logs/
-#     - workflow_log_YYYYMMDD.txt (processing log)
+#   - results/figures/detector_summary_YYYYMMDD.png (GT table)
+#   - results/figures/detector_summary_YYYYMMDD.html (GT table)
+#   - results/figures/study_summary_YYYYMMDD.png (GT table)
+#   - results/figures/study_summary_YYYYMMDD.html (GT table)
+#   - results/tables/summary_statistics_YYYYMMDD.xlsx (multi-sheet workbook)
+#   - results/rds/summary_data_YYYYMMDD.rds (all summaries as list)
+#   - logs/workflow_log_YYYYMMDD.txt (processing log)
 #
 # In Memory:
 #   - detector_summary (tibble)
 #   - study_summary (tibble)
-#   - variance_components (tibble)
+#   - variance_components (list)
 #   - species_summary (tibble)
 #   - species_accumulation (tibble)
 #   - hourly_summary_overall (tibble)
 #   - hourly_summary_by_detector (tibble)
-#   - all_summaries (list of all above)
-#
-# SUMMARY METRICS PRODUCED
-# -------------------------
-# **Detector Activity Summary:**
-#   - n_nights, total_hours, mean_hours
-#   - pct_success, pct_partial, pct_fail
-#   - total_calls, mean_cpn, mean_cph, median_cph
-#   - sd_cph, cv_pct, pct_zero
-#   - first_night, last_night
-#
-# **Study-Wide Summary:**
-#   - n_detectors, n_detector_nights
-#   - study_start, study_end, study_duration_days
-#   - total_calls, total_hours
-#   - overall_mean_cph, overall_cv_pct
-#   - pct_success, pct_partial, pct_fail
-#
-# **Variance Components:**
-#   - var_between, var_within, var_total
-#   - pct_between, pct_within
-#   - interpretation (plain English)
-#
-# **Species Summary:**
-#   - Detector, species, n_calls
-#   - pct_of_detector, pct_of_species
-#
-# **Species Accumulation:**
-#   - Night, night_number
-#   - new_species, cumulative_species
-#   - species_list (new species names)
-#
-# **Hourly Activity:**
-#   - Hour (0-23), n_calls, pct_of_total
-#   - Optional: by Detector
+#   - gt_tables (list of GT objects)
+#   - all_summaries (master list)
 #
 # PERFORMANCE EXPECTATIONS
 # -------------------------
 # Typical bat acoustic datasets:
 #
-# Small study (3 detectors, 30 nights, 5k calls):
+# Small study (3 detectors, 30 nights):
 #   - Processing: < 30 seconds
 #
-# Medium study (10 detectors, 90 nights, 50k calls):
+# Medium study (10 detectors, 90 nights):
+#   - Processing: < 1 minute
+#
+# Large study (20+ detectors, 180 nights):
 #   - Processing: 1-2 minutes
 #
-# Large study (20+ detectors, 180 nights, 200k+ calls):
-#   - Processing: 2-5 minutes
-#   - Species accumulation may be slower for very large datasets
+# Note: GT table rendering may take additional time
 #
 # DEPENDENCIES
 # ------------
-# R Packages:
+# R Packages (required):
 #   - tidyverse (dplyr, readr, tidyr, purrr)
-#   - lubridate (date/time extraction)
 #   - gt (table formatting)
-#   - webshot2 (PNG export for GT tables)
-#   - openxlsx (Excel export)
+#
+# R Packages (optional):
+#   - webshot2 (for PNG export)
+#   - openxlsx (for Excel export)
 #
 # Custom Functions (via load_all.R):
-#   - analysis/summarization.R:
-#       create_detector_activity_summary()
-#       create_study_summary()
-#       calculate_variance_components()
-#       create_species_summary_by_detector()
-#       create_species_accumulation_summary()
-#       create_hourly_activity_summary()
-#
-#   - output/tables.R:
-#       format_detector_summary_gt()
-#       format_species_summary_gt()
-#       format_study_summary_gt()
-#       format_hourly_summary_gt()
-#       save_gt_table()
-#
-#   - core/utilities.R:
-#       log_message()
-#       safe_read_csv()
+#   - core/utilities.R: log_message, load_cpn_final, load_master_data
+#   - validation/validation.R: validate_cpn_data, validate_master_data,
+#                              assert_directory_exists
+#   - analysis/summarization.R: create_detector_activity_summary,
+#                               create_study_summary, calculate_variance_components,
+#                               create_species_summary_by_detector,
+#                               create_species_accumulation_summary,
+#                               create_hourly_activity_summary
+#   - output/tables.R: format_detector_summary_gt, format_study_summary_gt,
+#                      format_species_summary_gt, format_hourly_summary_gt,
+#                      save_gt_table
 #
 # TROUBLESHOOTING
 # ---------------
 # Issue: "CallsPerNight_final not found"
-# Fix: Run 04_finalize_cpn.R first to generate final dataset
+# Fix: Run 04_finalize_cpn.R first
 #
-# Issue: "Master file not found"
-# Fix: Run 02_standardize.R first to generate master file
-#
-# Issue: "No identified species found"
-# Fix: Check that auto_id column contains valid species codes (not all NoID)
+# Issue: "kpro_master not found"
+# Fix: Run 02_standardize.R first
 #
 # Issue: "PNG export failed"
 # Fix: Install webshot2 package: install.packages("webshot2")
@@ -210,22 +156,13 @@
 #
 # USAGE EXAMPLES
 # --------------
-# # Run after completing Workflow 04:
+# # Run after Workflow 04:
 # source("R/workflows/05_summary_stats.R")
 #
 # # Inspect results:
-# print(detector_summary)
-# print(study_summary)
-# print(variance_components$interpretation)
-#
-# # View species composition:
-# species_summary %>%
-#   group_by(Detector) %>%
-#   slice_max(n_calls, n = 3)
-#
-# # Find peak activity hour:
-# hourly_summary_overall %>%
-#   slice_max(n_calls, n = 1)
+# detector_summary
+# study_summary
+# gt_tables$detector_summary
 #
 # # Access all summaries:
 # names(all_summaries)
@@ -233,22 +170,16 @@
 # MAINTAINER NOTES
 # ----------------
 # - ASCII boxes: Single-line (┌─┐) for all stages
-# - Stage numbering: 5.1 - 5.10 (10 stages total)
-# - All statistics are DESCRIPTIVE only (no inference)
-# - Species filtering excludes NoID, UNKNOWN, NA, blank
-# - GT tables require webshot2 for PNG export
-# - Excel workbook has one sheet per summary type
-# - RDS file contains list for easy Quarto integration
+# - Stage numbering: 5.1 - 5.10
+# - All summaries are DESCRIPTIVE only (no inference)
+# - GT tables use consistent white background styling
+# - Optional packages gracefully degrade if not installed
+# - RDS output always created for programmatic access
 #
 # CHANGELOG
 # ---------
-# 2024-12-29: Initial version with comprehensive summary statistics
+# 2024-12-29: Initial version following CODING_STANDARDS
 #
-# ==============================================================================
-
-
-# ==============================================================================
-# SETUP
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -261,51 +192,35 @@ source("R/functions/load_all.R")
 # Load required libraries
 # ------------------------------------------------------------------------------
 
-library(dplyr)
-library(tidyr)
-library(readr)
-library(lubridate)
-library(stringr)
-library(here)
+library(tidyverse)
 library(gt)
 
-# Optional: Check for export packages
+# Check for optional packages
 has_webshot2 <- requireNamespace("webshot2", quietly = TRUE)
 has_openxlsx <- requireNamespace("openxlsx", quietly = TRUE)
 
 if (!has_webshot2) {
-  warning("Package 'webshot2' not installed - PNG export will be skipped")
+  message("Note: webshot2 not installed - PNG export will be skipped")
+  message("      Install with: install.packages('webshot2')")
 }
 
 if (!has_openxlsx) {
-  warning("Package 'openxlsx' not installed - Excel export will be skipped")
+  message("Note: openxlsx not installed - Excel export will be skipped")
+  message("      Install with: install.packages('openxlsx')")
 }
 
 # ------------------------------------------------------------------------------
 # Initialize logging
 # ------------------------------------------------------------------------------
 
-log_message("=== WORKFLOW 05: Summary Statistics ===")
-
-# ------------------------------------------------------------------------------
-# Create output directories
-# ------------------------------------------------------------------------------
-
-# Ensure all output directories exist
-dir.create("results/figures", recursive = TRUE, showWarnings = FALSE)
-dir.create("results/tables", recursive = TRUE, showWarnings = FALSE)
-dir.create("results/rds", recursive = TRUE, showWarnings = FALSE)
-
-# Generate timestamp for output files
-output_timestamp <- format(Sys.time(), "%Y%m%d")
-
+log_message("=== WORKFLOW 05: Generate Summary Statistics ===")
 
 # ==============================================================================
 # STAGE 5.1: LOAD DATA
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│              STAGE 5.1: Load Data                               │")
+message("│              STAGE 5.1: Load Data                              │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # ------------------------------------------------------------------------------
@@ -314,53 +229,13 @@ message("└──────────────────────�
 
 message("Loading CallsPerNight final data...")
 
-# Check if in memory first
-if (!exists("calls_per_night_final")) {
-  
-  # Look for most recent final file
-  cpn_files <- list.files("outputs",
-                          pattern = "^04_CallsPerNight_Final_v.*\\.csv$",
-                          full.names = TRUE)
-  
-  if (length(cpn_files) == 0) {
-    stop("No CallsPerNight_final files found. Please run 04_finalize_cpn.R first.")
-  }
-  
-  # Get most recent by modification time
-  cpn_file <- cpn_files[order(file.mtime(cpn_files), decreasing = TRUE)][1]
-  
-  message(sprintf("  Loading: %s", basename(cpn_file)))
-  
-  calls_per_night_final <- safe_read_csv(cpn_file)
-  
-  if (is.null(calls_per_night_final)) {
-    stop("Failed to load CallsPerNight_final file")
-  }
-  
-  # Ensure Night is Date class
-  if (!inherits(calls_per_night_final$Night, "Date")) {
-    calls_per_night_final <- calls_per_night_final %>%
-      mutate(Night = as.Date(Night))
-  }
-  
-} else {
-  message("  Using calls_per_night_final from memory")
-  cpn_file <- "(from memory)"
-}
+calls_per_night_final <- load_cpn_final()
+
+validate_cpn_data(calls_per_night_final, require_status = TRUE, require_cph = TRUE)
 
 message(sprintf("✓ CallsPerNight final loaded: %s rows, %d detectors",
                 format(nrow(calls_per_night_final), big.mark = ","),
                 n_distinct(calls_per_night_final$Detector)))
-
-# Validate required columns
-cpn_required <- c("Detector", "Night", "CallsPerNight", "CallsPerHour", 
-                  "RecordingHours", "Status")
-cpn_missing <- setdiff(cpn_required, names(calls_per_night_final))
-
-if (length(cpn_missing) > 0) {
-  stop(sprintf("CallsPerNight_final missing required columns: %s",
-               paste(cpn_missing, collapse = ", ")))
-}
 
 # ------------------------------------------------------------------------------
 # Load Master File
@@ -368,47 +243,14 @@ if (length(cpn_missing) > 0) {
 
 message("\nLoading Master file...")
 
-# Check if in memory first
-if (!exists("kpro_master")) {
-  
-  # Look for most recent master file
-  master_files <- list.files("outputs",
-                             pattern = "^02_kpro_master_.*\\.csv$",
-                             full.names = TRUE)
-  
-  if (length(master_files) == 0) {
-    stop("No Master files found. Please run 02_standardize.R first.")
-  }
-  
-  # Get most recent by modification time
-  master_file <- master_files[order(file.mtime(master_files), decreasing = TRUE)][1]
-  
-  message(sprintf("  Loading: %s", basename(master_file)))
-  
-  kpro_master <- safe_read_csv(master_file)
-  
-  if (is.null(kpro_master)) {
-    stop("Failed to load Master file")
-  }
-  
-} else {
-  message("  Using kpro_master from memory")
-  master_file <- "(from memory)"
-}
+kpro_master <- load_master_data()
+
+validate_master_data(kpro_master)
 
 message(sprintf("✓ Master file loaded: %s rows",
                 format(nrow(kpro_master), big.mark = ",")))
 
-# Validate required columns for species/hourly analysis
-master_required <- c("Detector", "auto_id")
-master_missing <- setdiff(master_required, names(kpro_master))
-
-if (length(master_missing) > 0) {
-  warning(sprintf("Master file missing columns for full analysis: %s",
-                  paste(master_missing, collapse = ", ")))
-}
-
-# Check for Hour or DateTime
+# Check for Hour or DateTime (needed for hourly analysis)
 has_hour <- "Hour" %in% names(kpro_master)
 has_datetime <- "DateTime" %in% names(kpro_master)
 
@@ -416,392 +258,332 @@ if (!has_hour && !has_datetime) {
   warning("Master file has no Hour or DateTime column - hourly analysis will be skipped")
 }
 
-log_message(sprintf("Loaded data: CPN=%d rows, Master=%d rows",
+log_message(sprintf("[Stage 5.1] Loaded data: CPN=%d rows, Master=%d rows",
                     nrow(calls_per_night_final), nrow(kpro_master)))
-
 
 # ==============================================================================
 # STAGE 5.2: DETECTOR ACTIVITY SUMMARY
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 5.2: Detector Activity Summary                   │")
+message("│              STAGE 5.2: Detector Activity Summary              │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
+
+message("Creating detector activity summary...")
 
 detector_summary <- create_detector_activity_summary(calls_per_night_final)
 
-# Display preview
-message("\nDetector summary preview:")
-print(detector_summary %>% 
-        select(Detector, n_nights, total_calls, mean_cph, cv_pct) %>%
-        head(5))
+message(sprintf("✓ Detector summary created: %d detectors", nrow(detector_summary)))
 
-log_message(sprintf("Created detector summary: %d detectors", nrow(detector_summary)))
+# Preview
+message("\nDetector summary preview (top 5 by total calls):")
+preview <- detector_summary %>%
+  arrange(desc(total_calls)) %>%
+  head(5) %>%
+  select(Detector, n_nights, total_hours, total_calls, mean_cph, pct_success)
 
+for (i in seq_len(nrow(preview))) {
+  message(sprintf("  %s: %d nights, %.0f hrs, %s calls, %.2f CPH, %.0f%% success",
+                  preview$Detector[i],
+                  preview$n_nights[i],
+                  preview$total_hours[i],
+                  format(preview$total_calls[i], big.mark = ","),
+                  preview$mean_cph[i],
+                  preview$pct_success[i]))
+}
+
+log_message(sprintf("[Stage 5.2] Created detector summary: %d detectors", nrow(detector_summary)))
 
 # ==============================================================================
 # STAGE 5.3: STUDY-WIDE SUMMARY
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│            STAGE 5.3: Study-Wide Summary                        │")
+message("│              STAGE 5.3: Study-Wide Summary                     │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
+
+message("Creating study-wide summary...")
 
 study_summary <- create_study_summary(calls_per_night_final)
 
-# Display summary
+message("✓ Study summary created")
+
+# Display key metrics
 message("\nStudy overview:")
-message(sprintf("  Detectors: %d", study_summary$n_detectors))
-message(sprintf("  Detector-nights: %d", study_summary$n_detector_nights))
-message(sprintf("  Study period: %s to %s (%d days)",
-                study_summary$study_start, 
-                study_summary$study_end,
-                study_summary$study_duration_days))
+message(sprintf("  Total detectors: %d", study_summary$n_detectors))
+message(sprintf("  Total detector-nights: %s", format(study_summary$n_detector_nights, big.mark = ",")))
+message(sprintf("  Total recording hours: %.1f", study_summary$total_hours))
 message(sprintf("  Total calls: %s", format(study_summary$total_calls, big.mark = ",")))
-message(sprintf("  Total hours: %s", format(study_summary$total_hours, big.mark = ",")))
-message(sprintf("  Mean CPH: %.2f (CV: %.1f%%)", 
-                study_summary$overall_mean_cph,
-                study_summary$overall_cv_pct))
+message(sprintf("  Mean calls per hour: %.2f", study_summary$mean_cph))
+message(sprintf("  Success rate: %.1f%%", study_summary$pct_success))
 
-log_message(sprintf("Study summary: %d detectors, %s calls, %s hours",
-                    study_summary$n_detectors,
-                    format(study_summary$total_calls, big.mark = ","),
-                    format(study_summary$total_hours, big.mark = ",")))
-
+log_message("[Stage 5.3] Created study summary")
 
 # ==============================================================================
 # STAGE 5.4: VARIANCE COMPONENTS
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│           STAGE 5.4: Variance Components                        │")
+message("│              STAGE 5.4: Variance Components                    │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
+
+message("Calculating variance components...")
 
 variance_components <- calculate_variance_components(calls_per_night_final)
 
+message("✓ Variance components calculated")
+
 # Display interpretation
 message("\nVariance decomposition:")
-message(sprintf("  Between-detector: %.1f%%", variance_components$pct_between))
-message(sprintf("  Within-detector:  %.1f%%", variance_components$pct_within))
-message(sprintf("\n  Interpretation: %s", variance_components$interpretation))
+message(sprintf("  Between-detector variance: %.1f%%", variance_components$pct_between))
+message(sprintf("  Within-detector variance: %.1f%%", variance_components$pct_within))
+message(sprintf("  Interpretation: %s", variance_components$interpretation))
 
-log_message(sprintf("Variance: %.1f%% between, %.1f%% within",
-                    variance_components$pct_between,
-                    variance_components$pct_within))
-
+log_message("[Stage 5.4] Calculated variance components")
 
 # ==============================================================================
 # STAGE 5.5: SPECIES COMPOSITION
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│           STAGE 5.5: Species Composition                        │")
+message("│              STAGE 5.5: Species Composition                    │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Check if auto_id column exists
 if ("auto_id" %in% names(kpro_master)) {
+  message("Creating species composition summary...")
   
   species_summary <- create_species_summary_by_detector(kpro_master)
   
-  if (nrow(species_summary) > 0) {
-    # Display top species
-    message("\nTop 3 species per detector:")
-    top_species <- species_summary %>%
-      group_by(Detector) %>%
-      slice_max(n_calls, n = 3, with_ties = FALSE) %>%
-      ungroup()
-    
-    print(top_species %>% head(12))
-    
-    # Overall species count
-    n_species <- n_distinct(species_summary$species)
-    message(sprintf("\n✓ Total species detected: %d", n_species))
-    
-    log_message(sprintf("Species summary: %d species across %d detectors",
-                        n_species, n_distinct(species_summary$Detector)))
-  } else {
-    message("⚠ No identified species found in Master data")
-    species_summary <- NULL
+  n_species <- n_distinct(species_summary$species)
+  message(sprintf("✓ Species summary created: %d species detected", n_species))
+  
+  # Show top 3 species per detector
+  message("\nTop 3 species by detector:")
+  top_species <- species_summary %>%
+    group_by(Detector) %>%
+    slice_max(n_calls, n = 3) %>%
+    summarise(top3 = paste(species, collapse = ", "), .groups = "drop")
+  
+  for (i in seq_len(min(5, nrow(top_species)))) {
+    message(sprintf("  %s: %s", top_species$Detector[i], top_species$top3[i]))
   }
+  
+  if (nrow(top_species) > 5) {
+    message(sprintf("  ... and %d more detectors", nrow(top_species) - 5))
+  }
+  
+  log_message(sprintf("[Stage 5.5] Created species summary: %d species", n_species))
   
 } else {
   warning("auto_id column not found - skipping species summary")
   species_summary <- NULL
+  log_message("[Stage 5.5] Skipped species summary (no auto_id column)")
 }
-
 
 # ==============================================================================
 # STAGE 5.6: SPECIES ACCUMULATION
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 5.6: Species Accumulation                        │")
+message("│              STAGE 5.6: Species Accumulation                   │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
-if ("auto_id" %in% names(kpro_master) && !is.null(species_summary)) {
+if ("auto_id" %in% names(kpro_master) && "Night" %in% names(kpro_master)) {
+  message("Creating species accumulation summary...")
   
-  # Study-wide accumulation
-  species_accumulation <- create_species_accumulation_summary(kpro_master, by_detector = FALSE)
+  species_accumulation <- create_species_accumulation_summary(kpro_master)
   
-  if (nrow(species_accumulation) > 0) {
-    # Display accumulation summary
-    final_richness <- max(species_accumulation$cumulative_species)
-    nights_to_plateau <- species_accumulation %>%
-      filter(cumulative_species == final_richness) %>%
-      slice_min(night_number, n = 1) %>%
-      pull(night_number)
-    
-    message("\nSpecies accumulation:")
-    message(sprintf("  Final richness: %d species", final_richness))
-    message(sprintf("  Reached plateau: Night %d of %d", 
-                    nights_to_plateau, 
-                    max(species_accumulation$night_number)))
-    
-    # Show first few nights of accumulation
-    message("\nFirst detections:")
-    first_detections <- species_accumulation %>%
-      filter(new_species > 0) %>%
-      head(5)
-    print(first_detections %>% select(Night, night_number, new_species, cumulative_species))
-    
-    log_message(sprintf("Species accumulation: %d species, plateau at night %d",
-                        final_richness, nights_to_plateau))
-  } else {
-    message("⚠ Could not calculate species accumulation")
-    species_accumulation <- NULL
+  final_richness <- max(species_accumulation$cumulative_species, na.rm = TRUE)
+  message(sprintf("✓ Species accumulation calculated: %d total species", final_richness))
+  
+  # Show first detections
+  message("\nFirst detections:")
+  first_detections <- species_accumulation %>%
+    filter(!is.na(new_species) & new_species != "") %>%
+    head(5)
+  
+  for (i in seq_len(nrow(first_detections))) {
+    message(sprintf("  %s: %s (cumulative: %d)", 
+                    first_detections$Night[i],
+                    first_detections$new_species[i],
+                    first_detections$cumulative_species[i]))
   }
   
+  log_message(sprintf("[Stage 5.6] Created species accumulation: %d total species", final_richness))
+  
 } else {
-  message("Skipping species accumulation (no species data)")
+  warning("Required columns not found - skipping species accumulation")
   species_accumulation <- NULL
+  log_message("[Stage 5.6] Skipped species accumulation")
 }
-
 
 # ==============================================================================
 # STAGE 5.7: HOURLY ACTIVITY PROFILES
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 5.7: Hourly Activity Profiles                    │")
+message("│              STAGE 5.7: Hourly Activity Profiles               │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
 if (has_hour || has_datetime) {
+  message("Creating hourly activity profiles...")
   
-  # Overall hourly profile
-  message("Creating study-wide hourly profile...")
+  # Add Hour column if not present
+  if (!has_hour && has_datetime) {
+    kpro_master <- kpro_master %>%
+      mutate(Hour = lubridate::hour(DateTime))
+  }
+  
+  # Study-wide hourly profile
   hourly_summary_overall <- create_hourly_activity_summary(kpro_master, by_detector = FALSE)
   
-  # Find peak hour
-  peak_row <- hourly_summary_overall %>%
-    slice_max(n_calls, n = 1)
-  
-  message(sprintf("\nPeak activity: %02d:00 (%s calls, %.1f%% of total)",
-                  as.integer(sub(":00", "", peak_row$Hour)),
-                  format(peak_row$n_calls, big.mark = ","),
-                  peak_row$pct_of_total))
-  
-  # Per-detector hourly profiles
-  message("\nCreating per-detector hourly profiles...")
+  # Per-detector hourly profile
   hourly_summary_by_detector <- create_hourly_activity_summary(kpro_master, by_detector = TRUE)
   
-  message(sprintf("✓ Created hourly profiles for %d detectors",
-                  n_distinct(hourly_summary_by_detector$Detector)))
+  # Find peak hour
+  peak_hour <- hourly_summary_overall %>%
+    slice_max(total_calls, n = 1)
   
-  log_message(sprintf("Hourly profiles: peak at %s", peak_row$Hour))
+  message(sprintf("✓ Hourly profiles created"))
+  message(sprintf("  Peak hour: %02d:00 (%s calls, %.1f%% of total)",
+                  peak_hour$Hour,
+                  format(peak_hour$total_calls, big.mark = ","),
+                  peak_hour$pct_total))
+  
+  log_message("[Stage 5.7] Created hourly activity profiles")
   
 } else {
-  message("Skipping hourly analysis (no Hour or DateTime column)")
+  warning("No Hour or DateTime column - skipping hourly analysis")
   hourly_summary_overall <- NULL
   hourly_summary_by_detector <- NULL
+  log_message("[Stage 5.7] Skipped hourly analysis")
 }
-
 
 # ==============================================================================
 # STAGE 5.8: FORMAT GT TABLES
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│            STAGE 5.8: Format GT Tables                          │")
+message("│              STAGE 5.8: Format GT Tables                       │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Store all GT tables in a list
+message("Formatting GT tables...")
+
 gt_tables <- list()
 
-# ------------------------------------------------------------------------------
-# Detector Activity Summary Table
-# ------------------------------------------------------------------------------
+# Detector summary table
+gt_tables$detector_summary <- format_detector_summary_gt(detector_summary)
+message("  ✓ Detector summary table")
 
-message("Formatting detector activity summary...")
-gt_tables$detector_summary <- format_detector_summary_gt(
-  detector_summary,
-  title = "Detector Activity Summary",
-  subtitle = sprintf("Study Period: %s to %s", 
-                     study_summary$study_start, 
-                     study_summary$study_end)
-)
-message("  ✓ Detector summary table formatted")
+# Study summary table
+gt_tables$study_summary <- format_study_summary_gt(study_summary, orientation = "horizontal")
+message("  ✓ Study summary table")
 
-# ------------------------------------------------------------------------------
-# Study Summary Table
-# ------------------------------------------------------------------------------
-
-message("Formatting study summary...")
-gt_tables$study_summary <- format_study_summary_gt(
-  study_summary,
-  title = "Study Overview",
-  orientation = "vertical"
-)
-message("  ✓ Study summary table formatted")
-
-# ------------------------------------------------------------------------------
-# Species Summary Table
-# ------------------------------------------------------------------------------
-
-if (!is.null(species_summary) && nrow(species_summary) > 0) {
-  message("Formatting species summary...")
-  gt_tables$species_summary_long <- format_species_summary_gt(
-    species_summary,
-    format = "long",
-    title = "Species Composition by Detector",
-    top_n = 10  # Top 10 species per detector
-  )
-  
-  # Also create wide format if not too many species
-  n_species <- n_distinct(species_summary$species)
-  if (n_species <= 15) {
-    gt_tables$species_summary_wide <- format_species_summary_gt(
-      species_summary,
-      format = "wide",
-      title = "Species × Detector Matrix"
-    )
-    message("  ✓ Species tables formatted (long and wide)")
-  } else {
-    message(sprintf("  ✓ Species table formatted (long only, %d species too many for wide)", n_species))
-  }
+# Species summary table (if available)
+if (!is.null(species_summary)) {
+  gt_tables$species_summary <- format_species_summary_gt(species_summary, format = "wide")
+  message("  ✓ Species summary table")
 }
 
-# ------------------------------------------------------------------------------
-# Hourly Activity Table
-# ------------------------------------------------------------------------------
-
+# Hourly summary table (if available)
 if (!is.null(hourly_summary_overall)) {
-  message("Formatting hourly activity table...")
-  gt_tables$hourly_summary <- format_hourly_summary_gt(
-    hourly_summary_overall,
-    title = "Hourly Activity Profile",
-    subtitle = "Study-wide (all detectors combined)",
-    highlight_peak = TRUE
-  )
-  message("  ✓ Hourly activity table formatted")
+  gt_tables$hourly_summary <- format_hourly_summary_gt(hourly_summary_overall)
+  message("  ✓ Hourly summary table")
 }
 
 message(sprintf("\n✓ Created %d GT tables", length(gt_tables)))
 
-log_message(sprintf("Formatted %d GT tables", length(gt_tables)))
-
+log_message(sprintf("[Stage 5.8] Created %d GT tables", length(gt_tables)))
 
 # ==============================================================================
 # STAGE 5.9: EXPORT OUTPUTS
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│             STAGE 5.9: Export Outputs                           │")
+message("│              STAGE 5.9: Export Outputs                         │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
+# Create output directories
+assert_directory_exists("results/figures", create = TRUE)
+assert_directory_exists("results/tables", create = TRUE)
+assert_directory_exists("results/rds", create = TRUE)
+
+# Timestamp for filenames
+timestamp <- format(Sys.time(), "%Y%m%d")
+
+files_created <- character()
+
 # ------------------------------------------------------------------------------
-# Export GT Tables as PNG
+# Export GT tables as PNG (if webshot2 available)
 # ------------------------------------------------------------------------------
 
 if (has_webshot2) {
   message("Exporting GT tables as PNG...")
   
   for (table_name in names(gt_tables)) {
-    save_gt_table(
-      gt_tables[[table_name]],
-      filename = table_name,
-      output_dir = "results/figures",
-      format = "png"
-    )
+    png_file <- sprintf("results/figures/%s_%s.png", table_name, timestamp)
+    save_gt_table(gt_tables[[table_name]], png_file, format = "png")
+    files_created <- c(files_created, png_file)
+    message(sprintf("  ✓ %s", basename(png_file)))
   }
-  
-  message(sprintf("  ✓ Saved %d PNG files to results/figures/", length(gt_tables)))
 } else {
-  message("⚠ Skipping PNG export (webshot2 not installed)")
+  message("Skipping PNG export (webshot2 not installed)")
 }
 
 # ------------------------------------------------------------------------------
-# Export GT Tables as HTML
+# Export GT tables as HTML (always)
 # ------------------------------------------------------------------------------
 
 message("\nExporting GT tables as HTML...")
 
 for (table_name in names(gt_tables)) {
-  save_gt_table(
-    gt_tables[[table_name]],
-    filename = table_name,
-    output_dir = "results/figures",
-    format = "html"
-  )
+  html_file <- sprintf("results/figures/%s_%s.html", table_name, timestamp)
+  save_gt_table(gt_tables[[table_name]], html_file, format = "html")
+  files_created <- c(files_created, html_file)
+  message(sprintf("  ✓ %s", basename(html_file)))
 }
 
-message(sprintf("  ✓ Saved %d HTML files to results/figures/", length(gt_tables)))
-
 # ------------------------------------------------------------------------------
-# Export to Excel Workbook
+# Export Excel workbook (if openxlsx available)
 # ------------------------------------------------------------------------------
 
 if (has_openxlsx) {
-  message("\nExporting summaries to Excel workbook...")
+  message("\nExporting Excel workbook...")
+  
+  xlsx_file <- sprintf("results/tables/summary_statistics_%s.xlsx", timestamp)
   
   wb <- openxlsx::createWorkbook()
   
-  # Detector summary sheet
+  # Add sheets
   openxlsx::addWorksheet(wb, "Detector Summary")
   openxlsx::writeData(wb, "Detector Summary", detector_summary)
   
-  # Study summary sheet
   openxlsx::addWorksheet(wb, "Study Summary")
-  study_summary_long <- study_summary %>%
-    tidyr::pivot_longer(everything(), names_to = "Metric", values_to = "Value")
-  openxlsx::writeData(wb, "Study Summary", study_summary_long)
+  openxlsx::writeData(wb, "Study Summary", as.data.frame(study_summary))
   
-  # Variance components sheet
-  openxlsx::addWorksheet(wb, "Variance Components")
-  openxlsx::writeData(wb, "Variance Components", variance_components)
-  
-  # Species summary sheet (if available)
-  if (!is.null(species_summary) && nrow(species_summary) > 0) {
-    openxlsx::addWorksheet(wb, "Species Summary")
-    openxlsx::writeData(wb, "Species Summary", species_summary)
+  if (!is.null(species_summary)) {
+    openxlsx::addWorksheet(wb, "Species by Detector")
+    openxlsx::writeData(wb, "Species by Detector", species_summary)
   }
   
-  # Species accumulation sheet (if available)
-  if (!is.null(species_accumulation) && nrow(species_accumulation) > 0) {
-    openxlsx::addWorksheet(wb, "Species Accumulation")
-    openxlsx::writeData(wb, "Species Accumulation", species_accumulation)
-  }
-  
-  # Hourly summary sheet (if available)
   if (!is.null(hourly_summary_overall)) {
-    openxlsx::addWorksheet(wb, "Hourly Activity")
-    openxlsx::writeData(wb, "Hourly Activity", hourly_summary_overall)
+    openxlsx::addWorksheet(wb, "Hourly Profile")
+    openxlsx::writeData(wb, "Hourly Profile", hourly_summary_overall)
   }
   
-  # Save workbook
-  excel_path <- sprintf("results/tables/summary_statistics_%s.xlsx", output_timestamp)
-  openxlsx::saveWorkbook(wb, excel_path, overwrite = TRUE)
-  
-  message(sprintf("  ✓ Saved Excel workbook: %s", excel_path))
+  openxlsx::saveWorkbook(wb, xlsx_file, overwrite = TRUE)
+  files_created <- c(files_created, xlsx_file)
+  message(sprintf("  ✓ %s", basename(xlsx_file)))
   
 } else {
-  message("⚠ Skipping Excel export (openxlsx not installed)")
+  message("Skipping Excel export (openxlsx not installed)")
 }
 
 # ------------------------------------------------------------------------------
-# Export Summary Tibbles as RDS
+# Export RDS file (always)
 # ------------------------------------------------------------------------------
 
-message("\nExporting summary tibbles as RDS...")
+message("\nExporting RDS file...")
 
 all_summaries <- list(
   detector_summary = detector_summary,
@@ -812,117 +594,107 @@ all_summaries <- list(
   hourly_summary_overall = hourly_summary_overall,
   hourly_summary_by_detector = hourly_summary_by_detector,
   metadata = list(
-    generated_at = Sys.time(),
-    cpn_source = ifelse(exists("cpn_file"), cpn_file, "memory"),
-    master_source = ifelse(exists("master_file"), master_file, "memory")
+    created = Sys.time(),
+    n_detectors = study_summary$n_detectors,
+    n_detector_nights = study_summary$n_detector_nights,
+    total_calls = study_summary$total_calls
   )
 )
 
-rds_path <- sprintf("results/rds/summary_data_%s.rds", output_timestamp)
-saveRDS(all_summaries, rds_path)
+rds_file <- sprintf("results/rds/summary_data_%s.rds", timestamp)
+saveRDS(all_summaries, rds_file)
+files_created <- c(files_created, rds_file)
+message(sprintf("  ✓ %s", basename(rds_file)))
 
-message(sprintf("  ✓ Saved RDS file: %s", rds_path))
+message(sprintf("\n✓ Exported %d files", length(files_created)))
 
-log_message(sprintf("Exported: PNG=%s, HTML=%d, Excel=%s, RDS=%s",
-                    ifelse(has_webshot2, length(gt_tables), "skipped"),
-                    length(gt_tables),
-                    ifelse(has_openxlsx, "yes", "skipped"),
-                    "yes"))
-
+log_message(sprintf("[Stage 5.9] Exported %d files", length(files_created)))
 
 # ==============================================================================
 # STAGE 5.10: SUMMARY REPORT
 # ==============================================================================
 
 message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│            STAGE 5.10: Summary Report                           │")
+message("│              STAGE 5.10: Summary Report                        │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
-message("═══════════════════════════════════════════════════════════════════")
-message("                    WORKFLOW 05 COMPLETE                           ")
-message("═══════════════════════════════════════════════════════════════════")
+message("╔═══════════════════════════════════════════════════════════════╗")
+message("║                    STUDY SUMMARY                               ║")
+message("╚═══════════════════════════════════════════════════════════════╝")
 
 message("\n📊 STUDY OVERVIEW")
-message(sprintf("   Detectors:        %d", study_summary$n_detectors))
-message(sprintf("   Detector-nights:  %d", study_summary$n_detector_nights))
-message(sprintf("   Study duration:   %d days", study_summary$study_duration_days))
-message(sprintf("   Total calls:      %s", format(study_summary$total_calls, big.mark = ",")))
-message(sprintf("   Total hours:      %s", format(study_summary$total_hours, big.mark = ",")))
+message(sprintf("   Detectors: %d", study_summary$n_detectors))
+message(sprintf("   Study period: %s to %s", 
+                min(calls_per_night_final$Night), 
+                max(calls_per_night_final$Night)))
+message(sprintf("   Detector-nights: %s", format(study_summary$n_detector_nights, big.mark = ",")))
+message(sprintf("   Recording hours: %.1f", study_summary$total_hours))
 
-message("\n📈 ACTIVITY METRICS")
-message(sprintf("   Mean CPH:         %.2f", study_summary$overall_mean_cph))
-message(sprintf("   Median CPH:       %.2f", study_summary$overall_median_cph))
-message(sprintf("   CV:               %.1f%%", study_summary$overall_cv_pct))
-message(sprintf("   Success rate:     %.1f%%", study_summary$pct_success))
+message("\n🦇 ACTIVITY METRICS")
+message(sprintf("   Total calls: %s", format(study_summary$total_calls, big.mark = ",")))
+message(sprintf("   Mean calls/hour: %.2f", study_summary$mean_cph))
+message(sprintf("   Median calls/hour: %.2f", study_summary$median_cph))
+message(sprintf("   CV: %.1f%%", study_summary$cv_cph))
 
-message("\n🔬 VARIANCE DECOMPOSITION")
+message("\n📈 VARIANCE DECOMPOSITION")
 message(sprintf("   Between-detector: %.1f%%", variance_components$pct_between))
-message(sprintf("   Within-detector:  %.1f%%", variance_components$pct_within))
+message(sprintf("   Within-detector: %.1f%%", variance_components$pct_within))
 
-if (!is.null(species_summary) && nrow(species_summary) > 0) {
-  message("\n🦇 SPECIES")
-  message(sprintf("   Species detected: %d", n_distinct(species_summary$species)))
-  
-  # Most common species overall
-  top_overall <- species_summary %>%
-    group_by(species) %>%
-    summarise(total = sum(n_calls), .groups = "drop") %>%
-    slice_max(total, n = 3)
-  
-  message("   Most common:")
-  for (i in seq_len(nrow(top_overall))) {
-    message(sprintf("     %d. %s (%s calls)", 
-                    i, 
-                    top_overall$species[i],
-                    format(top_overall$total[i], big.mark = ",")))
-  }
+if (!is.null(species_summary)) {
+  n_species <- n_distinct(species_summary$species)
+  message("\n🔬 SPECIES")
+  message(sprintf("   Species detected: %d", n_species))
 }
 
 if (!is.null(hourly_summary_overall)) {
-  peak <- hourly_summary_overall %>% slice_max(n_calls, n = 1)
+  peak <- hourly_summary_overall %>% slice_max(total_calls, n = 1)
   message("\n⏰ TEMPORAL PATTERNS")
-  message(sprintf("   Peak hour:        %s (%.1f%% of calls)", 
-                  peak$Hour, peak$pct_of_total))
+  message(sprintf("   Peak activity hour: %02d:00", peak$Hour))
 }
 
-message("\n📁 OUTPUTS CREATED")
-message(sprintf("   PNG tables:       %s", 
-                ifelse(has_webshot2, 
-                       sprintf("%d files in results/figures/", length(gt_tables)),
-                       "skipped (install webshot2)")))
-message(sprintf("   HTML tables:      %d files in results/figures/", length(gt_tables)))
-message(sprintf("   Excel workbook:   %s",
-                ifelse(has_openxlsx,
-                       sprintf("results/tables/summary_statistics_%s.xlsx", output_timestamp),
-                       "skipped (install openxlsx)")))
-message(sprintf("   RDS data:         results/rds/summary_data_%s.rds", output_timestamp))
+message("\n✅ RECORDING STATUS")
+message(sprintf("   Success: %.1f%%", study_summary$pct_success))
+message(sprintf("   Partial: %.1f%%", study_summary$pct_partial))
+message(sprintf("   Fail: %.1f%%", study_summary$pct_fail))
 
-message("\n═══════════════════════════════════════════════════════════════════")
-message("   Summary statistics ready for analysis and reporting!")
-message("═══════════════════════════════════════════════════════════════════\n")
+message("\n📁 FILES CREATED")
+for (f in files_created) {
+  message(sprintf("   • %s", f))
+}
+
+# ==============================================================================
+# WORKFLOW 05 COMPLETE
+# ==============================================================================
+
+message("\n╔═══════════════════════════════════════════════════════════════╗")
+message("║          WORKFLOW 05 COMPLETE: Summary Statistics Generated    ║")
+message("╚═══════════════════════════════════════════════════════════════╝")
+
+message("\n========================================")
+message("✓ Workflow 05 Complete")
+message("========================================")
+
+message("\nData in environment:")
+message("  • detector_summary")
+message("  • study_summary")
+message("  • variance_components")
+if (!is.null(species_summary)) message("  • species_summary")
+if (!is.null(species_accumulation)) message("  • species_accumulation")
+if (!is.null(hourly_summary_overall)) message("  • hourly_summary_overall")
+if (!is.null(hourly_summary_by_detector)) message("  • hourly_summary_by_detector")
+message("  • gt_tables (list)")
+message("  • all_summaries (master list)")
+
+message("\nTo access GT tables:")
+message("  gt_tables$detector_summary")
+message("  gt_tables$study_summary")
+
+message("\nTo access all summaries:")
+message("  all_summaries <- readRDS('results/rds/summary_data_", timestamp, ".rds')")
+
+message("\nNext steps:")
+message("  - Review generated tables in results/figures/")
+message("  - Use summaries for reporting")
+message("  - Generate custom visualizations\n")
 
 log_message("=== WORKFLOW 05 COMPLETE ===")
-
-
-# ==============================================================================
-# OBJECTS AVAILABLE IN ENVIRONMENT
-# ==============================================================================
-#
-# After running this script, the following objects are available:
-#
-# Summary tibbles:
-#   - detector_summary         Per-detector effort & activity summary
-#   - study_summary            Single-row study overview
-#   - variance_components      Between/within detector variance
-#   - species_summary          Species counts by detector (if available)
-#   - species_accumulation     Cumulative species over time (if available)
-#   - hourly_summary_overall   Study-wide hourly profile (if available)
-#   - hourly_summary_by_detector Per-detector hourly (if available)
-#
-# GT table objects:
-#   - gt_tables                List of formatted GT tables
-#
-# Master list:
-#   - all_summaries            List containing all summary tibbles + metadata
-#
-# ==============================================================================

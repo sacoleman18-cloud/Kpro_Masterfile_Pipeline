@@ -16,6 +16,7 @@
 #   03_generate_cpn_template.R → [THIS SCRIPT] Generate template for editing
 #   [USER: Edit template in Excel]
 #   04_finalize_cpn.R     → Process edited template & calculate metrics
+#   05_summary_stats.R    → Generate summary statistics and tables
 #
 # INPUTS
 # ------
@@ -131,69 +132,6 @@
 #   - Subtracting datetimes gives difference in days
 #   - Multiply by 24 to convert days to hours
 #
-# Examples:
-#   StartDateTime: "10/25/2025 8:00:00 PM", EndDateTime: "10/26/2025 6:00:00 AM"
-#   → (Oct 26 6:00 AM - Oct 25 8:00 PM) = 0.4167 days = 10 hours
-#
-#   StartDateTime: "10/25/2025 6:00:00 PM", EndDateTime: "10/26/2025 8:00:00 AM"
-#   → (Oct 26 8:00 AM - Oct 25 6:00 PM) = 0.5833 days = 14 hours
-#
-# Equipment failure:
-#   StartDateTime: "10/25/2025 8:00:00 PM", EndDateTime: "10/26/2025 3:00:00 AM"
-#   → (Oct 26 3:00 AM - Oct 25 8:00 PM) = 0.2917 days = 7 hours
-#
-# TEMPLATE STRUCTURE
-# ------------------
-# Template columns (user will edit in Excel):
-#   Detector         - Friendly detector name (e.g., "SMO", "LPE")
-#   Night            - Study night date (YYYY-MM-DD)
-#   CallsPerNight    - Count of calls detected (0 if none)
-#   StartDateTime    - Recording start datetime (MM/DD/YYYY HH:MM:SS AM/PM) - USER EDITABLE
-#   EndDateTime      - Recording end datetime (MM/DD/YYYY HH:MM:SS AM/PM) - USER EDITABLE
-#   RecordingHours   - Excel formula (auto-calculates from Start/End)
-#
-# DateTime Format:
-#   Full datetime values eliminate ambiguity about which date a time refers to.
-#   Format: MM/DD/YYYY HH:MM:SS AM/PM (e.g., "10/25/2025 8:00:00 PM")
-#   
-#   Examples for Night = 2025-10-25:
-#     StartDateTime: 10/25/2025 8:00:00 PM (8:00 PM on Oct 25)
-#     EndDateTime:   10/26/2025 6:00:00 AM (6:00 AM on Oct 26 - next morning)
-#   
-#   Equipment failure examples:
-#     Failure at Oct 25 11:00 PM: EndDateTime = 10/25/2025 11:00:00 PM
-#     Failure at Oct 26 3:00 AM:  EndDateTime = 10/26/2025 3:00:00 AM
-#
-# User edits StartDateTime/EndDateTime to account for:
-#   - Equipment failures (set both to blank)
-#   - SD card full (adjust EndDateTime to when card filled)
-#   - Late deployment (adjust StartDateTime)
-#   - Early retrieval (adjust EndDateTime)
-#   - Power issues (adjust times or set to blank)
-#
-# Template organization:
-#   - Rows grouped by Detector (all nights for each detector together)
-#   - Nights sorted chronologically within each detector
-#
-# TWO-FILE SYSTEM
-# ---------------
-# Workflow 03 saves TWO identical template files:
-#
-# 1. *_ORIGINAL_*.csv - Original template (DO NOT EDIT)
-#    - Used in Workflow 04 for edit tracking
-#    - Compares original vs edited to log changes
-#    - Maintains audit trail
-#
-# 2. *_EDIT_THIS_*.csv - Editable template (USER EDITS THIS)
-#    - User opens this file in Excel
-#    - Makes all edits to StartDateTime/EndDateTime
-#    - Saves changes
-#
-# Why two files?
-#   - Preserves original for comparison
-#   - Enables edit tracking and audit log
-#   - Prevents accidental loss of original data
-#
 # PERFORMANCE EXPECTATIONS
 # -------------------------
 # Typical bat acoustic datasets:
@@ -218,14 +156,19 @@
 #   - hms (time parsing)
 #
 # Custom Functions (via load_all.R):
-#   - core/utilities.R: log_message, safe_read_csv
+#   - core/utilities.R: log_message, safe_read_csv, load_master_data
+#   - validation/validation.R: assert_columns_exist, assert_date_range,
+#                              assert_time_format, require_study_parameters
 #   - analysis/callspernight.R: calculate_recording_hours,
-#                                  generate_calls_per_night_template
+#                                generate_calls_per_night_template
 #
 # TROUBLESHOOTING
 # ---------------
-# Issue: "kpro_master not found"
-# Fix: Run Workflow 02 first, or load checkpoint manually
+# Issue: "kpro_master not found and no checkpoint available"
+# Fix: Run Workflow 02 first
+#
+# Issue: "Required columns not found"
+# Fix: Ensure data came from Workflow 02
 #
 # Issue: "Invalid date format"
 # Fix: Enter dates as YYYY-MM-DD (e.g., 2024-05-01)
@@ -255,6 +198,14 @@
 # - Two-file system: ORIGINAL + EDIT_THIS for edit tracking
 # - This script does NOT calculate final metrics (that's script 04)
 #
+# CHANGELOG
+# ---------
+# 2024-12-29: Refactored to use helper functions (load_master_data,
+#             require_study_parameters, assert_columns_exist, assert_date_range,
+#             assert_time_format)
+# 2024-12-27: Added comprehensive header documentation
+# 2024-12-26: Initial CODING_STANDARDS compliant version
+#
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -280,9 +231,9 @@ log_message("=== WORKFLOW 03: Generate CallsPerNight Template ===")
 # STAGE 3.0: MANUAL ID CHECK & IMPORT
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 3.0: Manual ID Check & Import                   │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 message("MANUAL SPECIES IDENTIFICATION")
 message(strrep("─", 66))
@@ -317,13 +268,11 @@ if (manual_id_response == "y") {
   }
   
   # Validate required columns
-  required_cols <- c("Detector", "detector_id", "DateTime", "auto_id", "manual_id")
-  missing <- setdiff(required_cols, names(kpro_master))
-  
-  if (length(missing) > 0) {
-    stop(sprintf("Manually-ID'd file missing required columns: %s\n  Did you export from Kaleidoscope with all columns?", 
-                 paste(missing, collapse = ", ")))
-  }
+  assert_columns_exist(
+    kpro_master, 
+    c("Detector", "detector_id", "DateTime", "auto_id", "manual_id"),
+    source_hint = "Kaleidoscope export"
+  )
   
   # Check if Night column exists, calculate if missing
   if (!"Night" %in% names(kpro_master)) {
@@ -366,49 +315,21 @@ if (manual_id_response == "y") {
 # STAGE 3.1: LOAD & VALIDATE DATA
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 3.1: Load & Validate Data                       │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Check if kpro_master exists in memory (from Stage 3.0 OR Workflow 02)
-if (exists("kpro_master")) {
-  message("✓ Using kpro_master from memory")
-  message(sprintf("  Rows: %s", format(nrow(kpro_master), big.mark = ",")))
-  
-} else {
-  # Load most recent kpro_master checkpoint
-  message("kpro_master not found in memory - loading from checkpoint...")
-  
-  checkpoint_files <- list.files("outputs", 
-                                 pattern = "^02_kpro_master_.*\\.csv$",
-                                 full.names = TRUE)
-  
-  if (length(checkpoint_files) == 0) {
-    stop("No kpro_master checkpoint found. Please run 02_standardize.R first.")
-  }
-  
-  # Get most recent checkpoint
-  checkpoint_file <- checkpoint_files[order(file.mtime(checkpoint_files), decreasing = TRUE)][1]
-  
-  message(sprintf("  Loading: %s", basename(checkpoint_file)))
-  
-  kpro_master <- safe_read_csv(checkpoint_file)
-  
-  if (is.null(kpro_master)) {
-    stop("Failed to load kpro_master checkpoint")
-  }
-  
-  message(sprintf("✓ Loaded checkpoint: %s rows", format(nrow(kpro_master), big.mark = ",")))
+# Load master data (from memory or checkpoint) - only if not already loaded in Stage 3.0
+if (!exists("kpro_master")) {
+  kpro_master <- load_master_data()
 }
 
-# Validate required columns (manual_id may or may not be present)
-required_cols <- c("Detector", "detector_id", "DateTime", "auto_id")
-missing <- setdiff(required_cols, names(kpro_master))
-
-if (length(missing) > 0) {
-  stop(sprintf("kpro_master missing required columns: %s", 
-               paste(missing, collapse = ", ")))
-}
+# Validate required columns
+assert_columns_exist(
+  kpro_master, 
+  c("Detector", "detector_id", "DateTime", "auto_id"),
+  source_hint = "02_standardize.R"
+)
 
 # Add manual_id column if it doesn't exist (for consistency)
 if (!"manual_id" %in% names(kpro_master)) {
@@ -425,29 +346,19 @@ log_message(sprintf("[Stage 3.1] Loaded kpro_master: %s rows", nrow(kpro_master)
 # STAGE 3.2: LOAD RECORDING PERIOD FROM YAML
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 3.2: Load Recording Period from Config          │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Load study parameters from YAML
-if (!file.exists("inst/config/study_parameters.yaml")) {
-  stop("inst/config/study_parameters.yaml not found. Please run 01_ingest_raw_data.R first.")
-}
-
-params <- load_study_parameters("inst/config/study_parameters.yaml")
+# Load study parameters (validates file exists)
+params <- require_study_parameters()
 
 # Extract recording period dates
 start_date <- as.Date(params$study_parameters$start_date)
 end_date <- as.Date(params$study_parameters$end_date)
 
-# Validate dates loaded correctly
-if (is.na(start_date) || is.na(end_date)) {
-  stop("Invalid dates in YAML. Check study_parameters.yaml: start_date and end_date must be 'YYYY-MM-DD'")
-}
-
-if (end_date < start_date) {
-  stop("End date before start date in YAML. Check study_parameters.yaml")
-}
+# Validate dates
+assert_date_range(start_date, end_date)
 
 total_nights <- as.numeric(end_date - start_date) + 1
 
@@ -468,10 +379,8 @@ if (!advanced_scheduling) {
   }
   
   # Validate time format
-  if (!grepl("^\\d{2}:\\d{2}:\\d{2}$", uniform_start) || 
-      !grepl("^\\d{2}:\\d{2}:\\d{2}$", uniform_end)) {
-    stop("Invalid time format in YAML. Times must be 'HH:MM:SS' (e.g., '20:00:00')")
-  }
+  assert_time_format(uniform_start, "recording_start")
+  assert_time_format(uniform_end, "recording_end")
   
   message(sprintf("✓ Uniform schedule (from YAML): %s to %s", uniform_start, uniform_end))
   
@@ -495,9 +404,9 @@ log_message(sprintf("[Stage 3.2] Recording period: %s to %s (%d nights)",
 # STAGE 3.3: CALCULATE STUDY NIGHTS
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 3.3: Calculate Study Nights                     │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Calculate Night column using cutoff that matches recording schedule
 # Note: This (re)calculates Night regardless of whether it exists from Stage 3.0
@@ -557,14 +466,12 @@ log_message(sprintf("[Stage 3.3] Calculated %d detector-night combinations",
                     nrow(calls_per_night)))
 
 # ==============================================================================
-
-# ==============================================================================
 # STAGE 3.4: GENERATE TEMPLATE
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 3.4: Generate Template                          │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # -------------------------
 # Remove NoID calls without manual identification
@@ -769,9 +676,9 @@ log_message(sprintf("[Stage 3.4] Generated template: %d rows (saved as ORIGINAL 
 # STAGE 3.5: SAVE & DISPLAY INSTRUCTIONS
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 3.5: Save & Display Instructions                │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 message(strrep("=", 66))
 message("TEMPLATE GENERATED - READY FOR MANUAL EDITING")
@@ -820,9 +727,9 @@ log_message("[Stage 3.5] Templates saved - ready for user editing")
 # WORKFLOW 03 COMPLETE
 # ==============================================================================
 
-message("\n╔══════════════════════════════════════════════════════════════╗")
+message("\n╔═══════════════════════════════════════════════════════════════╗")
 message("║          WORKFLOW 03 COMPLETE: Template Generated              ║")
-message("╚══════════════════════════════════════════════════════════════╝")
+message("╚═══════════════════════════════════════════════════════════════╝")
 
 message("\nTemplates created:")
 message(sprintf("  ✓ ORIGINAL: %s", basename(template_original_file)))

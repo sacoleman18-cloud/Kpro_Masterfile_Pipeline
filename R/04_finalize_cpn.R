@@ -16,6 +16,7 @@
 #   03_generate_cpn_template.R → Generate template for editing
 #   [USER: Edit template in Excel]
 #   04_finalize_cpn.R     → [THIS SCRIPT] Process edited template
+#   05_summary_stats.R    → Generate summary statistics and tables
 #
 # INPUTS
 # ------
@@ -76,7 +77,7 @@
 # -------
 # Files Created:
 #   - outputs/04_CallsPerNight_EditLog_YYYYMMDD_HHMMSS.txt (edit tracking)
-#   - outputs/04_CallsPerNight_Final_vX.csv (final versioned dataset)
+#   - results/csv/CallsPerNight_final_vX.csv (final versioned dataset)
 #   - logs/workflow_log_YYYYMMDD.txt (processing log)
 #
 # In Memory:
@@ -101,56 +102,22 @@
 #    - Manually adjusted from uniform schedule
 #    - User edited StartDateTime or EndDateTime in template
 #
-# EDIT TRACKING
-# -------------
-# All manual edits are logged to ensure reproducibility:
-#
-# Edit log includes:
-#   - Detector and Night for each edited row
-#   - Original vs edited StartDateTime/EndDateTime
-#   - Calculated RecordingHours
-#   - Timestamp of edit log generation
-#   - Reference to both original and edited files
-#
-# FINAL DATASET STRUCTURE
-# ------------------------
-# Columns in final dataset:
-#   Detector       - Friendly detector name
-#   DetectorID     - 16-character hardware ID
-#   Night          - Study night date (YYYY-MM-DD)
-#   DateTime       - Representative datetime (noon on night date)
-#   CallsPerNight  - Count of calls detected
-#   RecordingHours - Hours detector was recording
-#   StartDateTime  - Recording start datetime (MM/DD/YYYY HH:MM:SS AM/PM)
-#   EndDateTime    - Recording end datetime (MM/DD/YYYY HH:MM:SS AM/PM)
-#   Status         - Fail/Success/Partial classification
-#   CallsPerHour   - Calls per hour metric
-#
-# PERFORMANCE EXPECTATIONS
-# -------------------------
-# Typical bat acoustic datasets:
-#
-# Small study (3 detectors, 30 nights):
-#   - Processing: < 30 seconds
-#
-# Medium study (10 detectors, 90 nights):
-#   - Processing: < 1 minute
-#
-# Large study (20+ detectors, 180 nights):
-#   - Processing: 1-2 minutes
-#
 # DEPENDENCIES
 # ------------
 # R Packages:
-#   - tidyverse (dplyr, readr, purrr)
+#   - dplyr, tidyr, readr (data manipulation)
 #   - lubridate (date/time calculations)
 #   - hms (time parsing)
+#   - here (path management)
+#   - stringr (string operations)
 #
 # Custom Functions (via load_all.R):
-#   - core/utilities.R: log_message, safe_read_csv
+#   - core/utilities.R: log_message, safe_read_csv, load_master_data,
+#                       find_most_recent_file, make_versioned_path
+#   - validation/validation.R: require_study_parameters, assert_file_exists,
+#                              assert_columns_exist, validate_calls_per_night
 #   - analysis/callspernight.R: calculate_recording_hours,
-#                                  save_callspernight_with_version
-#   - validation/validation.R: enforce_master_schema
+#                                save_callspernight_with_version
 #
 # TROUBLESHOOTING
 # ---------------
@@ -179,12 +146,20 @@
 # MAINTAINER NOTES
 # ----------------
 # - ASCII boxes: Single-line (┌─┐) for all stages
-# - Stage numbering: 4.1 - 4.5 (renumbered from original 3.6-3.10)
+# - Stage numbering: 4.1 - 4.5
 # - Edit log critical for reproducibility and audit trail
 # - Status classification must be deterministic
-# - Final dataset must pass enforce_master_schema() validation
+# - Final dataset must pass validation
 # - Version numbering auto-increments (v1, v2, v3...)
 # - Two-file system: ORIGINAL for tracking, EDIT_THIS for processing
+#
+# CHANGELOG
+# ---------
+# 2024-12-29: Refactored to use helper functions (load_master_data,
+#             require_study_parameters, find_most_recent_file,
+#             assert_file_exists, assert_columns_exist, make_versioned_path)
+# 2024-12-27: Added comprehensive header documentation
+# 2024-12-26: Initial CODING_STANDARDS compliant version
 #
 # ==============================================================================
 
@@ -216,22 +191,16 @@ log_message("=== WORKFLOW 04: Finalize CallsPerNight ===")
 # Load YAML parameters
 # ------------------------------------------------------------------------------
 
-# Load study parameters to get uniform recording schedule
-if (file.exists("inst/config/study_parameters.yaml")) {
-  params <- load_study_parameters("inst/config/study_parameters.yaml")
-  
-  # Extract uniform schedule for status classification
-  advanced_scheduling <- params$processing_options$advanced_scheduling %||% FALSE
-  
-  if (!advanced_scheduling) {
-    uniform_start <- params$processing_options$recording_start
-    uniform_end <- params$processing_options$recording_end
-  } else {
-    uniform_start <- NA
-    uniform_end <- NA
-  }
+# Load study parameters (validates file exists)
+params <- require_study_parameters()
+
+# Extract uniform schedule for status classification
+advanced_scheduling <- params$processing_options$advanced_scheduling %||% FALSE
+
+if (!advanced_scheduling) {
+  uniform_start <- params$processing_options$recording_start
+  uniform_end <- params$processing_options$recording_end
 } else {
-  warning("study_parameters.yaml not found - status classification may not work correctly")
   uniform_start <- NA
   uniform_end <- NA
 }
@@ -241,43 +210,15 @@ if (file.exists("inst/config/study_parameters.yaml")) {
 # LOAD REQUIRED DATA
 # ==============================================================================
 
-# Check if kpro_master exists in memory (from script 03)
-if (!exists("kpro_master")) {
-  message("kpro_master not found in memory - loading from checkpoint...")
-  
-  checkpoint_files <- list.files("outputs", 
-                                 pattern = "^02_kpro_master_.*\\.csv$",
-                                 full.names = TRUE)
-  
-  if (length(checkpoint_files) == 0) {
-    stop("No kpro_master checkpoint found. Please run 02_standardize.R first.")
-  }
-  
-  # Get most recent checkpoint
-  checkpoint_file <- checkpoint_files[order(file.mtime(checkpoint_files), decreasing = TRUE)][1]
-  
-  message(sprintf("  Loading: %s", basename(checkpoint_file)))
-  
-  kpro_master <- safe_read_csv(checkpoint_file)
-  
-  if (is.null(kpro_master)) {
-    stop("Failed to load kpro_master checkpoint")
-  }
-  
-  message(sprintf("✓ Loaded checkpoint: %s rows", format(nrow(kpro_master), big.mark = ",")))
-}
+# Load master data (from memory or checkpoint)
+kpro_master <- load_master_data()
 
-# Locate most recent ORIGINAL template from script 03
-template_files <- list.files("outputs",
-                             pattern = "^03_CallsPerNight_Template_ORIGINAL_.*\\.csv$",
-                             full.names = TRUE)
-
-if (length(template_files) == 0) {
-  stop("No original template found. Please run 03_generate_cpn_template.R first.")
-}
-
-# Get most recent template
-template_original_file <- template_files[order(file.mtime(template_files), decreasing = TRUE)][1]
+# Load original template from script 03
+template_original_file <- find_most_recent_file(
+  "outputs",
+  "^03_CallsPerNight_Template_ORIGINAL_.*\\.csv$",
+  hint = "Run 03_generate_cpn_template.R first"
+)
 
 message(sprintf("\nFound original template: %s", basename(template_original_file)))
 
@@ -291,9 +232,9 @@ timestamp <- sub(".*_ORIGINAL_(\\d{8}_\\d{6})\\.csv$", "\\1", basename(template_
 # STAGE 4.1: LOAD EDITED TEMPLATE
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 4.1: Load Edited Template                       │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Look for most recent EDIT_THIS file as default
 editable_files <- list.files("outputs",
@@ -333,9 +274,7 @@ if (length(editable_files) > 0) {
 }
 
 # Validate file exists
-if (!file.exists(edited_file)) {
-  stop(sprintf("File not found: %s", edited_file))
-}
+assert_file_exists(edited_file, hint = "Run 03_generate_cpn_template.R first")
 
 message(sprintf("\n  Loading: %s", basename(edited_file)))
 
@@ -346,15 +285,12 @@ if (is.null(template_edited)) {
   stop("Failed to load edited template")
 }
 
-# Validate structure (detector_id should NOT be present)
-required_template_cols <- c("Detector", "Night", "CallsPerNight",
-                            "StartDateTime", "EndDateTime", "RecordingHours")
-missing_template_cols <- setdiff(required_template_cols, names(template_edited))
-
-if (length(missing_template_cols) > 0) {
-  stop(sprintf("Edited template missing columns: %s", 
-               paste(missing_template_cols, collapse = ", ")))
-}
+# Validate required columns
+assert_columns_exist(
+  template_edited,
+  c("Detector", "Night", "CallsPerNight", "StartDateTime", "EndDateTime", "RecordingHours"),
+  source_hint = "03_generate_cpn_template.R"
+)
 
 # Remove detector_id if user added it back
 if ("detector_id" %in% names(template_edited)) {
@@ -382,9 +318,9 @@ log_message(sprintf("[Stage 4.1] Loaded edited template: %d rows",
 # STAGE 4.2: TRACK EDITS
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 4.2: Track Manual Edits                         │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 message("Comparing ORIGINAL vs EDITED templates...")
 
@@ -537,23 +473,6 @@ template_edit_parsed <- template_edited %>%
 message(sprintf("  Parsed original rows: %d", nrow(template_orig_parsed)))
 message(sprintf("  Parsed edited rows: %d", nrow(template_edit_parsed)))
 
-# Debug: Show sample detectors and nights
-if (nrow(template_orig_parsed) > 0) {
-  sample_orig <- template_orig_parsed %>% head(3)
-  message("  Sample from original:")
-  message(sprintf("    Detector: %s | Night: %s", 
-                  paste(sample_orig$Detector, collapse = ", "),
-                  paste(sample_orig$Night, collapse = ", ")))
-}
-
-if (nrow(template_edit_parsed) > 0) {
-  sample_edit <- template_edit_parsed %>% head(3)
-  message("  Sample from edited:")
-  message(sprintf("    Detector: %s | Night: %s", 
-                  paste(sample_edit$Detector, collapse = ", "),
-                  paste(sample_edit$Night, collapse = ", ")))
-}
-
 # Join and compare PARSED datetimes (not string representations)
 message("  Joining original and edited templates...")
 comparison <- template_orig_parsed %>%
@@ -577,23 +496,6 @@ if (nrow(comparison) == 0) {
   
   common_keys <- intersect(orig_keys$key, edit_keys$key)
   message(sprintf("  Common keys found: %d", length(common_keys)))
-  
-  if (length(common_keys) > 0) {
-    message(sprintf("  Sample common keys: %s", paste(head(common_keys, 3), collapse = "; ")))
-  }
-  
-  only_in_orig <- setdiff(orig_keys$key, edit_keys$key)
-  only_in_edit <- setdiff(edit_keys$key, orig_keys$key)
-  
-  if (length(only_in_orig) > 0) {
-    message(sprintf("  Keys only in original: %d", length(only_in_orig)))
-    message(sprintf("    Example: %s", paste(head(only_in_orig, 3), collapse = "; ")))
-  }
-  
-  if (length(only_in_edit) > 0) {
-    message(sprintf("  Keys only in edited: %d", length(only_in_edit)))
-    message(sprintf("    Example: %s", paste(head(only_in_edit, 3), collapse = "; ")))
-  }
   
   stop("Join failed - no matching Detector/Night pairs found between original and edited templates.\n  This suggests the templates are from different runs or have been modified incorrectly.\n  Please ensure you're comparing matching templates.")
 }
@@ -629,44 +531,6 @@ comparison <- comparison %>%
 total_edits <- sum(comparison$Any_change, na.rm = TRUE)
 
 message(sprintf("  Total manual edits: %d", total_edits))
-
-# Debug: Show breakdown if no edits
-if (total_edits == 0) {
-  message("  No manual edits detected - checking why...")
-  
-  # Check if any values differ (even NA)
-  start_differs <- sum(!is.na(comparison$StartDateTime_orig) & 
-                         !is.na(comparison$StartDateTime_edit) &
-                         comparison$StartDateTime_orig != comparison$StartDateTime_edit, 
-                       na.rm = TRUE)
-  
-  end_differs <- sum(!is.na(comparison$EndDateTime_orig) & 
-                       !is.na(comparison$EndDateTime_edit) &
-                       comparison$EndDateTime_orig != comparison$EndDateTime_edit, 
-                     na.rm = TRUE)
-  
-  message(sprintf("    Rows with different StartDateTime values: %d", start_differs))
-  message(sprintf("    Rows with different EndDateTime values: %d", end_differs))
-  
-  if (start_differs > 0 || end_differs > 0) {
-    message("    NOTE: Some datetimes differ but by < 1 second (Excel rounding)")
-    message("          This is expected and does not count as a manual edit")
-  }
-  
-  # Show sample comparison
-  if (nrow(comparison) > 0) {
-    sample <- comparison %>% head(3)
-    message("  Sample comparison (first 3 rows):")
-    for (i in 1:min(3, nrow(sample))) {
-      row <- sample[i,]
-      message(sprintf("    [%d] %s | %s", i, row$Detector, row$Night))
-      message(sprintf("        Start: '%s' vs '%s'", 
-                      row$StartDateTime_orig_str, row$StartDateTime_edit_str))
-      message(sprintf("        End:   '%s' vs '%s'", 
-                      row$EndDateTime_orig_str, row$EndDateTime_edit_str))
-    }
-  }
-}
 
 # Generate edit log
 if (total_edits > 0) {
@@ -751,9 +615,9 @@ log_message(sprintf("[Stage 4.2] Tracked %d manual edits", total_edits))
 # STAGE 4.3: SET STATUS
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 4.3: Set Recording Status                       │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 message("Classifying recording status (Fail/Success/Partial)...")
 
@@ -774,7 +638,6 @@ if (!is.na(uniform_start) && !is.na(uniform_end)) {
   expected_hours <- calculate_recording_hours(uniform_start, uniform_end)
   
   # Define tolerance for matching (allow ±5 minutes = 0.0833 hours)
-  # This handles minor Excel rounding or user adjustments
   hour_tolerance <- 0.0833  # 5 minutes
   
   template_edited <- template_edited %>%
@@ -789,9 +652,6 @@ if (!is.na(uniform_start) && !is.na(uniform_end)) {
                        abs(RecordingHours - expected_hours) <= hour_tolerance),
       
       # Consider it matching uniform schedule if EITHER times or hours match
-      # This handles cases where:
-      # - Excel reformatted times but hours are correct
-      # - User adjusted times slightly but total hours match
       matches_uniform = times_match | hours_match
     )
   
@@ -855,15 +715,11 @@ log_message(sprintf("[Stage 4.3] Set status: %d Fail, %d Success, %d Partial",
 # STAGE 4.4: CALCULATE METRICS
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 4.4: Calculate Metrics                          │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 message("Calculating CallsPerHour...")
-
-# Debug: Show column types before conversion
-message(sprintf("  CallsPerNight type: %s", paste(class(template_edited$CallsPerNight), collapse = ", ")))
-message(sprintf("  RecordingHours type: %s", paste(class(template_edited$RecordingHours), collapse = ", ")))
 
 # Ensure numeric columns are actually numeric (Excel may save as character)
 message("  Converting columns to numeric types...")
@@ -872,14 +728,6 @@ calls_per_night_final <- template_edited %>%
     CallsPerNight = as.numeric(CallsPerNight),
     RecordingHours = as.numeric(RecordingHours)
   )
-
-# Check for conversion warnings
-if (any(is.na(calls_per_night_final$CallsPerNight) & !is.na(template_edited$CallsPerNight))) {
-  warning("Some CallsPerNight values could not be converted to numeric - check for text/formulas")
-}
-if (any(is.na(calls_per_night_final$RecordingHours) & !is.na(template_edited$RecordingHours))) {
-  warning("Some RecordingHours values could not be converted to numeric - check for Excel formulas")
-}
 
 # Calculate CallsPerHour (avoid division by zero)
 calls_per_night_final <- calls_per_night_final %>%
@@ -926,9 +774,9 @@ log_message(sprintf("[Stage 4.4] Calculated metrics: %d final rows",
 # STAGE 4.5: VALIDATE & SAVE
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 4.5: Validate & Save                           │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Reorder columns for final dataset
 message("Finalizing column structure...")
@@ -938,14 +786,12 @@ calls_per_night_final <- calls_per_night_final %>%
 
 # Validate required columns exist
 message("\nValidating CallsPerNight structure...")
-required_cols <- c("Detector", "Night", "CallsPerNight", "RecordingHours", 
-                   "StartDateTime", "EndDateTime", "Status", "CallsPerHour")
-missing_cols <- setdiff(required_cols, names(calls_per_night_final))
-
-if (length(missing_cols) > 0) {
-  stop(sprintf("Final dataset missing required columns: %s", 
-               paste(missing_cols, collapse = ", ")))
-}
+assert_columns_exist(
+  calls_per_night_final,
+  c("Detector", "Night", "CallsPerNight", "RecordingHours", 
+    "StartDateTime", "EndDateTime", "Status", "CallsPerHour"),
+  source_hint = "04_finalize_cpn.R"
+)
 
 message("  ✓ All required columns present")
 
@@ -990,6 +836,9 @@ if (nrow(problematic) > 0) {
 
 message("\n✓ Data validation passed")
 
+# Ensure output directory exists
+assert_directory_exists("results/csv", create = TRUE)
+
 # Save with auto-incrementing version
 message("\nSaving final CallsPerNight dataset...")
 
@@ -1007,9 +856,9 @@ log_message(sprintf("[Stage 4.5] Saved final dataset: %s", basename(final_file))
 # WORKFLOW 04 COMPLETE
 # ==============================================================================
 
-message("\n╔══════════════════════════════════════════════════════════════╗")
+message("\n╔═══════════════════════════════════════════════════════════════╗")
 message("║          WORKFLOW 04 COMPLETE: CallsPerNight Generated         ║")
-message("╚══════════════════════════════════════════════════════════════╝")
+message("╚═══════════════════════════════════════════════════════════════╝")
 
 message("\nFiles created:")
 message(sprintf("  ✓ Template (original): %s", basename(template_original_file)))
@@ -1048,9 +897,9 @@ message("  summary(calls_per_night_final)")
 message("  table(calls_per_night_final$Status)")
 message("  View(calls_per_night_final)")
 
-message("\nNext steps:")
-message("  - Perform statistical analysis")
-message("  - Generate visualizations")
-message("  - Export for reporting\n")
+message("\nNext workflow:")
+message("  source(\"R/workflows/05_summary_stats.R\")")
+message("  - Generate summary statistics")
+message("  - Create publication-ready tables\n")
 
 log_message("=== WORKFLOW 04 COMPLETE ===")

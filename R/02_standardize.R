@@ -20,6 +20,7 @@
 #   02_standardize.R      → [THIS SCRIPT] Transform to master schema
 #   03_generate_cpn_template.R → Generate CallsPerNight template
 #   04_finalize_cpn.R     → Process template & calculate metrics
+#   05_summary_stats.R    → Generate summary statistics and tables
 #
 # INPUTS
 # ------
@@ -197,37 +198,33 @@
 #   - yaml (configuration file parsing)
 #
 # Custom Functions (via load_all.R):
+#   - core/utilities.R: log_message, safe_read_csv, load_intro_standardized
 #   - core/config.R: load_study_parameters, save_study_parameters
-#   - core/utilities.R: log_message, safe_read_csv
 #   - standardization/standardization.R: standardize_kpro_schema
 #   - standardization/datetime_conversion.R: convert_datetime_to_local
-#   - validation/validation.R: enforce_unified_schema, 
-#                              finalize_master_columns,
-#                              check_duplicates
-#   - core/utilities.R: save_master_with_timestamp
+#   - validation/validation.R: enforce_unified_schema, finalize_master_columns,
+#                              check_duplicates, assert_columns_exist,
+#                              require_study_parameters
 #
 # Configuration Files:
 #   - inst/config/study_parameters.yaml (detector mappings, timezone)
 #
 # TROUBLESHOOTING
 # ---------------
-# Issue: "raw_combined not found"
-# Fix: Run 01_ingest_raw_data.R first, or load checkpoint manually
+# Issue: "raw_combined not found and no checkpoint available"
+# Fix: Run 01_ingest_raw_data.R first
 #
-# Issue: "schema_version column not found"
+# Issue: "Required column 'schema_version' not found"
 # Fix: Data may not be from Script 01 - re-run ingestion workflow
 #
-# Issue: "Timezone not set in study_parameters.yaml"
-# Fix: Run 01_ingest_raw_data.R which prompts for timezone
+# Issue: "study_parameters.yaml not found"
+# Fix: Run 01_ingest_raw_data.R which creates this file
 #
 # Issue: "Duplicate detector names found"
 # Fix: Edit inst/config/study_parameters.yaml and ensure unique friendly names
 #
 # Issue: Detector name prompts appear every run
 # Fix: Check YAML file saved correctly, may have file permission issue
-#
-# Issue: "Failed to load checkpoint file"
-# Fix: Check outputs/ directory exists and contains intro_standardized CSVs
 #
 # Issue: DateTime shows wrong timezone
 # Fix: Verify timezone in study_parameters.yaml matches your location
@@ -276,17 +273,12 @@
 #
 # CHANGELOG
 # ---------
+# 2024-12-29: Refactored to use helper functions (load_intro_standardized,
+#             require_study_parameters, assert_columns_exist)
 # 2024-12-27: Removed hardcoded timezone, now uses YAML configuration
 # 2024-12-27: Updated to use convert_datetime_to_local() with explicit timezone
 # 2024-12-27: Added comprehensive header documentation
 # 2024-12-26: Initial CODING_STANDARDS compliant version
-#
-# ==============================================================================
-
-# OUTPUTS
-# -------
-# - kpro_master (in memory, ready for analysis)
-# - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv (timestamped checkpoint)
 #
 # ==============================================================================
 
@@ -314,45 +306,16 @@ log_message("=== WORKFLOW 02: Standardize to Master Schema ===")
 # STAGE 2.1: LOAD DATA
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.1: Load Data                                  │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Check if raw_combined exists in memory
-if (exists("raw_combined")) {
-  message("✓ Using raw_combined from memory")
-  message(sprintf("  Rows: %s", format(nrow(raw_combined), big.mark = ",")))
-  
-} else {
-  # Load most recent checkpoint from outputs/
-  message("raw_combined not found in memory - loading from checkpoint...")
-  
-  checkpoint_files <- list.files("outputs", 
-                                 pattern = "^01_intro_standardized_.*\\.csv$",
-                                 full.names = TRUE)
-  
-  if (length(checkpoint_files) == 0) {
-    stop("No checkpoint files found in outputs/. Please run 01_ingest_raw_data.R first.")
-  }
-  
-  # Get most recent checkpoint
-  checkpoint_file <- checkpoint_files[order(file.mtime(checkpoint_files), decreasing = TRUE)][1]
-  
-  message(sprintf("  Loading: %s", basename(checkpoint_file)))
-  
-  raw_combined <- safe_read_csv(checkpoint_file)
-  
-  if (is.null(raw_combined)) {
-    stop("Failed to load checkpoint file")
-  }
-  
-  message(sprintf("✓ Loaded checkpoint: %s rows", format(nrow(raw_combined), big.mark = ",")))
-}
+# Load intro-standardized data (from memory or checkpoint)
+raw_combined <- load_intro_standardized()
 
-# Validate schema_version column exists
-if (!"schema_version" %in% names(raw_combined)) {
-  stop("schema_version column not found - data may not be from Script 01")
-}
+# Validate required column exists
+assert_columns_exist(raw_combined, "schema_version", 
+                     source_hint = "01_ingest_raw_data.R")
 
 log_message(sprintf("[Stage 2.1] Loaded data: %s rows", nrow(raw_combined)))
 
@@ -360,16 +323,12 @@ log_message(sprintf("[Stage 2.1] Loaded data: %s rows", nrow(raw_combined)))
 # STAGE 2.2: DETECTOR MAPPING
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.2: Configure Detector Mapping                 │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Load study parameters (guaranteed to exist by Script 01)
-if (!file.exists("inst/config/study_parameters.yaml")) {
-  stop("inst/config/study_parameters.yaml not found. Please run 01_ingest_raw_data.R first.")
-}
-
-params <- load_study_parameters("inst/config/study_parameters.yaml")
+# Load study parameters (validates file exists)
+params <- require_study_parameters()
 
 # Validate detector_mapping exists
 if (is.null(params$study_parameters$detector_mapping)) {
@@ -454,9 +413,9 @@ log_message(sprintf("[Stage 2.2] Configured %d detector mappings", nrow(detector
 # STAGE 2.3: SCHEMA TRANSFORMATION
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.3: Transform to Unified Schema                │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Use existing standardize_kpro_schema() function
 # This should handle v1/v2/v3 transformation internally
@@ -473,9 +432,9 @@ log_message("[Stage 2.3] Transformed schemas to unified format")
 # STAGE 2.3.5: APPLY DETECTOR MAPPING (NEW STAGE - CRITICAL FIX)
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.3.5: Apply Detector Mapping to Data          │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 message("Joining detector_mapping to unified_data...")
 
@@ -521,9 +480,9 @@ log_message(sprintf("[Stage 2.3.5] Applied detector mapping: %d detectors", n_de
 # STAGE 2.4: TIME CONVERSIONS
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.4: Time Conversions (UTC → Local Time)        │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # -------------------------
 # Load timezone from YAML configuration
@@ -556,9 +515,9 @@ log_message(sprintf("[Stage 2.4] Converted times to %s", user_timezone))
 # STAGE 2.5: SCHEMA ENFORCEMENT & FINALIZATION
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.5: Enforce & Finalize Schema                  │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # -------------------------
 # Enforce unified schema (validate required columns & types)
@@ -583,9 +542,9 @@ log_message("[Stage 2.5] Enforced and finalized unified schema")
 # STAGE 2.6: DEDUPLICATION
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.6: Remove Duplicates                          │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Check for duplicates
 dup_check <- check_duplicates(kpro_master)
@@ -611,9 +570,9 @@ if (n_removed > 0) {
 # STAGE 2.7: SAVE MASTER FILE
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.7: Save Master File                           │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Use existing save_master_with_timestamp() function
 master_file <- save_master_with_timestamp(kpro_master)
@@ -627,9 +586,9 @@ log_message(sprintf("[Stage 2.7] Saved kpro_master: %s rows", nrow(kpro_master))
 # STAGE 2.8: CLEAN WORKSPACE
 # ==============================================================================
 
-message("\n┌────────────────────────────────────────────────────────────────┐")
+message("\n┌─────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 2.8: Clean Workspace                            │")
-message("└────────────────────────────────────────────────────────────────┘\n")
+message("└─────────────────────────────────────────────────────────────────┘\n")
 
 # Remove intermediate objects
 if (exists("raw_combined")) {
@@ -653,9 +612,9 @@ message("✓ Workspace cleaned")
 # STAGE 2 COMPLETE
 # ==============================================================================
 
-message("\n╔══════════════════════════════════════════════════════════════╗")
+message("\n╔═══════════════════════════════════════════════════════════════╗")
 message("║          STAGE 2 COMPLETE: Master Schema Created               ║")
-message("╚══════════════════════════════════════════════════════════════╝")
+message("╚═══════════════════════════════════════════════════════════════╝")
 
 message("\nTransformations applied:")
 message("  ✓ DetectorID → Detector mapping")
@@ -695,6 +654,6 @@ message("  table(kpro_master$Detector)")
 message("  View(kpro_master)")
 
 message("\nNext workflow:")
-message("  03_calls_per_night.R - Generate CallsPerNight template\n")
+message("  03_generate_cpn_template.R - Generate CallsPerNight template\n")
 
 log_message("=== WORKFLOW 02 COMPLETE ===")
