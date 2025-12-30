@@ -1,0 +1,828 @@
+# =============================================================================
+# output/plot_temporal.R — TEMPORAL PATTERN VISUALIZATIONS
+# =============================================================================
+# PURPOSE
+# -------
+# Provides visualization functions focused on temporal bat activity patterns.
+# These plots help researchers understand when bats are active (within nights,
+# across nights, across weeks/months) and how activity changes over the study.
+#
+# All functions return ggplot2 objects that can be further customized,
+# combined with other plots, or saved using ggsave().
+#
+# DEPENDENCIES
+# ------------
+# External Packages:
+#   - ggplot2: All plotting
+#   - dplyr: Data manipulation for plot preparation
+#   - tidyr: complete() for filling gaps
+#   - lubridate: Date/time manipulation
+#   - scales: Axis formatting (comma, percent, date labels)
+#
+# Internal Dependencies:
+#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
+#                     format_number()
+#
+# CONTENTS
+# --------
+# Nightly Patterns:
+#   - plot_activity_over_time(): Time series by detector
+#   - plot_cumulative_calls_over_time(): Running total
+#
+# Within-Night Patterns:
+#   - plot_hourly_activity_profile(): Activity by hour
+#   - plot_callsperhour_distribution(): CPH histogram
+#
+# Seasonal Patterns:
+#   - plot_weekly_activity(): Weekly aggregation
+#   - plot_activity_by_month(): Monthly aggregation
+#
+# Effort Visualization:
+#   - plot_recording_effort_heatmap(): Effort × Night matrix
+#
+# USAGE
+# -----
+# # Source via load_all.R or directly:
+# source("R/functions/output/plot_helpers.R")  # Must be first
+# source("R/functions/output/plot_temporal.R")
+#
+# # Generate plot
+# p <- plot_activity_over_time(calls_per_night_final)
+#
+# CHANGELOG
+# ---------
+# 2024-12-30: Initial creation with CODING_STANDARDS compliance
+#
+# =============================================================================
+
+
+# =============================================================================
+# NIGHTLY PATTERNS
+# =============================================================================
+
+#' Bat Activity Over Time by Detector
+#'
+#' @description
+#' Creates a line plot showing nightly bat activity trends for each detector.
+#' Useful for visualizing temporal patterns and comparing activity levels
+#' across monitoring sites throughout the study period.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
+#'   - Detector: Character. Unique detector identifier.
+#'   - Night: Date. Night of recording.
+#'   - CallsPerNight: Numeric. Number of calls per night.
+#' @param show_points Logical. If TRUE, show data points in addition to
+#'   lines. Default is FALSE.
+#'
+#' @return ggplot object showing nightly activity by detector.
+#'
+#' @details
+#' Each detector is shown as a separate colored line. Colors are assigned
+#' from the colorblind-accessible kpro_palette_cat().
+#'
+#' For studies with many detectors (>8), the legend may become crowded.
+#' Consider faceting by detector or using plot_synchrony() instead.
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - Each detector shown as separate line
+#' - Colors are colorblind-accessible
+#' - Works with any number of detectors
+#'
+#' @section DOES NOT:
+#' - Interpolate missing dates
+#' - Smooth the data
+#' - Normalize by recording effort
+#' - Facet by detector (add + facet_wrap(~Detector) if needed)
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage
+#' p <- plot_activity_over_time(calls_per_night_final)
+#'
+#' # With data points
+#' p <- plot_activity_over_time(cpn, show_points = TRUE)
+#'
+#' # Faceted by detector
+#' p + facet_wrap(~Detector, scales = "free_y")
+#' }
+#'
+#' @export
+plot_activity_over_time <- function(calls_per_night, show_points = FALSE) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Detector", "Night", "CallsPerNight"),
+    date_cols = "Night",
+    numeric_cols = "CallsPerNight",
+    df_name = "calls_per_night"
+  )
+  
+  n_detectors <- dplyr::n_distinct(calls_per_night$Detector)
+  
+  # Build base plot
+  p <- ggplot(
+    calls_per_night,
+    aes(x = Night, y = CallsPerNight, color = Detector)
+  ) +
+    geom_line(alpha = 0.8) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_color_manual(values = kpro_palette_cat(n_detectors)) +
+    labs(
+      title = "Bat Activity Over Time",
+      x = "Night",
+      y = "Calls Per Night",
+      color = "Detector"
+    ) +
+    theme_kpro()
+  
+  # Optionally add points
+  if (show_points) {
+    p <- p + geom_point(alpha = 0.6, size = 1)
+  }
+  
+  p
+}
+
+
+#' Cumulative Calls Over Time
+#'
+#' @description
+#' Shows the running total of bat calls through the study period. The slope
+#' of the line indicates activity intensity: steeper sections represent
+#' periods of higher activity.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
+#'   - Night: Date. Night of recording.
+#'   - CallsPerNight: Numeric. Number of calls per night.
+#' @param by_detector Logical. If TRUE, show separate cumulative lines for
+#'   each detector. Requires Detector column. Default is FALSE.
+#'
+#' @return ggplot object showing cumulative activity curve.
+#'
+#' @details
+#' Cumulative plots help visualize:
+#' - Overall sampling effort (final total)
+#' - Activity periods (steep slopes)
+#' - Low-activity periods (flat sections)
+#' - Relative contribution of each detector (if by_detector = TRUE)
+#'
+#' The study-wide version (by_detector = FALSE) first sums activity across
+#' all detectors for each night, then calculates the running total.
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - Cumulative sum never decreases
+#' - Final value equals total calls in dataset
+#' - Works with gaps in dates (cumulative continues from previous value)
+#'
+#' @section DOES NOT:
+#' - Interpolate missing dates
+#' - Normalize by expected effort
+#' - Reset cumulative count at any point
+#'
+#' @examples
+#' \dontrun{
+#' # Study-wide cumulative
+#' p <- plot_cumulative_calls_over_time(calls_per_night_final)
+#'
+#' # By detector
+#' p <- plot_cumulative_calls_over_time(cpn, by_detector = TRUE)
+#' }
+#'
+#' @export
+plot_cumulative_calls_over_time <- function(calls_per_night,
+                                            by_detector = FALSE) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Night", "CallsPerNight"),
+    date_cols = "Night",
+    numeric_cols = "CallsPerNight",
+    df_name = "calls_per_night"
+  )
+  
+  if (by_detector && !"Detector" %in% names(calls_per_night)) {
+    warning("Detector column not found. Showing study-wide cumulative.")
+    by_detector <- FALSE
+  }
+  
+  if (by_detector) {
+    # Calculate cumulative sum per detector
+    cumulative <- calls_per_night %>%
+      dplyr::arrange(Detector, Night) %>%
+      dplyr::group_by(Detector) %>%
+      dplyr::mutate(cumulative_calls = cumsum(CallsPerNight)) %>%
+      dplyr::ungroup()
+    
+    n_detectors <- dplyr::n_distinct(cumulative$Detector)
+    
+    p <- ggplot(
+      cumulative,
+      aes(x = Night, y = cumulative_calls, color = Detector)
+    ) +
+      geom_line(linewidth = 1) +
+      scale_color_manual(values = kpro_palette_cat(n_detectors))
+    
+  } else {
+    # Calculate study-wide cumulative
+    cumulative <- calls_per_night %>%
+      dplyr::arrange(Night) %>%
+      dplyr::group_by(Night) %>%
+      dplyr::summarise(
+        daily_total = sum(CallsPerNight, na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      dplyr::mutate(cumulative_calls = cumsum(daily_total))
+    
+    p <- ggplot(cumulative, aes(x = Night, y = cumulative_calls)) +
+      geom_line(color = "#0072B2", linewidth = 1)
+  }
+  
+  # Add common elements
+  p +
+    scale_y_continuous(labels = scales::comma) +
+    labs(
+      title = "Cumulative Bat Calls Over Time",
+      subtitle = "Slope indicates activity intensity",
+      x = "Night",
+      y = "Cumulative Calls"
+    ) +
+    theme_kpro()
+}
+
+
+# =============================================================================
+# WITHIN-NIGHT PATTERNS
+# =============================================================================
+
+#' Hourly Bat Activity Profile
+#'
+#' @description
+#' Displays bat activity by hour of night across the entire study. Shows
+#' when bats are most active, typically revealing peak activity in early
+#' evening hours after sunset.
+#'
+#' @param master_data Data frame. Must contain a `DateTime` column (POSIXct)
+#'   OR a pre-computed `Hour` column (integer 0-23).
+#' @param metric Character. One of "total" (sum of all calls) or "mean"
+#'   (average calls per hour per night). Default is "total".
+#'
+#' @return ggplot object showing hourly activity profile.
+#'
+#' @details
+#' The plot shows all 24 hours on the x-axis (0-23). Activity is represented
+#' by an area chart with line overlay for clear visibility.
+#'
+#' A vertical dashed line marks the peak activity hour with an annotation
+#' showing the specific hour.
+#'
+#' For bat studies, typical patterns show:
+#' - Low activity during daylight hours (06-18)
+#' - Rising activity after sunset (19-21)
+#' - Peak activity in early night (21-00)
+#' - Declining activity toward dawn (03-05)
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - All 24 hours shown (including zero-activity hours)
+#' - Peak hour annotated
+#' - Works with either DateTime or Hour column
+#'
+#' @section DOES NOT:
+#' - Separate by species (use plot_species_hourly_profile)
+#' - Account for sunset/sunrise time variation
+#' - Separate by detector
+#' - Normalize for recording effort by hour
+#'
+#' @examples
+#' \dontrun{
+#' # Total calls by hour
+#' p <- plot_hourly_activity_profile(kpro_master)
+#'
+#' # Mean calls per hour per night
+#' p <- plot_hourly_activity_profile(kpro_master, metric = "mean")
+#' }
+#'
+#' @export
+plot_hourly_activity_profile <- function(master_data, metric = "total") {
+  
+  # Validate input
+  validate_plot_input(
+    master_data,
+    df_name = "master_data"
+  )
+  
+  metric <- match.arg(metric, c("total", "mean"))
+  
+  # Get Hour column from DateTime if not present
+  if (!"Hour" %in% names(master_data)) {
+    if ("DateTime" %in% names(master_data)) {
+      master_data <- master_data %>%
+        dplyr::mutate(Hour = lubridate::hour(DateTime))
+    } else {
+      stop(
+        "master_data must contain 'Hour' or 'DateTime' column",
+        call. = FALSE
+      )
+    }
+  }
+  
+  # Count calls by hour
+  hourly <- master_data %>%
+    dplyr::count(Hour, name = "total_calls")
+  
+  # Calculate metric
+  if (metric == "mean") {
+    # Need to know number of nights
+    if ("DateTime" %in% names(master_data)) {
+      n_nights <- dplyr::n_distinct(as.Date(master_data$DateTime))
+    } else if ("Night" %in% names(master_data)) {
+      n_nights <- dplyr::n_distinct(master_data$Night)
+    } else {
+      stop("Cannot calculate mean without DateTime or Night column")
+    }
+    hourly <- hourly %>%
+      dplyr::mutate(value = total_calls / n_nights)
+    y_label <- "Mean Calls Per Night"
+  } else {
+    hourly <- hourly %>%
+      dplyr::mutate(value = total_calls)
+    y_label <- "Total Calls"
+  }
+  
+  # Ensure all 24 hours present
+  hourly <- hourly %>%
+    tidyr::complete(Hour = 0:23, fill = list(value = 0, total_calls = 0))
+  
+  # Identify peak hour
+  peak <- hourly %>% dplyr::slice_max(value, n = 1)
+  
+  # Build plot
+  ggplot(hourly, aes(x = Hour, y = value)) +
+    geom_area(fill = "#56B4E9", alpha = 0.3) +
+    geom_line(color = "#0072B2", linewidth = 1) +
+    geom_point(color = "#0072B2", size = 2) +
+    geom_vline(
+      xintercept = peak$Hour,
+      linetype = "dashed",
+      color = "#D55E00"
+    ) +
+    annotate(
+      "text",
+      x = peak$Hour,
+      y = peak$value,
+      label = sprintf("Peak: %02d:00", peak$Hour),
+      hjust = -0.1,
+      vjust = -0.5,
+      size = 3.5,
+      color = "#D55E00"
+    ) +
+    scale_x_continuous(breaks = 0:23, labels = sprintf("%02d", 0:23)) +
+    scale_y_continuous(labels = scales::comma) +
+    labs(
+      title = "Hourly Bat Activity Profile",
+      x = "Hour of Night",
+      y = y_label
+    ) +
+    theme_kpro()
+}
+
+
+#' Distribution of Calls Per Hour
+#'
+#' @description
+#' Creates a histogram showing the distribution of CallsPerHour values
+#' across all detectors and nights. Useful for identifying typical activity
+#' levels and spotting unusually high-activity periods.
+#'
+#' @param calls_per_night Data frame. Must contain column:
+#'   - CallsPerHour: Numeric. Call rate (calls per recording hour).
+#' @param binwidth Numeric or NULL. Histogram bin width. Default is NULL
+#'   (auto-determined by ggplot2).
+#' @param log_scale Logical. If TRUE, use log10 scale for x-axis.
+#'   Useful for right-skewed distributions. Default is FALSE.
+#'
+#' @return ggplot object showing CallsPerHour histogram.
+#'
+#' @details
+#' CallsPerHour normalizes activity by recording effort, making it more
+#' comparable across nights with different recording durations.
+#'
+#' Vertical lines show mean (orange, dashed) and median (green, dashed)
+#' with labels. For right-skewed distributions typical of bat data,
+#' the median is often more representative than the mean.
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - Mean and median shown as reference lines
+#' - NA and Inf values removed before plotting
+#' - Works with any binwidth
+#'
+#' @section DOES NOT:
+#' - Test for normality
+#' - Identify specific outliers
+#' - Separate by detector or species
+#' - Transform the raw data
+#'
+#' @examples
+#' \dontrun{
+#' # Default histogram
+#' p <- plot_callsperhour_distribution(calls_per_night_final)
+#'
+#' # With log scale for skewed data
+#' p <- plot_callsperhour_distribution(cpn, log_scale = TRUE)
+#' }
+#'
+#' @export
+plot_callsperhour_distribution <- function(calls_per_night,
+                                           binwidth = NULL,
+                                           log_scale = FALSE) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = "CallsPerHour",
+    numeric_cols = "CallsPerHour",
+    df_name = "calls_per_night"
+  )
+  
+  # Remove NA and Inf values
+  plot_data <- calls_per_night %>%
+    dplyr::filter(!is.na(CallsPerHour), is.finite(CallsPerHour))
+  
+  # Calculate summary statistics
+  mean_cph <- mean(plot_data$CallsPerHour, na.rm = TRUE)
+  median_cph <- median(plot_data$CallsPerHour, na.rm = TRUE)
+  
+  # Build plot
+  p <- ggplot(plot_data, aes(x = CallsPerHour)) +
+    geom_histogram(
+      binwidth = binwidth,
+      fill = "#56B4E9",
+      color = "white"
+    ) +
+    geom_vline(
+      xintercept = mean_cph,
+      color = "#D55E00",
+      linetype = "dashed"
+    ) +
+    geom_vline(
+      xintercept = median_cph,
+      color = "#009E73",
+      linetype = "dashed"
+    ) +
+    annotate(
+      "text",
+      x = mean_cph,
+      y = Inf,
+      label = sprintf("Mean: %.1f", mean_cph),
+      hjust = -0.1,
+      vjust = 2,
+      size = 3,
+      color = "#D55E00"
+    ) +
+    annotate(
+      "text",
+      x = median_cph,
+      y = Inf,
+      label = sprintf("Median: %.1f", median_cph),
+      hjust = -0.1,
+      vjust = 4,
+      size = 3,
+      color = "#009E73"
+    ) +
+    labs(
+      title = "Distribution of Calls Per Hour",
+      x = "Calls Per Hour",
+      y = "Frequency (nights)"
+    ) +
+    theme_kpro()
+  
+  # Optionally use log scale
+  if (log_scale) {
+    p <- p + scale_x_log10()
+  }
+  
+  p
+}
+
+
+# =============================================================================
+# SEASONAL PATTERNS
+# =============================================================================
+
+#' Weekly Activity Summary
+#'
+#' @description
+#' Aggregates bat activity by week to show seasonal patterns at a coarser
+#' temporal resolution. Useful for identifying migration periods, phenological
+#' changes, or weather-related activity patterns.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
+#'   - Night: Date. Night of recording.
+#'   - CallsPerNight: Numeric. Number of calls per night.
+#' @param by_detector Logical. If TRUE, facet by detector. Requires Detector
+#'   column. Default is FALSE.
+#'
+#' @return ggplot object showing weekly activity summary.
+#'
+#' @details
+#' Weeks are defined using ISO week numbering (Monday start). The x-axis
+#' shows the start date of each week.
+#'
+#' This plot smooths out day-to-day variation to reveal longer-term patterns
+#' like:
+#' - Seasonal increase/decrease in activity
+#' - Migration pulses
+#' - Weather-related activity bursts
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - Weeks defined by ISO week (Monday start)
+#' - Shows total calls per week (not mean)
+#' - Works with partial weeks at study start/end
+#'
+#' @section DOES NOT:
+#' - Normalize by number of active nights per week
+#' - Show confidence intervals
+#' - Handle multi-year studies gracefully
+#'
+#' @examples
+#' \dontrun{
+#' # Study-wide weekly totals
+#' p <- plot_weekly_activity(calls_per_night_final)
+#'
+#' # Faceted by detector
+#' p <- plot_weekly_activity(cpn, by_detector = TRUE)
+#' }
+#'
+#' @export
+plot_weekly_activity <- function(calls_per_night, by_detector = FALSE) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Night", "CallsPerNight"),
+    date_cols = "Night",
+    numeric_cols = "CallsPerNight",
+    df_name = "calls_per_night"
+  )
+  
+  if (by_detector && !"Detector" %in% names(calls_per_night)) {
+    warning("Detector column not found. Showing study-wide summary.")
+    by_detector <- FALSE
+  }
+  
+  # Add week column (ISO week, starts Monday)
+  weekly_data <- calls_per_night %>%
+    dplyr::mutate(
+      Week = lubridate::floor_date(Night, "week"),
+      week_num = lubridate::isoweek(Night)
+    )
+  
+  # Aggregate by week (and optionally by detector)
+  if (by_detector) {
+    weekly_summary <- weekly_data %>%
+      dplyr::group_by(Detector, Week) %>%
+      dplyr::summarise(
+        total_calls = sum(CallsPerNight, na.rm = TRUE),
+        n_nights = dplyr::n(),
+        mean_calls = mean(CallsPerNight, na.rm = TRUE),
+        .groups = "drop"
+      )
+  } else {
+    weekly_summary <- weekly_data %>%
+      dplyr::group_by(Week) %>%
+      dplyr::summarise(
+        total_calls = sum(CallsPerNight, na.rm = TRUE),
+        n_nights = dplyr::n(),
+        mean_calls = mean(CallsPerNight, na.rm = TRUE),
+        .groups = "drop"
+      )
+  }
+  
+  # Build plot
+  p <- ggplot(weekly_summary, aes(x = Week, y = total_calls)) +
+    geom_col(fill = "#009E73") +
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_date(date_labels = "%b %d", date_breaks = "2 weeks") +
+    labs(
+      title = "Weekly Bat Activity",
+      x = "Week Starting",
+      y = "Total Calls"
+    ) +
+    theme_kpro(rotate_x = TRUE)
+  
+  # Optionally facet by detector
+  if (by_detector) {
+    p <- p + facet_wrap(~Detector, scales = "free_y")
+  }
+  
+  p
+}
+
+
+#' Monthly Activity Summary
+#'
+#' @description
+#' Aggregates bat activity by month for studies spanning multiple months.
+#' Useful for comparing overall activity levels across different parts
+#' of the season.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
+#'   - Night: Date. Night of recording.
+#'   - CallsPerNight: Numeric. Number of calls per night.
+#' @param by_detector Logical. If TRUE, show stacked bars by detector.
+#'   Requires Detector column. Default is FALSE.
+#'
+#' @return ggplot object showing monthly activity summary.
+#'
+#' @details
+#' For single-month studies, this plot is less informative than weekly
+#' summaries. It's most useful for studies spanning 2+ months.
+#'
+#' When by_detector = TRUE, bars are stacked showing each detector's
+#' contribution to the monthly total.
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - Months shown with "Mon YYYY" labels
+#' - Shows total calls per month
+#' - Works with partial months at study start/end
+#'
+#' @section DOES NOT:
+#' - Normalize by number of active nights per month
+#' - Handle multi-year studies with same-month comparisons
+#' - Show error bars or variation
+#'
+#' @examples
+#' \dontrun{
+#' # Study-wide monthly totals
+#' p <- plot_activity_by_month(calls_per_night_final)
+#'
+#' # Stacked by detector
+#' p <- plot_activity_by_month(cpn, by_detector = TRUE)
+#' }
+#'
+#' @export
+plot_activity_by_month <- function(calls_per_night, by_detector = FALSE) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Night", "CallsPerNight"),
+    date_cols = "Night",
+    numeric_cols = "CallsPerNight",
+    df_name = "calls_per_night"
+  )
+  
+  if (by_detector && !"Detector" %in% names(calls_per_night)) {
+    warning("Detector column not found. Showing study-wide summary.")
+    by_detector <- FALSE
+  }
+  
+  # Add month column
+  monthly_data <- calls_per_night %>%
+    dplyr::mutate(Month = lubridate::floor_date(Night, "month"))
+  
+  if (by_detector) {
+    monthly_summary <- monthly_data %>%
+      dplyr::group_by(Detector, Month) %>%
+      dplyr::summarise(
+        total_calls = sum(CallsPerNight, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    n_detectors <- dplyr::n_distinct(monthly_summary$Detector)
+    
+    p <- ggplot(
+      monthly_summary,
+      aes(x = Month, y = total_calls, fill = Detector)
+    ) +
+      geom_col(position = "stack") +
+      scale_fill_manual(values = kpro_palette_cat(n_detectors))
+    
+  } else {
+    monthly_summary <- monthly_data %>%
+      dplyr::group_by(Month) %>%
+      dplyr::summarise(
+        total_calls = sum(CallsPerNight, na.rm = TRUE),
+        n_nights = dplyr::n(),
+        .groups = "drop"
+      )
+    
+    p <- ggplot(monthly_summary, aes(x = Month, y = total_calls)) +
+      geom_col(fill = "#0072B2")
+  }
+  
+  # Add common elements
+  p +
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+    labs(
+      title = "Monthly Bat Activity",
+      x = "Month",
+      y = "Total Calls"
+    ) +
+    theme_kpro(rotate_x = TRUE)
+}
+
+
+# =============================================================================
+# EFFORT VISUALIZATION
+# =============================================================================
+
+#' Recording Effort Heatmap
+#'
+#' @description
+#' Creates a heatmap showing recording effort (hours) across detectors and
+#' nights. Helps identify deployment gaps, partial nights, and equipment
+#' failures that affect data quality.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
+#'   - Detector: Character. Unique detector identifier.
+#'   - Night: Date. Night of recording.
+#'   - RecordingHours: Numeric. Hours of recording per night.
+#'
+#' @return ggplot object showing effort heatmap.
+#'
+#' @details
+#' The heatmap uses a viridis color scale where:
+#' - Darker colors = more recording hours
+#' - Lighter colors = fewer recording hours
+#' - Gray = no data (detector not active or data missing)
+#'
+#' The plot automatically fills in missing detector × night combinations
+#' with NA (shown as gray), making gaps in coverage visually apparent.
+#'
+#' Typical use cases:
+#' - Identify nights when detectors failed
+#' - Spot partial recording nights (equipment issues, battery)
+#' - Verify consistent deployment across all sites
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - All dates in study period shown (including gaps)
+#' - Missing data shown as gray (NA)
+#' - Uses viridis color scale for accessibility
+#'
+#' @section DOES NOT:
+#' - Flag specific thresholds (e.g., "partial" nights)
+#' - Calculate expected recording hours
+#' - Interpolate missing values
+#'
+#' @examples
+#' \dontrun{
+#' p <- plot_recording_effort_heatmap(calls_per_night_final)
+#' print(p)
+#' }
+#'
+#' @export
+plot_recording_effort_heatmap <- function(calls_per_night) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Detector", "Night", "RecordingHours"),
+    date_cols = "Night",
+    numeric_cols = "RecordingHours",
+    df_name = "calls_per_night"
+  )
+  
+  # Create complete grid of all detector × night combinations
+  all_nights <- seq(
+    min(calls_per_night$Night),
+    max(calls_per_night$Night),
+    by = 1
+  )
+  all_detectors <- unique(calls_per_night$Detector)
+  
+  complete_grid <- tidyr::expand_grid(
+    Detector = all_detectors,
+    Night = all_nights
+  ) %>%
+    dplyr::left_join(
+      calls_per_night %>% dplyr::select(Detector, Night, RecordingHours),
+      by = c("Detector", "Night")
+    )
+  
+  # Build heatmap
+  ggplot(complete_grid, aes(x = Night, y = Detector, fill = RecordingHours)) +
+    geom_tile(color = "white", linewidth = 0.2) +
+    scale_fill_viridis_c(
+      option = "viridis",
+      na.value = "gray80",
+      name = "Hours"
+    ) +
+    labs(
+      title = "Recording Effort Heatmap",
+      subtitle = "Gray = no data; darker = more recording hours",
+      x = "Night",
+      y = "Detector"
+    ) +
+    theme_kpro(rotate_x = TRUE) +
+    theme(panel.grid = element_blank())
+}
