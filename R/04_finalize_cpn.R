@@ -318,9 +318,9 @@ log_message(sprintf("[Stage 4.1] Loaded edited template: %d rows",
 # STAGE 4.2: TRACK EDITS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
+message("\n┌────────────────────────────────────────────────────────────────┐")
 message("│          STAGE 4.2: Track Manual Edits                         │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+message("└────────────────────────────────────────────────────────────────┘\n")
 
 message("Comparing ORIGINAL vs EDITED templates...")
 
@@ -328,91 +328,8 @@ message("Comparing ORIGINAL vs EDITED templates...")
 message(sprintf("  Original template rows: %d", nrow(template)))
 message(sprintf("  Edited template rows: %d", nrow(template_edited)))
 
-# Helper function to check if a column is Date type
-is.Date <- function(x) {
-  inherits(x, "Date")
-}
-
-# Helper function to parse datetime strings consistently
-parse_datetime_safe <- function(dt_string) {
-  if (is.na(dt_string) || trimws(dt_string) == "") {
-    return(as.POSIXct(NA))
-  }
-  
-  # Try multiple formats (same logic as calculate_recording_hours)
-  if (grepl("/", dt_string)) {
-    # Try AM/PM format first
-    result <- lubridate::mdy_hms(dt_string, quiet = TRUE)
-    
-    # Try 24-hour format if that failed
-    if (is.na(result)) {
-      result <- lubridate::mdy_hm(dt_string, quiet = TRUE)
-    }
-    
-    # Try explicit parse if still failed
-    if (is.na(result)) {
-      result <- as.POSIXct(dt_string, format = "%m/%d/%Y %H:%M", tz = "UTC")
-    }
-    
-    return(result)
-  } else {
-    # Time-only format - not expected in this comparison but handle it
-    return(as.POSIXct(NA))
-  }
-}
-
-# Helper function to extract time from datetime string
-extract_time <- function(datetime_str) {
-  if (is.na(datetime_str) || trimws(datetime_str) == "") {
-    return(NA_character_)
-  }
-  
-  # Parse the datetime
-  dt <- parse_datetime_safe(datetime_str)
-  if (is.na(dt)) {
-    return(NA_character_)
-  }
-  
-  # Extract time as HH:MM:SS
-  return(format(dt, "%H:%M:%S"))
-}
-
 # Ensure Night columns are same type (Date) for join
-# Excel may save dates in various formats, so we need to parse carefully
 message("  Parsing Night columns...")
-
-# Helper function to parse dates in multiple formats
-parse_date_safe <- function(date_string) {
-  if (is.na(date_string) || trimws(date_string) == "") {
-    return(as.Date(NA))
-  }
-  
-  # If already a Date object, return it
-  if (inherits(date_string, "Date")) {
-    return(date_string)
-  }
-  
-  # Try multiple formats Excel might use
-  # Format 1: YYYY-MM-DD (standard)
-  result <- as.Date(date_string, format = "%Y-%m-%d")
-  if (!is.na(result)) return(result)
-  
-  # Format 2: MM/DD/YYYY (US Excel)
-  result <- lubridate::mdy(date_string, quiet = TRUE)
-  if (!is.na(result)) return(result)
-  
-  # Format 3: MM-DD-YYYY (Excel variant)
-  result <- as.Date(date_string, format = "%m-%d-%Y")
-  if (!is.na(result)) return(result)
-  
-  # Format 4: M/D/YYYY (single-digit month/day)
-  result <- as.Date(date_string, format = "%m/%d/%Y")
-  if (!is.na(result)) return(result)
-  
-  # If all failed, return NA and warn
-  warning(sprintf("Could not parse date: '%s'", date_string))
-  return(as.Date(NA))
-}
 
 # Parse Night in original template
 if (is.Date(template$Night)) {
@@ -420,7 +337,7 @@ if (is.Date(template$Night)) {
   template <- template %>%
     mutate(Night = as.Date(Night))
 } else {
-  # Parse from string
+  # Parse from string using parse_date_safe() from callspernight.R
   template <- template %>%
     mutate(Night = sapply(Night, parse_date_safe) %>% as.Date(origin = "1970-01-01"))
 }
@@ -431,7 +348,7 @@ if (is.Date(template_edited$Night)) {
   template_edited <- template_edited %>%
     mutate(Night = as.Date(Night))
 } else {
-  # Parse from string
+  # Parse from string using parse_date_safe() from callspernight.R
   template_edited <- template_edited %>%
     mutate(Night = sapply(Night, parse_date_safe) %>% as.Date(origin = "1970-01-01"))
 }
@@ -443,7 +360,7 @@ message(sprintf("  Edited Night range: %s to %s",
                 min(template_edited$Night, na.rm = TRUE), 
                 max(template_edited$Night, na.rm = TRUE)))
 
-# Parse datetimes in both templates
+# Parse datetimes in both templates using parse_datetime_safe() from callspernight.R
 message("  Parsing original template datetimes...")
 template_orig_parsed <- template %>%
   select(Detector, Night, 
@@ -473,6 +390,23 @@ template_edit_parsed <- template_edited %>%
 message(sprintf("  Parsed original rows: %d", nrow(template_orig_parsed)))
 message(sprintf("  Parsed edited rows: %d", nrow(template_edit_parsed)))
 
+# Debug: Show sample detectors and nights
+if (nrow(template_orig_parsed) > 0) {
+  sample_orig <- template_orig_parsed %>% head(3)
+  message("  Sample from original:")
+  message(sprintf("    Detector: %s | Night: %s", 
+                  paste(sample_orig$Detector, collapse = ", "),
+                  paste(sample_orig$Night, collapse = ", ")))
+}
+
+if (nrow(template_edit_parsed) > 0) {
+  sample_edit <- template_edit_parsed %>% head(3)
+  message("  Sample from edited:")
+  message(sprintf("    Detector: %s | Night: %s", 
+                  paste(sample_edit$Detector, collapse = ", "),
+                  paste(sample_edit$Night, collapse = ", ")))
+}
+
 # Join and compare PARSED datetimes (not string representations)
 message("  Joining original and edited templates...")
 comparison <- template_orig_parsed %>%
@@ -496,6 +430,23 @@ if (nrow(comparison) == 0) {
   
   common_keys <- intersect(orig_keys$key, edit_keys$key)
   message(sprintf("  Common keys found: %d", length(common_keys)))
+  
+  if (length(common_keys) > 0) {
+    message(sprintf("  Sample common keys: %s", paste(head(common_keys, 3), collapse = "; ")))
+  }
+  
+  only_in_orig <- setdiff(orig_keys$key, edit_keys$key)
+  only_in_edit <- setdiff(edit_keys$key, orig_keys$key)
+  
+  if (length(only_in_orig) > 0) {
+    message(sprintf("  Keys only in original: %d", length(only_in_orig)))
+    message(sprintf("    Example: %s", paste(head(only_in_orig, 3), collapse = "; ")))
+  }
+  
+  if (length(only_in_edit) > 0) {
+    message(sprintf("  Keys only in edited: %d", length(only_in_edit)))
+    message(sprintf("    Example: %s", paste(head(only_in_edit, 3), collapse = "; ")))
+  }
   
   stop("Join failed - no matching Detector/Night pairs found between original and edited templates.\n  This suggests the templates are from different runs or have been modified incorrectly.\n  Please ensure you're comparing matching templates.")
 }
@@ -532,6 +483,44 @@ total_edits <- sum(comparison$Any_change, na.rm = TRUE)
 
 message(sprintf("  Total manual edits: %d", total_edits))
 
+# Debug: Show breakdown if no edits
+if (total_edits == 0) {
+  message("  No manual edits detected - checking why...")
+  
+  # Check if any values differ (even NA)
+  start_differs <- sum(!is.na(comparison$StartDateTime_orig) & 
+                         !is.na(comparison$StartDateTime_edit) &
+                         comparison$StartDateTime_orig != comparison$StartDateTime_edit, 
+                       na.rm = TRUE)
+  
+  end_differs <- sum(!is.na(comparison$EndDateTime_orig) & 
+                       !is.na(comparison$EndDateTime_edit) &
+                       comparison$EndDateTime_orig != comparison$EndDateTime_edit, 
+                     na.rm = TRUE)
+  
+  message(sprintf("    Rows with different StartDateTime values: %d", start_differs))
+  message(sprintf("    Rows with different EndDateTime values: %d", end_differs))
+  
+  if (start_differs > 0 || end_differs > 0) {
+    message("    NOTE: Some datetimes differ but by < 1 second (Excel rounding)")
+    message("          This is expected and does not count as a manual edit")
+  }
+  
+  # Show sample comparison
+  if (nrow(comparison) > 0) {
+    sample <- comparison %>% head(3)
+    message("  Sample comparison (first 3 rows):")
+    for (i in 1:min(3, nrow(sample))) {
+      row <- sample[i,]
+      message(sprintf("    [%d] %s | %s", i, row$Detector, row$Night))
+      message(sprintf("        Start: '%s' vs '%s'", 
+                      row$StartDateTime_orig_str, row$StartDateTime_edit_str))
+      message(sprintf("        End:   '%s' vs '%s'", 
+                      row$EndDateTime_orig_str, row$EndDateTime_edit_str))
+    }
+  }
+}
+
 # Generate edit log
 if (total_edits > 0) {
   edit_log_file <- sprintf("outputs/04_CallsPerNight_EditLog_%s.txt", timestamp)
@@ -540,7 +529,7 @@ if (total_edits > 0) {
     filter(Any_change) %>%
     arrange(Detector, Night)
   
-  # Write edit log
+  # Write edit log using format_datetime_for_log() from callspernight.R
   sink(edit_log_file)
   cat("==================================================\n")
   cat("CALLSPERNIGHT TEMPLATE EDIT LOG\n")
@@ -556,46 +545,45 @@ if (total_edits > 0) {
   cat("DETAILED EDIT LIST\n")
   cat("==================================================\n\n")
   
-  # Helper function to format datetime for display
-  format_datetime_for_log <- function(dt_parsed, dt_string) {
-    if (is.na(dt_parsed)) {
-      return("<blank>")
-    }
-    # Format as: MM/DD/YYYY HH:MM (24-hour, no seconds, consistent)
-    return(format(dt_parsed, "%m/%d/%Y %H:%M"))
-  }
-  
   for (i in seq_len(nrow(edit_log))) {
     row <- edit_log[i, ]
     cat(sprintf("[%d] Detector: %s | Night: %s\n", i, row$Detector, row$Night))
     
-    # Show StartDateTime changes
+    # Show StartDateTime changes using format_datetime_for_log() from callspernight.R
     if (row$StartDateTime_changed) {
       cat(sprintf("    StartDateTime CHANGED:\n"))
-      cat(sprintf("      Original: %s\n", format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)))
-      cat(sprintf("      Edited:   %s\n", format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)))
+      cat(sprintf("      Original: %s\n", 
+                  format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)))
+      cat(sprintf("      Edited:   %s\n", 
+                  format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)))
     } else if (row$StartDateTime_added) {
       cat(sprintf("    StartDateTime ADDED:\n"))
       cat(sprintf("      Original: <blank>\n"))
-      cat(sprintf("      Edited:   %s\n", format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)))
+      cat(sprintf("      Edited:   %s\n", 
+                  format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)))
     } else if (row$StartDateTime_removed) {
       cat(sprintf("    StartDateTime REMOVED:\n"))
-      cat(sprintf("      Original: %s\n", format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)))
+      cat(sprintf("      Original: %s\n", 
+                  format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)))
       cat(sprintf("      Edited:   <blank>\n"))
     }
     
-    # Show EndDateTime changes
+    # Show EndDateTime changes using format_datetime_for_log() from callspernight.R
     if (row$EndDateTime_changed) {
       cat(sprintf("    EndDateTime CHANGED:\n"))
-      cat(sprintf("      Original: %s\n", format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str)))
-      cat(sprintf("      Edited:   %s\n", format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)))
+      cat(sprintf("      Original: %s\n", 
+                  format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str)))
+      cat(sprintf("      Edited:   %s\n", 
+                  format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)))
     } else if (row$EndDateTime_added) {
       cat(sprintf("    EndDateTime ADDED:\n"))
       cat(sprintf("      Original: <blank>\n"))
-      cat(sprintf("      Edited:   %s\n", format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)))
+      cat(sprintf("      Edited:   %s\n", 
+                  format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)))
     } else if (row$EndDateTime_removed) {
       cat(sprintf("    EndDateTime REMOVED:\n"))
-      cat(sprintf("      Original: %s\n", format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str)))
+      cat(sprintf("      Original: %s\n", 
+                  format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str)))
       cat(sprintf("      Edited:   <blank>\n"))
     }
     
@@ -610,6 +598,7 @@ if (total_edits > 0) {
 }
 
 log_message(sprintf("[Stage 4.2] Tracked %d manual edits", total_edits))
+
 
 # ==============================================================================
 # STAGE 4.3: SET STATUS

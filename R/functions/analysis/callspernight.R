@@ -53,13 +53,15 @@
 #
 # CONTENTS
 # --------
-#   - calculate_recording_hours()          # Recording duration calculation
-#   - is.Date()                            # Type checker for Date objects
-#   - parse_datetime_safe()                # Parse full datetime strings (multi-format)
-#   - extract_time()                       # Extract time component from datetime
-#   - generate_calls_per_night_template()  # Template generation
-#   - apply_schedule()                     # Apply recording schedule
-#   - save_callspernight_with_version()    # Save with version numbering
+# - calculate_recording_hours()          # Recording duration calculation
+# - is.Date()                            # Type checker for Date objects
+# - parse_datetime_safe()                # Parse full datetime strings
+# - extract_time()                       # Extract time component from datetime
+# - parse_date_safe()                    # Parse date strings (multi-format)
+# - format_datetime_for_log()            # Format datetime for edit log display
+# - generate_calls_per_night_template()  # Template generation
+# - apply_schedule()                     # Apply recording schedule
+# - save_callspernight_with_version()    # Save with version numbering
 #
 # EXCEL FORMULA FOR RECORDINGHOURS
 # --------------------------------
@@ -611,6 +613,228 @@ extract_time <- function(datetime_str) {
   # Extract time component as HH:MM:SS (24-hour format)
   # format() with %H:%M:%S gives zero-padded 24-hour time
   return(format(dt, "%H:%M:%S"))
+}
+
+
+' Parse Date Strings Safely
+#'
+#' @description
+#' Parses date strings in multiple formats commonly produced by Excel or
+#' user editing. Handles mixed date formats gracefully. Used for parsing
+#' Night column in template comparison (Workflow 04).
+#'
+#' @param date_string Character date string to parse, Date object, or NA
+#'
+#' @return Date object, or NA if parsing fails or input is NA
+#'
+#' @details
+#' **Purpose:**
+#' When comparing ORIGINAL vs EDITED templates in Workflow 04, the Night
+#' column may have been saved in different date formats by Excel. This
+#' function handles multiple formats to ensure successful joins.
+#'
+#' **Supported formats (tried in order):**
+#' 1. YYYY-MM-DD (standard R format)
+#' 2. MM/DD/YYYY (US Excel format)
+#' 3. MM-DD-YYYY (Excel variant)
+#' 4. M/D/YYYY (single-digit month/day)
+#'
+#' **Already Date objects:**
+#' If input is already a Date object, returns it unchanged.
+#'
+#' **Excel date formats:**
+#' Excel saves dates in various formats depending on locale and settings.
+#' This function tries all common formats to maximize compatibility.
+#'
+#' **NA handling:**
+#' - Input: NA or empty string → Output: NA (Date)
+#' - Input: Unparseable string → Output: NA (Date) with warning
+#'
+#' @section CONTRACT:
+#' - Returns Date object (R Date class)
+#' - Returns NA (Date) for NA or blank input (fails gracefully)
+#' - Returns input unchanged if already Date object
+#' - Tries multiple formats automatically (no format parameter needed)
+#' - Warns on parse failures (logs unparseable strings)
+#' - Never throws errors (returns NA on failure)
+#'
+#' @section DOES NOT:
+#' - Parse datetime strings (use parse_datetime_safe for those)
+#' - Validate if date is "reasonable" (e.g., Feb 30 would parse to NA)
+#' - Perform timezone conversions (Date has no timezone)
+#' - Require explicit format specification (auto-detects)
+#' - Throw errors on parse failures (warns and returns NA)
+#'
+#' @examples
+#' \dontrun{
+#' # Standard R format
+#' parse_date_safe("2024-10-15")
+#' # [1] "2024-10-15"
+#'
+#' # US Excel format
+#' parse_date_safe("10/15/2024")
+#' # [1] "2024-10-15"
+#'
+#' # Excel variant
+#' parse_date_safe("10-15-2024")
+#' # [1] "2024-10-15"
+#'
+#' # Single-digit month/day
+#' parse_date_safe("1/5/2024")
+#' # [1] "2024-01-05"
+#'
+#' # Already Date object (unchanged)
+#' parse_date_safe(as.Date("2024-10-15"))
+#' # [1] "2024-10-15"
+#'
+#' # NA handling
+#' parse_date_safe(NA)
+#' # [1] NA (Date)
+#'
+#' parse_date_safe("")
+#' # [1] NA (Date)
+#'
+#' # Unparseable format (warns and returns NA)
+#' parse_date_safe("invalid")
+#' # Warning: Could not parse date: 'invalid'
+#' # [1] NA (Date)
+#'
+#' # Usage in Workflow 04 template comparison:
+#' template <- template %>%
+#'   mutate(Night = sapply(Night, parse_date_safe) %>% 
+#'            as.Date(origin = "1970-01-01"))
+#' }
+#'
+#' @export
+parse_date_safe <- function(date_string) {
+  
+  # -------------------------
+  # Handle special cases
+  # -------------------------
+  
+  # NA or empty string
+  if (is.na(date_string) || trimws(date_string) == "") {
+    return(as.Date(NA))
+  }
+  
+  # Already a Date object - return unchanged
+  if (inherits(date_string, "Date")) {
+    return(date_string)
+  }
+  
+  # -------------------------
+  # Try multiple date formats
+  # -------------------------
+  
+  # Format 1: YYYY-MM-DD (standard R format)
+  result <- as.Date(date_string, format = "%Y-%m-%d")
+  if (!is.na(result)) return(result)
+  
+  # Format 2: MM/DD/YYYY (US Excel)
+  result <- lubridate::mdy(date_string, quiet = TRUE)
+  if (!is.na(result)) return(result)
+  
+  # Format 3: MM-DD-YYYY (Excel variant)
+  result <- as.Date(date_string, format = "%m-%d-%Y")
+  if (!is.na(result)) return(result)
+  
+  # Format 4: M/D/YYYY (single-digit month/day)
+  result <- as.Date(date_string, format = "%m/%d/%Y")
+  if (!is.na(result)) return(result)
+  
+  # -------------------------
+  # All formats failed - warn and return NA
+  # -------------------------
+  
+  warning(sprintf("Could not parse date: '%s'", date_string))
+  return(as.Date(NA))
+}
+
+
+#' Format DateTime for Edit Log Display
+#'
+#' @description
+#' Formats a parsed POSIXct datetime for display in the CallsPerNight edit
+#' log. Returns consistent 24-hour format without seconds for readability.
+#' Used in Workflow 04 edit tracking.
+#'
+#' @param dt_parsed POSIXct datetime object (parsed), or NA
+#' @param dt_string Character original datetime string (for reference, unused)
+#'
+#' @return Character string in format "MM/DD/YYYY HH:MM" (24-hour, no seconds),
+#'   or "<blank>" if dt_parsed is NA
+#'
+#' @details
+#' **Purpose:**
+#' In the CallsPerNight edit log, we need consistent datetime formatting
+#' regardless of how Excel formatted the original strings. This function
+#' ensures all datetimes display as 24-hour format without seconds.
+#'
+#' **Format:**
+#' - Date: MM/DD/YYYY (US format, matches template format)
+#' - Time: HH:MM (24-hour, no seconds for readability)
+#' - Example: "10/24/2025 18:00"
+#'
+#' **NA handling:**
+#' Returns "<blank>" for NA datetimes to clearly indicate missing values
+#' in the edit log.
+#'
+#' **Design note:**
+#' The dt_string parameter is included for consistency with calling pattern
+#' but is not used. We format from the parsed datetime to ensure consistency.
+#'
+#' @section CONTRACT:
+#' - Returns character string in format "MM/DD/YYYY HH:MM"
+#' - Returns "<blank>" for NA input
+#' - Always 24-hour format (never AM/PM)
+#' - Never includes seconds
+#' - Zero-padded (e.g., "08:00" not "8:00")
+#'
+#' @section DOES NOT:
+#' - Include AM/PM indicators (always 24-hour)
+#' - Include seconds (omitted for readability)
+#' - Use original string format (formats from parsed datetime)
+#' - Perform timezone conversions (uses datetime as-is)
+#' - Validate if datetime is "reasonable"
+#'
+#' @examples
+#' \dontrun{
+#' # Normal datetime
+#' dt <- parse_datetime_safe("10/24/2025 6:00:00 PM")
+#' format_datetime_for_log(dt, "10/24/2025 6:00:00 PM")
+#' # [1] "10/24/2025 18:00"
+#'
+#' # Morning time
+#' dt <- parse_datetime_safe("10/24/2025 7:30:00 AM")
+#' format_datetime_for_log(dt, "10/24/2025 7:30:00 AM")
+#' # [1] "10/24/2025 07:30"
+#'
+#' # NA datetime
+#' format_datetime_for_log(NA, "")
+#' # [1] "<blank>"
+#'
+#' # Usage in Workflow 04 edit log:
+#' for (i in seq_len(nrow(edit_log))) {
+#'   row <- edit_log[i, ]
+#'   cat(sprintf("      Original: %s\n",
+#'     format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)
+#'   ))
+#'   cat(sprintf("      Edited:   %s\n",
+#'     format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
+#'   ))
+#' }
+#' }
+#'
+#' @export
+format_datetime_for_log <- function(dt_parsed, dt_string) {
+  
+  # Handle NA input - return clear indicator
+  if (is.na(dt_parsed)) {
+    return("<blank>")
+  }
+  
+  # Format as: MM/DD/YYYY HH:MM (24-hour, no seconds, consistent)
+  return(format(dt_parsed, "%m/%d/%Y %H:%M"))
 }
 
 

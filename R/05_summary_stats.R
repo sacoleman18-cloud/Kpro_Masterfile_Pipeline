@@ -391,7 +391,11 @@ message("└──────────────────────�
 if ("auto_id" %in% names(kpro_master) && "Night" %in% names(kpro_master)) {
   message("Creating species accumulation summary...")
   
-  species_accumulation <- create_species_accumulation_summary(kpro_master)
+  # Pass date_col = "Night" to use Night column
+  species_accumulation <- create_species_accumulation_summary(
+    kpro_master, 
+    date_col = "Night"
+  )
   
   final_richness <- max(species_accumulation$cumulative_species, na.rm = TRUE)
   message(sprintf("✓ Species accumulation calculated: %d total species", final_richness))
@@ -399,13 +403,13 @@ if ("auto_id" %in% names(kpro_master) && "Night" %in% names(kpro_master)) {
   # Show first detections
   message("\nFirst detections:")
   first_detections <- species_accumulation %>%
-    filter(!is.na(new_species) & new_species != "") %>%
+    filter(!is.na(new_species_list) & new_species_list != "") %>%  # ✅ Use new_species_list
     head(5)
   
   for (i in seq_len(nrow(first_detections))) {
     message(sprintf("  %s: %s (cumulative: %d)", 
-                    first_detections$Night[i],
-                    first_detections$new_species[i],
+                    first_detections$Night[i],            # ✅ Now works with Night column
+                    first_detections$new_species_list[i], # ✅ Show species names
                     first_detections$cumulative_species[i]))
   }
   
@@ -416,6 +420,7 @@ if ("auto_id" %in% names(kpro_master) && "Night" %in% names(kpro_master)) {
   species_accumulation <- NULL
   log_message("[Stage 5.6] Skipped species accumulation")
 }
+
 
 # ==============================================================================
 # STAGE 5.7: HOURLY ACTIVITY PROFILES
@@ -442,13 +447,13 @@ if (has_hour || has_datetime) {
   
   # Find peak hour
   peak_hour <- hourly_summary_overall %>%
-    slice_max(total_calls, n = 1)
+    slice_max(n_calls, n = 1)  # ✅ Changed from total_calls to n_calls
   
   message(sprintf("✓ Hourly profiles created"))
   message(sprintf("  Peak hour: %02d:00 (%s calls, %.1f%% of total)",
                   peak_hour$Hour,
-                  format(peak_hour$total_calls, big.mark = ","),
-                  peak_hour$pct_total))
+                  format(peak_hour$n_calls, big.mark = ","),      # ✅ Changed from total_calls
+                  peak_hour$pct_of_total))                        # ✅ Changed from pct_total
   
   log_message("[Stage 5.7] Created hourly activity profiles")
   
@@ -458,6 +463,7 @@ if (has_hour || has_datetime) {
   hourly_summary_by_detector <- NULL
   log_message("[Stage 5.7] Skipped hourly analysis")
 }
+
 
 # ==============================================================================
 # STAGE 5.8: FORMAT GT TABLES
@@ -632,9 +638,10 @@ message(sprintf("   Recording hours: %.1f", study_summary$total_hours))
 
 message("\n🦇 ACTIVITY METRICS")
 message(sprintf("   Total calls: %s", format(study_summary$total_calls, big.mark = ",")))
-message(sprintf("   Mean calls/hour: %.2f", study_summary$mean_cph))
-message(sprintf("   Median calls/hour: %.2f", study_summary$median_cph))
-message(sprintf("   CV: %.1f%%", study_summary$cv_cph))
+message(sprintf("   Mean calls/hour: %.2f", study_summary$overall_mean_cph))      # ✅ Fixed
+message(sprintf("   Median calls/hour: %.2f", study_summary$overall_median_cph))  # ✅ Fixed
+message(sprintf("   SD calls/hour: %.2f", study_summary$overall_sd_cph))          # ✅ Added
+message(sprintf("   CV: %.1f%%", study_summary$overall_cv_pct))  
 
 message("\n📈 VARIANCE DECOMPOSITION")
 message(sprintf("   Between-detector: %.1f%%", variance_components$pct_between))
@@ -647,7 +654,7 @@ if (!is.null(species_summary)) {
 }
 
 if (!is.null(hourly_summary_overall)) {
-  peak <- hourly_summary_overall %>% slice_max(total_calls, n = 1)
+  peak <- hourly_summary_overall %>% slice_max(n_calls, n = 1)  # ✅ Changed from total_calls
   message("\n⏰ TEMPORAL PATTERNS")
   message(sprintf("   Peak activity hour: %02d:00", peak$Hour))
 }

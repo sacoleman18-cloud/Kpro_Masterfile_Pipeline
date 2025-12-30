@@ -105,8 +105,9 @@
 #'
 #' @description
 #' Creates a comprehensive per-detector summary combining effort metrics,
-#' activity metrics, and variability metrics. This is the primary summary
-#' for assessing detector performance and bat activity patterns.
+#' activity metrics (both per-night and per-hour), and variability metrics.
+#' This is the primary summary for assessing detector performance and bat 
+#' activity patterns.
 #'
 #' @param cpn_final Data frame. CallsPerNight final data from Workflow 04.
 #'   Must contain: Detector, Night, CallsPerNight, RecordingHours, Status,
@@ -120,16 +121,20 @@
 #'     \item{mean_hours}{Mean hours per night}
 #'     \item{pct_success}{Percent of nights with full recording}
 #'     \item{pct_partial}{Percent of nights with partial recording}
-#'     \item{pct_fail}{Percent of nights with no recording}
+#'     \item{pct_fail}{Percent of nights with no recording (equipment failure)}
 #'     \item{total_calls}{Total bat calls detected}
 #'     \item{mean_cpn}{Mean calls per night}
+#'     \item{median_cpn}{Median calls per night}
+#'     \item{sd_cpn}{Standard deviation of calls per night}
+#'     \item{min_cpn}{Minimum calls per night}
+#'     \item{max_cpn}{Maximum calls per night}
 #'     \item{mean_cph}{Mean calls per hour}
 #'     \item{median_cph}{Median calls per hour}
 #'     \item{sd_cph}{Standard deviation of calls per hour}
 #'     \item{min_cph}{Minimum calls per hour}
 #'     \item{max_cph}{Maximum calls per hour}
-#'     \item{cv_pct}{Coefficient of variation (percent)}
-#'     \item{pct_zero}{Percent of nights with zero calls}
+#'     \item{cv_pct}{Coefficient of variation in CPH (percent). Measures relative variability: Low CV (~20%) = consistent activity, High CV (~100%+) = highly variable}
+#'     \item{pct_zero}{Percent of nights with zero calls (detector recorded but no bats detected). Different from pct_fail (equipment didn't record)}
 #'     \item{first_night}{First night of recording}
 #'     \item{last_night}{Last night of recording}
 #'   }
@@ -138,7 +143,9 @@
 #' - Returns one row per detector
 #' - All metrics calculated with na.rm = TRUE
 #' - Percentages are 0-100 scale
-#' - CV calculated as sd/mean * 100
+#' - CV calculated as (sd/mean) * 100 for CallsPerHour
+#' - pct_zero based on CallsPerNight (nights with 0 calls but RecordingHours > 0)
+#' - pct_fail based on Status column (nights with Fail status)
 #'
 #' @section DOES NOT:
 #' - Make ecological interpretations
@@ -153,7 +160,6 @@
 #'
 #' @export
 create_detector_activity_summary <- function(cpn_final) {
-  
   
   # Input validation using helpers
   validate_cpn_data(cpn_final, require_status = TRUE, require_cph = TRUE)
@@ -170,16 +176,22 @@ create_detector_activity_summary <- function(cpn_final) {
       pct_partial = round(100 * sum(Status == "Partial", na.rm = TRUE) / dplyr::n(), 1),
       pct_fail = round(100 * sum(Status == "Fail", na.rm = TRUE) / dplyr::n(), 1),
       
-      # Activity metrics
+      # Activity metrics - Calls Per Night
       total_calls = sum(CallsPerNight, na.rm = TRUE),
       mean_cpn = round(mean(CallsPerNight, na.rm = TRUE), 1),
+      median_cpn = round(median(CallsPerNight, na.rm = TRUE), 1),
+      sd_cpn = round(sd(CallsPerNight, na.rm = TRUE), 1),
+      min_cpn = round(min(CallsPerNight, na.rm = TRUE), 1),
+      max_cpn = round(max(CallsPerNight, na.rm = TRUE), 1),
+      
+      # Activity metrics - Calls Per Hour
       mean_cph = round(mean(CallsPerHour, na.rm = TRUE), 2),
       median_cph = round(median(CallsPerHour, na.rm = TRUE), 2),
-      
-      # Variability metrics
       sd_cph = round(sd(CallsPerHour, na.rm = TRUE), 2),
       min_cph = round(min(CallsPerHour, na.rm = TRUE), 2),
       max_cph = round(max(CallsPerHour, na.rm = TRUE), 2),
+      
+      # Variability metrics
       cv_pct = round(100 * sd(CallsPerHour, na.rm = TRUE) /
                        mean(CallsPerHour, na.rm = TRUE), 1),
       pct_zero = round(100 * sum(CallsPerNight == 0, na.rm = TRUE) / dplyr::n(), 1),
@@ -303,19 +315,27 @@ create_effort_summary_table <- function(calls_per_night) {
 #'     \item{study_duration_days}{Number of days in study}
 #'     \item{total_calls}{Total bat calls across all detectors}
 #'     \item{total_hours}{Total recording hours}
+#'     \item{overall_mean_cpn}{Mean calls per night (study-wide)}
+#'     \item{overall_median_cpn}{Median calls per night}
+#'     \item{overall_sd_cpn}{Standard deviation of CPN}
+#'     \item{overall_min_cpn}{Minimum calls per night}
+#'     \item{overall_max_cpn}{Maximum calls per night}
 #'     \item{overall_mean_cph}{Mean calls per hour (study-wide)}
 #'     \item{overall_median_cph}{Median calls per hour}
 #'     \item{overall_sd_cph}{Standard deviation of CPH}
-#'     \item{overall_cv_pct}{Coefficient of variation}
+#'     \item{overall_min_cph}{Minimum calls per hour}
+#'     \item{overall_max_cph}{Maximum calls per hour}
+#'     \item{overall_cv_pct}{Coefficient of variation in CPH. Low (~20%) = consistent, High (~100%+) = variable}
 #'     \item{pct_success}{Percent detector-nights with full recording}
 #'     \item{pct_partial}{Percent with partial recording}
-#'     \item{pct_fail}{Percent with no recording}
+#'     \item{pct_fail}{Percent with no recording (equipment failure)}
 #'   }
 #'
 #' @section CONTRACT:
 #' - Returns exactly one row
 #' - Aggregates across ALL detectors
-#' - CV calculated as sd/mean * 100
+#' - CV calculated as (sd/mean) * 100 for CallsPerHour
+#' - All percentages sum to 100 (Success + Partial + Fail)
 #'
 #' @section DOES NOT:
 #' - Break down by detector (use create_detector_activity_summary)
@@ -335,10 +355,23 @@ create_study_summary <- function(cpn_final) {
     study_duration_days = as.integer(study_end - study_start) + 1L,
     total_calls = sum(cpn_final$CallsPerNight, na.rm = TRUE),
     total_hours = round(sum(cpn_final$RecordingHours, na.rm = TRUE), 1),
+    
+    # Calls Per Night metrics
+    overall_mean_cpn = round(mean(cpn_final$CallsPerNight, na.rm = TRUE), 1),
+    overall_median_cpn = round(median(cpn_final$CallsPerNight, na.rm = TRUE), 1),
+    overall_sd_cpn = round(sd(cpn_final$CallsPerNight, na.rm = TRUE), 1),
+    overall_min_cpn = round(min(cpn_final$CallsPerNight, na.rm = TRUE), 1),
+    overall_max_cpn = round(max(cpn_final$CallsPerNight, na.rm = TRUE), 1),
+    
+    # Calls Per Hour metrics
     overall_mean_cph = round(mean(cpn_final$CallsPerHour, na.rm = TRUE), 2),
     overall_median_cph = round(median(cpn_final$CallsPerHour, na.rm = TRUE), 2),
     overall_sd_cph = round(sd(cpn_final$CallsPerHour, na.rm = TRUE), 2),
+    overall_min_cph = round(min(cpn_final$CallsPerHour, na.rm = TRUE), 2),
+    overall_max_cph = round(max(cpn_final$CallsPerHour, na.rm = TRUE), 2),
     overall_cv_pct = round(100 * overall_sd_cph / overall_mean_cph, 1),
+    
+    # Recording status percentages
     pct_success = round(100 * sum(cpn_final$Status == "Success", na.rm = TRUE) /
                           nrow(cpn_final), 1),
     pct_partial = round(100 * sum(cpn_final$Status == "Partial", na.rm = TRUE) /
@@ -366,12 +399,14 @@ create_study_summary <- function(cpn_final) {
 #'     \item{pct_between}{Percent of variance between detectors}
 #'     \item{pct_within}{Percent of variance within detectors}
 #'     \item{icc}{Intraclass correlation coefficient}
+#'     \item{interpretation}{Plain-English interpretation of spatial heterogeneity}
 #'   }
 #'
 #' @section CONTRACT:
 #' - Returns single row
 #' - ICC = var_between / var_total
 #' - pct_between + pct_within = 100 (approximately)
+#' - Interpretation based on ICC thresholds
 #'
 #' @section DOES NOT:
 #' - Perform formal ANOVA or hypothesis testing
@@ -410,13 +445,26 @@ calculate_variance_components <- function(cpn_final) {
     )
   var_within <- mean(within_vars$var_within, na.rm = TRUE)
   
+  # Calculate ICC
+  icc <- var_between / var_total
+  
+  # Generate interpretation based on ICC
+  interpretation <- dplyr::case_when(
+    icc >= 0.75 ~ "Very high spatial heterogeneity (most variation between sites)",
+    icc >= 0.50 ~ "High spatial heterogeneity (more variation between than within sites)",
+    icc >= 0.25 ~ "Moderate spatial heterogeneity (balanced spatial and temporal variation)",
+    icc >= 0.10 ~ "Low spatial heterogeneity (more variation within sites over time)",
+    TRUE ~ "Very low spatial heterogeneity (most variation is temporal)"
+  )
+  
   tibble::tibble(
     var_total = round(var_total, 2),
     var_between = round(var_between, 2),
     var_within = round(var_within, 2),
     pct_between = round(100 * var_between / var_total, 1),
     pct_within = round(100 * var_within / var_total, 1),
-    icc = round(var_between / var_total, 3)
+    icc = round(icc, 3),
+    interpretation = interpretation
   )
 }
 
@@ -489,14 +537,15 @@ create_species_summary_by_detector <- function(master_data,
 #' Shows cumulative species count over time. Useful for assessing
 #' whether sampling effort was sufficient to detect most species.
 #'
-#' @param master_data Data frame. Master file with DateTime and auto_id.
+#' @param master_data Data frame. Master file with DateTime or Night column and auto_id.
 #' @param species_col Character. Column containing species ID.
 #'   Default: "auto_id"
-#' @param date_col Character. Column containing date. Default: "DateTime"
+#' @param date_col Character. Column containing date. Default: "Night"
+#'   Can also accept "DateTime" which will be converted to date.
 #'
 #' @return Tibble with columns:
 #'   \describe{
-#'     \item{date}{Date}
+#'     \item{Night}{Date}
 #'     \item{new_species}{Number of new species detected that date}
 #'     \item{cumulative_species}{Running total of unique species}
 #'     \item{new_species_list}{Character, comma-separated new species}
@@ -506,6 +555,7 @@ create_species_summary_by_detector <- function(master_data,
 #' - One row per date with detections
 #' - Excludes NoID/UNKNOWN from species counts
 #' - cumulative_species is monotonically increasing
+#' - Returns Night column (not date) for consistency with workflow
 #'
 #' @section DOES NOT:
 #' - Account for detection probability
@@ -514,7 +564,7 @@ create_species_summary_by_detector <- function(master_data,
 #' @export
 create_species_accumulation_summary <- function(master_data,
                                                 species_col = "auto_id",
-                                                date_col = "DateTime") {
+                                                date_col = "Night") {
   
   # Input validation
   validate_master_data(master_data)
@@ -546,13 +596,13 @@ create_species_accumulation_summary <- function(master_data,
   
   # Accumulate by date
   accumulation <- first_detections %>%
-    dplyr::group_by(date = first_date) %>%
+    dplyr::group_by(Night = first_date) %>%  # ✅ Changed from date to Night
     dplyr::summarise(
       new_species = dplyr::n(),
       new_species_list = paste(species, collapse = ", "),
       .groups = "drop"
     ) %>%
-    dplyr::arrange(date) %>%
+    dplyr::arrange(Night) %>%  # ✅ Changed from date to Night
     dplyr::mutate(
       cumulative_species = cumsum(new_species)
     )
