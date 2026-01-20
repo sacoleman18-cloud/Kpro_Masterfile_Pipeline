@@ -37,6 +37,16 @@
 # Data Quality:
 #   - plot_noid_proportion(): Unidentified call rates by detector
 #
+# SPECIES COLUMN NOTE
+# -------------------
+# All functions in this module use the unified `species` column created
+# in Workflow 03. This column contains either:
+#   - auto_id values (if user chose automatic ID only)
+#   - manual_id values with auto_id fallback (if user chose manual ID path)
+#
+# The original auto_id and manual_id columns are preserved in the master
+# file for audit purposes, but all species-level analysis uses `species`.
+#
 # USAGE
 # -----
 # # Source via load_all.R or directly:
@@ -51,6 +61,7 @@
 #
 # CHANGELOG
 # ---------
+# 2025-01-07: Updated to use unified `species` column (was auto_id)
 # 2024-12-30: Initial creation with CODING_STANDARDS compliance
 #
 # =============================================================================
@@ -67,8 +78,9 @@
 #' species detected across the entire study. Bars are ordered from most
 #' to least common species, with percentages shown.
 #'
-#' @param master_data Data frame. Must contain an `auto_id` column with
-#'   species identification codes. Each row represents one bat call.
+#' @param master_data Data frame. Must contain a `species` column with
+#'   species identification codes (unified from auto_id or manual_id
+#'   in Workflow 03). Each row represents one bat call.
 #' @param top_n Integer or NULL. If specified, only show the top N species
 #'   by total calls. Default is NULL (show all species).
 #' @param exclude_noid Logical. If TRUE (default), exclude NoID and
@@ -97,10 +109,10 @@
 #' - NoID excluded by default (can be included with exclude_noid = FALSE)
 #'
 #' @section DOES NOT:
-#' - Distinguish between auto_id and manual_id
 #' - Account for detection probability
 #' - Normalize by recording effort
 #' - Validate species codes
+#' - Distinguish original source (auto_id vs manual_id)
 #'
 #' @examples
 #' \dontrun{
@@ -122,7 +134,7 @@ plot_species_composition_bar <- function(master_data,
   # Validate input
   validate_plot_input(
     master_data,
-    required_cols = "auto_id",
+    required_cols = "species",
     df_name = "master_data"
   )
   
@@ -130,14 +142,14 @@ plot_species_composition_bar <- function(master_data,
   if (exclude_noid) {
     master_data <- master_data %>%
       dplyr::filter(
-        !is.na(auto_id),
-        !auto_id %in% c("NoID", "UNKNOWN", "")
+        !is.na(species),
+        !species %in% c("NoID", "UNKNOWN", "")
       )
   }
   
   # Count calls by species, ordered by descending count
   species_counts <- master_data %>%
-    dplyr::count(auto_id, name = "TotalCalls") %>%
+    dplyr::count(species, name = "TotalCalls") %>%
     dplyr::arrange(dplyr::desc(TotalCalls))
   
   # Optionally limit to top N species
@@ -151,7 +163,7 @@ plot_species_composition_bar <- function(master_data,
   
   # Convert to factor for proper ordering
   species_counts <- species_counts %>%
-    dplyr::mutate(auto_id = factor(auto_id, levels = auto_id))
+    dplyr::mutate(species = factor(species, levels = species))
   
   # Calculate percentages
   total <- sum(species_counts$TotalCalls)
@@ -159,7 +171,7 @@ plot_species_composition_bar <- function(master_data,
     dplyr::mutate(pct = TotalCalls / total * 100)
   
   # Build plot
-  ggplot(species_counts, aes(x = auto_id, y = TotalCalls)) +
+  ggplot(species_counts, aes(x = species, y = TotalCalls)) +
     geom_col(fill = "#009E73") +
     geom_text(
       aes(label = sprintf("%s\n(%.1f%%)", format_number(TotalCalls), pct)),
@@ -189,7 +201,7 @@ plot_species_composition_bar <- function(master_data,
 #'
 #' @param master_data Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
-#'   - auto_id: Character. Species identification code.
+#'   - species: Character. Species identification code.
 #' @param exclude_noid Logical. If TRUE (default), exclude NoID calls.
 #' @param show_values Logical. If TRUE (default), display call counts in cells.
 #'
@@ -237,7 +249,7 @@ plot_species_by_detector_heatmap <- function(master_data,
   # Validate input
   validate_plot_input(
     master_data,
-    required_cols = c("Detector", "auto_id"),
+    required_cols = c("Detector", "species"),
     df_name = "master_data"
   )
   
@@ -245,32 +257,32 @@ plot_species_by_detector_heatmap <- function(master_data,
   if (exclude_noid) {
     master_data <- master_data %>%
       dplyr::filter(
-        !is.na(auto_id),
-        !auto_id %in% c("NoID", "UNKNOWN", "")
+        !is.na(species),
+        !species %in% c("NoID", "UNKNOWN", "")
       )
   }
   
   # Create complete species × detector matrix with counts
   species_detector <- master_data %>%
-    dplyr::count(Detector, auto_id, name = "n_calls") %>%
+    dplyr::count(Detector, species, name = "n_calls") %>%
     tidyr::complete(
       Detector,
-      auto_id,
+      species,
       fill = list(n_calls = 0)
     )
   
   # Order species by total calls (most common first, but reversed for y-axis)
   species_order <- species_detector %>%
-    dplyr::group_by(auto_id) %>%
+    dplyr::group_by(species) %>%
     dplyr::summarise(total = sum(n_calls), .groups = "drop") %>%
     dplyr::arrange(dplyr::desc(total)) %>%
-    dplyr::pull(auto_id)
+    dplyr::pull(species)
   
   species_detector <- species_detector %>%
-    dplyr::mutate(auto_id = factor(auto_id, levels = rev(species_order)))
+    dplyr::mutate(species = factor(species, levels = rev(species_order)))
   
   # Build base heatmap
-  p <- ggplot(species_detector, aes(x = Detector, y = auto_id, fill = n_calls)) +
+  p <- ggplot(species_detector, aes(x = Detector, y = species, fill = n_calls)) +
     geom_tile(color = "white") +
     scale_fill_viridis_c(
       option = "viridis",
@@ -323,7 +335,7 @@ plot_species_by_detector_heatmap <- function(master_data,
 #' trend suggests more species would be detected with additional sampling.
 #'
 #' @param master_data Data frame. Must contain columns:
-#'   - auto_id: Character. Species identification code.
+#'   - species: Character. Species identification code.
 #'   - Night: Date. Night of detection (or DateTime to derive Night).
 #' @param exclude_noid Logical. If TRUE (default), exclude NoID calls.
 #'
@@ -365,7 +377,7 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
   # Validate input
   validate_plot_input(
     master_data,
-    required_cols = "auto_id",
+    required_cols = "species",
     df_name = "master_data"
   )
   
@@ -386,14 +398,14 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
   if (exclude_noid) {
     master_data <- master_data %>%
       dplyr::filter(
-        !is.na(auto_id),
-        !auto_id %in% c("NoID", "UNKNOWN", "")
+        !is.na(species),
+        !species %in% c("NoID", "UNKNOWN", "")
       )
   }
   
   # Find first detection date for each species
   first_detections <- master_data %>%
-    dplyr::group_by(auto_id) %>%
+    dplyr::group_by(species) %>%
     dplyr::summarise(first_night = min(Night, na.rm = TRUE), .groups = "drop") %>%
     dplyr::arrange(first_night)
   
@@ -459,7 +471,7 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #' identify species-specific activity windows and temporal niche partitioning.
 #'
 #' @param master_data Data frame. Must contain columns:
-#'   - auto_id: Character. Species identification code.
+#'   - species: Character. Species identification code.
 #'   - DateTime: POSIXct. Timestamp of detection (or Hour: integer 0-23).
 #' @param top_n Integer. Number of most common species to display.
 #'   Default is 6 to keep the plot readable.
@@ -490,7 +502,6 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #' - Account for variable sunset/sunrise times
 #' - Show confidence intervals
 #' - Normalize for recording effort differences by hour
-#' - Handle datasets with only Hour column (needs DateTime)
 #'
 #' @examples
 #' \dontrun{
@@ -509,18 +520,18 @@ plot_species_hourly_profile <- function(master_data,
   # Validate input
   validate_plot_input(
     master_data,
-    required_cols = "auto_id",
+    required_cols = "species",
     df_name = "master_data"
   )
   
   # Get Hour column from DateTime if not present
-  if (!"Hour" %in% names(master_data)) {
-    if ("DateTime" %in% names(master_data)) {
+  if (!"Hour_local" %in% names(master_data)) {
+    if ("DateTime_local" %in% names(master_data)) {
       master_data <- master_data %>%
-        dplyr::mutate(Hour = lubridate::hour(DateTime))
+        dplyr::mutate(Hour = lubridate::hour(DateTime_local))
     } else {
       stop(
-        "master_data must contain 'Hour' or 'DateTime' column",
+        "master_data must contain 'Hour_local' or 'DateTime_local' column",
         call. = FALSE
       )
     }
@@ -530,36 +541,36 @@ plot_species_hourly_profile <- function(master_data,
   if (exclude_noid) {
     master_data <- master_data %>%
       dplyr::filter(
-        !is.na(auto_id),
-        !auto_id %in% c("NoID", "UNKNOWN", "")
+        !is.na(species),
+        !species %in% c("NoID", "UNKNOWN", "")
       )
   }
   
   # Identify top N species by total calls
   top_species <- master_data %>%
-    dplyr::count(auto_id, sort = TRUE) %>%
+    dplyr::count(species, sort = TRUE) %>%
     dplyr::slice_head(n = top_n) %>%
-    dplyr::pull(auto_id)
+    dplyr::pull(species)
   
   # Calculate hourly profiles for top species
   hourly_species <- master_data %>%
-    dplyr::filter(auto_id %in% top_species) %>%
-    dplyr::count(auto_id, Hour, name = "n_calls") %>%
-    dplyr::group_by(auto_id) %>%
+    dplyr::filter(species %in% top_species) %>%
+    dplyr::count(species, Hour_local, name = "n_calls") %>%
+    dplyr::group_by(species) %>%
     dplyr::mutate(pct = n_calls / sum(n_calls) * 100) %>%
     dplyr::ungroup() %>%
-    dplyr::mutate(auto_id = factor(auto_id, levels = top_species))
+    dplyr::mutate(species = factor(species, levels = top_species))
   
   # Ensure all hours represented for each species
   hourly_species <- hourly_species %>%
     tidyr::complete(
-      auto_id,
-      Hour = 0:23,
+      species,
+      Hour_local = 0:23,
       fill = list(n_calls = 0, pct = 0)
     )
   
   # Build plot
-  ggplot(hourly_species, aes(x = Hour, y = pct, color = auto_id)) +
+  ggplot(hourly_species, aes(x = Hour_local, y = pct, color = species)) +
     geom_line(linewidth = 1, alpha = 0.8) +
     geom_point(size = 1.5) +
     scale_x_continuous(breaks = seq(0, 23, by = 2)) +
@@ -588,12 +599,12 @@ plot_species_hourly_profile <- function(master_data,
 #'
 #' @param master_data Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
-#'   - auto_id: Character. Species identification code.
+#'   - species: Character. Species identification code.
 #'
 #' @return ggplot object showing NoID proportion by detector.
 #'
 #' @details
-#' NoID calls are defined as rows where auto_id is:
+#' NoID calls are defined as rows where species is:
 #' - NA
 #' - "NoID"
 #' - "UNKNOWN"
@@ -633,14 +644,14 @@ plot_noid_proportion <- function(master_data) {
   # Validate input
   validate_plot_input(
     master_data,
-    required_cols = c("Detector", "auto_id"),
+    required_cols = c("Detector", "species"),
     df_name = "master_data"
   )
   
   # Calculate NoID proportion per detector
   noid_summary <- master_data %>%
     dplyr::mutate(
-      is_noid = is.na(auto_id) | auto_id %in% c("NoID", "UNKNOWN", "")
+      is_noid = is.na(species) | species %in% c("NoID", "UNKNOWN", "")
     ) %>%
     dplyr::group_by(Detector) %>%
     dplyr::summarise(

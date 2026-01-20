@@ -1,0 +1,283 @@
+registry_version: '1.0'
+created_utc: '2026-01-12T06:34:34Z'
+pipeline_version: '2.1'
+artifacts:
+  intro_standardized_20260112_003435:
+    name: intro_standardized_20260112_003435
+    type: checkpoint
+    workflow: '01'
+    file_path: outputs/01_intro_standardized_20260112_003420.csv
+    file_hash_sha256: 42fe65d8f1b065b82b895dd41fb80e727d6243a481e4e94917c1ddb29a8e5f84
+    file_size_bytes: 944509.0
+    created_utc: '2026-01-12T06:34:35Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 2131
+      n_files: 2.0
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+  kpro_master_20260112_010304:
+    name: kpro_master_20260112_010304
+    type: masterfile
+    workflow: '02'
+    file_path: results/csv/Master_2026-01-12_0103.csv
+    file_hash_sha256: 6746c39a45915e966e7337c9504afc3c10decfb1f00c8198140b98ccd52bcc33
+    file_size_bytes: 792575.0
+    created_utc: '2026-01-12T07:03:04Z'
+    pipeline_version: '2.1'
+    input_artifacts: intro_standardized
+    metadata:
+      n_rows: 2008
+      n_detectors: 9
+      n_duplicates_removed: 123
+      timezone: America/Chicago
+  intro_standardized_20260112_013112:
+    name: intro_standardized_20260112_013112
+    type: checkpoint
+    workflow: '01'
+    file_path: outputs/01_intro_standardized_20260112_013107.csv
+    file_hash_sha256: 42fe65d8f1b065b82b895dd41fb80e727d6243a481e4e94917c1ddb29a8e5f84
+    file_size_bytes: 944509.0
+    created_utc: '2026-01-12T07:31:12Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 2131
+      n_files: 2.0
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      rows_removed_total: 281228.0
+  intro_standardized_20260112_014124:
+    name: intro_standardized_20260112_014124
+    type: checkpoint
+    workflow: '01'
+    file_path: outputs/01_intro_standardized_20260112_014121.csv
+    file_hash_sha256: 42fe65d8f1b065b82b895dd41fb80e727d6243a481e4e94917c1ddb29a8e5f84
+    file_size_bytes: 944509.0
+    created_utc: '2026-01-12T07:41:24Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 2131
+      n_files: 2.0
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      rows_removed_total: 281228.0
+  kpro_master_20260112_014831:
+    name: kpro_master_20260112_014831
+    type: masterfile
+    workflow: '02'
+    file_path: results/csv/Master_2026-01-12_0148.csv
+    file_hash_sha256: 6746c39a45915e966e7337c9504afc3c10decfb1f00c8198140b98ccd52bcc33
+    file_size_bytes: 792575.0
+    created_utc: '2026-01-12T07:48:31Z'
+    pipeline_version: '2.1'
+    input_artifacts: intro_standardized
+    metadata:
+      n_rows: 2008
+      n_detectors: 9
+      n_duplicates_removed: 123
+      timezone: America/Chicago
+      date_range_start: 2025-10-04 19:03:28
+      date_range_end: 2025-10-31 22:16:54
+  kpro_master_20260112_020904:
+    name: kpro_master_20260112_020904
+    type: masterfile
+    workflow: '02'
+    file_path: results/csv/Master_2026-01-12_0209.csv
+    file_hash_sha256: 6746c39a45915e966e7337c9504afc3c10decfb1f00c8198140b98ccd52bcc33
+    file_size_bytes: 792575.0
+    created_utc: '2026-01-12T08:09:04Z'
+    pipeline_version: '2.1'
+    input_artifacts: intro_standardized
+    metadata:
+      n_rows: 2008
+      n_detectors: 9
+      n_duplicates_removed: 123
+      timezone: America/Chicago
+      date_range_start: 2025-10-04 19:03:28
+      date_range_end: 2025-10-31 22:16:54
+  cpn_template_original_20260112_193030:
+    name: cpn_template_original_20260112_193030
+    type: cpn_template
+    workflow: '03'
+    file_path: outputs/03_CallsPerNight_Template_ORIGINAL_20260112_193030.csv
+    file_hash_sha256: 518cc18eeab98d9935401d06c49bb8279fec8c185d234cac834c6e3b59d2ffdc
+    file_size_bytes: 23330.0
+    created_utc: '2026-01-13T01:30:48Z'
+    pipeline_version: '2.1'
+    input_artifacts: kpro_master
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      n_nights: 28
+      template_type: ORIGINAL
+      uniform_schedule: yes
+      noid_removed: 540
+  cpn_template_editable_20260112_193030:
+    name: cpn_template_editable_20260112_193030
+    type: cpn_template
+    workflow: '03'
+    file_path: outputs/03_CallsPerNight_Template_EDIT_THIS_20260112_193030.csv
+    file_hash_sha256: 518cc18eeab98d9935401d06c49bb8279fec8c185d234cac834c6e3b59d2ffdc
+    file_size_bytes: 23330.0
+    created_utc: '2026-01-13T01:30:49Z'
+    pipeline_version: '2.1'
+    input_artifacts: kpro_master
+    metadata:
+      template_type: EDIT_THIS
+      parent_original: 03_CallsPerNight_Template_ORIGINAL_20260112_193030.csv
+  cpn_template_original_20260112_212802:
+    name: cpn_template_original_20260112_212802
+    type: cpn_template
+    workflow: '03'
+    file_path: outputs/03_CallsPerNight_Template_ORIGINAL_20260112_212802.csv
+    file_hash_sha256: 518cc18eeab98d9935401d06c49bb8279fec8c185d234cac834c6e3b59d2ffdc
+    file_size_bytes: 23330.0
+    created_utc: '2026-01-13T03:28:08Z'
+    pipeline_version: '2.1'
+    input_artifacts: kpro_master
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      n_nights: 28
+      template_type: ORIGINAL
+      uniform_schedule: yes
+      noid_removed: 540
+  cpn_template_editable_20260112_212802:
+    name: cpn_template_editable_20260112_212802
+    type: cpn_template
+    workflow: '03'
+    file_path: outputs/03_CallsPerNight_Template_EDIT_THIS_20260112_212802.csv
+    file_hash_sha256: 518cc18eeab98d9935401d06c49bb8279fec8c185d234cac834c6e3b59d2ffdc
+    file_size_bytes: 23330.0
+    created_utc: '2026-01-13T03:28:09Z'
+    pipeline_version: '2.1'
+    input_artifacts: kpro_master
+    metadata:
+      template_type: EDIT_THIS
+      parent_original: 03_CallsPerNight_Template_ORIGINAL_20260112_212802.csv
+  cpn_final_v6_20260112_214607:
+    name: cpn_final_v6_20260112_214607
+    type: cpn_final
+    workflow: '04'
+    file_path: results/csv/CallsPerNight_final_v6.csv
+    file_hash_sha256: d129f9ae2c1c006e64342efe811c409685a5dcf64d0a55487839376fd5a17aba
+    file_size_bytes: 15801.0
+    created_utc: '2026-01-13T03:46:07Z'
+    pipeline_version: '2.1'
+    input_artifacts: cpn_template_editable
+    metadata:
+      version: '6'
+      n_rows: 252
+      n_detectors: 9
+      n_nights: 28
+      n_dead_nights: 77
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      mean_calls_per_hour: 0.69
+  summary_stats_20260112:
+    name: summary_stats_20260112
+    type: summary_stats
+    workflow: '05'
+    file_path: results/rds/summary_data_20260112.rds
+    file_hash_sha256: bee5688ae073f64a063c0d22439cbe4ee30b8c7f160b271c7c0a475d91779142
+    file_size_bytes: 2393.0
+    created_utc: '2026-01-13T04:21:32Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - cpn_final
+    - kpro_master
+    metadata:
+      n_detectors: 9
+      n_detector_nights: 252
+      total_calls: 1468.0
+      total_hours: 2220.3
+      gt_tables_created: 4
+      files_exported: 10
+      has_species_summary: yes
+      has_hourly_summary: yes
+  plot_objects_20260112:
+    name: plot_objects_20260112
+    type: plot_objects
+    workflow: '06'
+    file_path: results/rds/plot_objects_20260112.rds
+    file_hash_sha256: 72884fe7c1d5f85a0fc243d9ce7c2713f986e5f126831a54bcc0e1217ad343d2
+    file_size_bytes: 1704182.0
+    created_utc: '2026-01-13T04:45:28Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - cpn_final
+    - kpro_master
+    metadata:
+      n_quality_plots: 8
+      n_detector_plots: 7
+      n_species_plots: 5
+      n_temporal_plots: 6
+      total_plots: 26
+      has_species_plots: yes
+      png_exported: 26
+      svg_exported: 0.0
+  plot_objects_20260119:
+    name: plot_objects_20260119
+    type: plot_objects
+    workflow: '06'
+    file_path: results/rds/plot_objects_20260119.rds
+    file_hash_sha256: 72884fe7c1d5f85a0fc243d9ce7c2713f986e5f126831a54bcc0e1217ad343d2
+    file_size_bytes: 1704182.0
+    created_utc: '2026-01-19T20:34:17Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - cpn_final
+    - kpro_master
+    metadata:
+      n_quality_plots: 8
+      n_detector_plots: 7
+      n_species_plots: 5
+      n_temporal_plots: 6
+      total_plots: 26
+      has_species_plots: yes
+      png_exported: 26
+      svg_exported: 0.0
+  report_20260119:
+    name: report_20260119
+    type: report
+    workflow: '07'
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/reports/bat_activity_report_20260119.html
+    file_hash_sha256: 42be095d4bacf159e25bca2a423fa64f75e7257a13390b6ee1cb0ff831ed6903
+    file_size_bytes: 4159536.0
+    created_utc: '2026-01-19T23:07:39Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - summary_data_20260112.rds
+    - plot_objects_20260119.rds
+    metadata:
+      render_time_seconds: 785.0
+      file_size_kb: 4062.0
+  kpro_release_SchmeeckleBatStudy_20260119_173139:
+    name: kpro_release_SchmeeckleBatStudy_20260119_173139
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260119_173139.zip
+    file_hash_sha256: 2e057a4a61293948b056d24be346da7968234a4d62adaf6887ee1471cbdba9b6
+    file_size_bytes: 5039156.0
+    created_utc: '2026-01-19T23:31:43Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - kpro_master
+    - cpn_final
+    metadata:
+      study_id: SchmeeckleBatStudy
+      n_files: 35
+      zip_size_bytes: 5039156.0
+last_modified_utc: '2026-01-19T23:31:43Z'

@@ -37,8 +37,6 @@
 #   - plot_weekly_activity(): Weekly aggregation
 #   - plot_activity_by_month(): Monthly aggregation
 #
-# Effort Visualization:
-#   - plot_recording_effort_heatmap(): Effort × Night matrix
 #
 # USAGE
 # -----
@@ -51,7 +49,8 @@
 #
 # CHANGELOG
 # ---------
-# 2024-12-30: Initial creation with CODING_STANDARDS compliance
+# 2026-01-07: Moved plot_recording_effort_heatmap() from plot_temporal.R to plot_quality.R
+# 2025-12-30: Initial creation with CODING_STANDARDS compliance
 #
 # =============================================================================
 
@@ -265,8 +264,8 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 #' when bats are most active, typically revealing peak activity in early
 #' evening hours after sunset.
 #'
-#' @param master_data Data frame. Must contain a `DateTime` column (POSIXct)
-#'   OR a pre-computed `Hour` column (integer 0-23).
+#' @param master_data Data frame. Must contain a `DateTime_local` column (POSIXct)
+#'   OR a pre-computed `Hour_local` column (integer 0-23).
 #' @param metric Character. One of "total" (sum of all calls) or "mean"
 #'   (average calls per hour per night). Default is "total".
 #'
@@ -289,7 +288,7 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 #' - Returns a ggplot object
 #' - All 24 hours shown (including zero-activity hours)
 #' - Peak hour annotated
-#' - Works with either DateTime or Hour column
+#' - Works with either DateTime_local or Hour_local column
 #'
 #' @section DOES NOT:
 #' - Separate by species (use plot_species_hourly_profile)
@@ -317,14 +316,14 @@ plot_hourly_activity_profile <- function(master_data, metric = "total") {
   
   metric <- match.arg(metric, c("total", "mean"))
   
-  # Get Hour column from DateTime if not present
-  if (!"Hour" %in% names(master_data)) {
-    if ("DateTime" %in% names(master_data)) {
+  # Get Hour_local column from DateTime_local if not present
+  if (!"Hour_local" %in% names(master_data)) {
+    if ("DateTime_local" %in% names(master_data)) {
       master_data <- master_data %>%
-        dplyr::mutate(Hour = lubridate::hour(DateTime))
+        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
     } else {
       stop(
-        "master_data must contain 'Hour' or 'DateTime' column",
+        "master_data must contain 'Hour_local' or 'DateTime_local' column",
         call. = FALSE
       )
     }
@@ -332,17 +331,17 @@ plot_hourly_activity_profile <- function(master_data, metric = "total") {
   
   # Count calls by hour
   hourly <- master_data %>%
-    dplyr::count(Hour, name = "total_calls")
+    dplyr::count(Hour_local, name = "total_calls")
   
   # Calculate metric
   if (metric == "mean") {
     # Need to know number of nights
-    if ("DateTime" %in% names(master_data)) {
-      n_nights <- dplyr::n_distinct(as.Date(master_data$DateTime))
+    if ("DateTime_local" %in% names(master_data)) {
+      n_nights <- dplyr::n_distinct(as.Date(master_data$DateTime_local))
     } else if ("Night" %in% names(master_data)) {
       n_nights <- dplyr::n_distinct(master_data$Night)
     } else {
-      stop("Cannot calculate mean without DateTime or Night column")
+      stop("Cannot calculate mean without DateTime_local or Night column")
     }
     hourly <- hourly %>%
       dplyr::mutate(value = total_calls / n_nights)
@@ -355,26 +354,26 @@ plot_hourly_activity_profile <- function(master_data, metric = "total") {
   
   # Ensure all 24 hours present
   hourly <- hourly %>%
-    tidyr::complete(Hour = 0:23, fill = list(value = 0, total_calls = 0))
+    tidyr::complete(Hour_local = 0:23, fill = list(value = 0, total_calls = 0))
   
   # Identify peak hour
   peak <- hourly %>% dplyr::slice_max(value, n = 1)
   
   # Build plot
-  ggplot(hourly, aes(x = Hour, y = value)) +
+  ggplot(hourly, aes(x = Hour_local, y = value)) +
     geom_area(fill = "#56B4E9", alpha = 0.3) +
     geom_line(color = "#0072B2", linewidth = 1) +
     geom_point(color = "#0072B2", size = 2) +
     geom_vline(
-      xintercept = peak$Hour,
+      xintercept = peak$Hour_local,
       linetype = "dashed",
       color = "#D55E00"
     ) +
     annotate(
       "text",
-      x = peak$Hour,
+      x = peak$Hour_local,
       y = peak$value,
-      label = sprintf("Peak: %02d:00", peak$Hour),
+      label = sprintf("Peak: %02d:00", peak$Hour_local),
       hjust = -0.1,
       vjust = -0.5,
       size = 3.5,
@@ -728,101 +727,4 @@ plot_activity_by_month <- function(calls_per_night, by_detector = FALSE) {
       y = "Total Calls"
     ) +
     theme_kpro(rotate_x = TRUE)
-}
-
-
-# =============================================================================
-# EFFORT VISUALIZATION
-# =============================================================================
-
-#' Recording Effort Heatmap
-#'
-#' @description
-#' Creates a heatmap showing recording effort (hours) across detectors and
-#' nights. Helps identify deployment gaps, partial nights, and equipment
-#' failures that affect data quality.
-#'
-#' @param calls_per_night Data frame. Must contain columns:
-#'   - Detector: Character. Unique detector identifier.
-#'   - Night: Date. Night of recording.
-#'   - RecordingHours: Numeric. Hours of recording per night.
-#'
-#' @return ggplot object showing effort heatmap.
-#'
-#' @details
-#' The heatmap uses a viridis color scale where:
-#' - Darker colors = more recording hours
-#' - Lighter colors = fewer recording hours
-#' - Gray = no data (detector not active or data missing)
-#'
-#' The plot automatically fills in missing detector × night combinations
-#' with NA (shown as gray), making gaps in coverage visually apparent.
-#'
-#' Typical use cases:
-#' - Identify nights when detectors failed
-#' - Spot partial recording nights (equipment issues, battery)
-#' - Verify consistent deployment across all sites
-#'
-#' @section CONTRACT:
-#' - Returns a ggplot object
-#' - All dates in study period shown (including gaps)
-#' - Missing data shown as gray (NA)
-#' - Uses viridis color scale for accessibility
-#'
-#' @section DOES NOT:
-#' - Flag specific thresholds (e.g., "partial" nights)
-#' - Calculate expected recording hours
-#' - Interpolate missing values
-#'
-#' @examples
-#' \dontrun{
-#' p <- plot_recording_effort_heatmap(calls_per_night_final)
-#' print(p)
-#' }
-#'
-#' @export
-plot_recording_effort_heatmap <- function(calls_per_night) {
-  
-  # Validate input
-  validate_plot_input(
-    calls_per_night,
-    required_cols = c("Detector", "Night", "RecordingHours"),
-    date_cols = "Night",
-    numeric_cols = "RecordingHours",
-    df_name = "calls_per_night"
-  )
-  
-  # Create complete grid of all detector × night combinations
-  all_nights <- seq(
-    min(calls_per_night$Night),
-    max(calls_per_night$Night),
-    by = 1
-  )
-  all_detectors <- unique(calls_per_night$Detector)
-  
-  complete_grid <- tidyr::expand_grid(
-    Detector = all_detectors,
-    Night = all_nights
-  ) %>%
-    dplyr::left_join(
-      calls_per_night %>% dplyr::select(Detector, Night, RecordingHours),
-      by = c("Detector", "Night")
-    )
-  
-  # Build heatmap
-  ggplot(complete_grid, aes(x = Night, y = Detector, fill = RecordingHours)) +
-    geom_tile(color = "white", linewidth = 0.2) +
-    scale_fill_viridis_c(
-      option = "viridis",
-      na.value = "gray80",
-      name = "Hours"
-    ) +
-    labs(
-      title = "Recording Effort Heatmap",
-      subtitle = "Gray = no data; darker = more recording hours",
-      x = "Night",
-      y = "Detector"
-    ) +
-    theme_kpro(rotate_x = TRUE) +
-    theme(panel.grid = element_blank())
 }

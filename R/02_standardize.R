@@ -67,19 +67,19 @@
 # Stage 2.4: Time Conversions
 #   - Loads user's timezone from study_parameters.yaml
 #   - Converts UTC timestamps to user's local time
-#   - Creates unified DateTime column (POSIXct)
+#   - Creates unified DateTime_local column (POSIXct)
 #   - Preserves original date/time columns for reference
 #   - Uses convert_datetime_to_local() with explicit timezone
 #
 # Stage 2.5: Schema Enforcement & Finalization
 #   - Validates all required master schema columns exist
 #   - Enforces correct data types (character, numeric, POSIXct)
-#   - Adds derived columns (Hour, Time from DateTime)
+#   - Adds derived columns (Hour_local, Time_local from DateTime_local)
 #   - Removes unwanted columns from intro-standardization
 #   - Reorders columns to master schema layout
 #
 # Stage 2.6: Deduplication
-#   - Identifies duplicate rows (same Detector, DateTime, auto_id)
+#   - Identifies duplicate rows (same Detector, DateTime_local, auto_id)
 #   - Removes duplicates keeping first occurrence
 #   - Logs number of duplicates removed
 #
@@ -98,6 +98,9 @@
 # Files Created:
 #   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv (timestamped checkpoint)
 #   - logs/workflow_log_YYYYMMDD.txt (processing log)
+#   - results/validation/validation_02_YYYYMMDD_HHMMSS.yaml (validation log)
+#   - results/validation/validation_02_YYYYMMDD_HHMMSS.html (validation report)
+#   - inst/config/artifact_registry.yaml (updated with master file entry)
 #
 # In Memory:
 #   - kpro_master (final standardized dataset, ready for analysis)
@@ -122,47 +125,28 @@
 #    - AudioMoth outputs are ALWAYS UTC
 #    - Converts to user's local timezone from YAML
 #    - Handles DST transitions correctly
-#    - Creates DateTime column for analysis
+#    - Creates DateTime_local column for analysis
 #
 # 4. Column Standardization:
 #    - Consistent naming: auto_id (not INDIR or IN DIR)
-#    - Consistent types: DateTime (POSIXct), not character
-#    - Derived columns: Hour, Time (from DateTime)
-#    - All lowercase except proper names (Detector, DateTime)
+#    - Consistent types: DateTime_local (POSIXct), not character
+#    - Derived columns: Hour, Time (from DateTime_local)
+#    - All lowercase except proper names (Detector, DateTime_local)
 #
 # 5. Deduplication:
 #    - Removes exact duplicates across all identifying columns
 #    - Keeps first occurrence (temporal priority)
 #    - Logs number removed for audit trail
 #
-# MASTER SCHEMA DEFINITION
-# -------------------------
-# Final kpro_master columns (in order):
-#
-#   Detector       - User-friendly detector name (e.g., "SMO", "LPE")
-#   DetectorID     - Original 16-char hardware ID (for traceability)
-#   DateTime       - Local timestamp (POSIXct, user's timezone)
-#   date           - Date component (Date type)
-#   time           - Time component (hms type)
-#   Hour           - Hour of day (0-23, for temporal analysis)
-#   Time           - Time as decimal (0.0-23.999, for plotting)
-#   auto_id        - Auto-identified species/call type
-#   manual_id      - Manual identification (NA if not performed)
-#   pulses         - Number of pulses detected (v2+ only)
-#   duration       - Call duration in ms (v2+ only)
-#   fmax           - Maximum frequency in kHz (v2+ only)
-#   fmin           - Minimum frequency in kHz (v2+ only)
-#   fctr           - Center frequency in kHz (v2+ only)
-#   bandwidth      - Bandwidth in kHz (v2+ only)
-#   fmean          - Mean frequency in kHz (v2+ only)
-#   fmax_amp       - Frequency at max amplitude (v2+ only)
-#   dur_ms         - Call duration (v2+ only)
-#   qualityscore   - Quality score 0-100 (v2+ only)
-#   file           - Original audio filename
-#   schema_version - Source schema (v1/v2/v3, for provenance)
-#
-# Missing columns (v1 data): Set to NA with correct type
-# Extra columns: Removed during finalization
+# VALIDATION TRACKING
+# -------------------
+# This workflow tracks the following validation events:
+#   - data_loaded: Rows loaded from intro-standardization
+#   - detector_mapping: Detectors mapped to friendly names
+#   - schema_transform: Schema version transformations applied
+#   - timezone_conversion: UTC to local timezone conversion
+#   - duplicate: Duplicate rows detected and removed
+#   - rows_processed: Final row count after all processing
 #
 # PERFORMANCE EXPECTATIONS
 # -------------------------
@@ -199,6 +183,9 @@
 #
 # Custom Functions (via load_all.R):
 #   - core/utilities.R: log_message, safe_read_csv, load_intro_standardized
+#   - core/artifacts.R: create_validation_context, log_validation_event, 
+#                       finalize_validation_report, init_artifact_registry,
+#                       register_artifact
 #   - core/config.R: load_study_parameters, save_study_parameters
 #   - standardization/standardization.R: standardize_kpro_schema
 #   - standardization/datetime_conversion.R: convert_datetime_to_local
@@ -235,50 +222,17 @@
 # Issue: Slow processing on large datasets
 # Fix: Normal - time conversions are computationally expensive
 #
-# USAGE EXAMPLES
-# --------------
-# # Run after Workflow 01:
-# source("R/workflows/01_ingest_raw_data.R")
-# source("R/workflows/02_standardize.R")
-#
-# # Run standalone (loads from checkpoint):
-# source("R/workflows/02_standardize.R")
-#
-# # Inspect results:
-# head(kpro_master)
-# summary(kpro_master)
-# table(kpro_master$Detector)
-# table(kpro_master$schema_version)
-# range(kpro_master$DateTime)
-# View(kpro_master)
-#
-# # Check for missing values:
-# colSums(is.na(kpro_master))
-#
-# # Export for external analysis:
-# write_csv(kpro_master, "data/kpro_master_for_analysis.csv")
-#
-# MAINTAINER NOTES
-# ----------------
-# - ASCII boxes: Single-line (┌─┐) for stage headers
-# - Stage numbering: 2.1 - 2.8 (8 stages total)
-# - Detector mapping is critical - must be unique and descriptive
-# - Timezone handling changed in Dec 2024 - now requires user timezone in YAML
-# - Schema detection happens in Script 01, transformation in Script 02
-# - Never modify timezone assumptions - always use YAML configuration
-# - Deduplication uses Detector, DateTime, auto_id (not file or other fields)
-# - Master schema is additive - new columns can be added without breaking
-# - All validation functions are in validation/validation.R
-# - Time conversion function is timezone-aware (no hardcoded CST)
-#
 # CHANGELOG
 # ---------
-# 2024-12-29: Refactored to use helper functions (load_intro_standardized,
+# 2026-01-12: Enhanced validation tracking (schema_transform, timezone_conversion details)
+# 2026-01-12: Added validation context tracking and artifact registration (v2.1)
+# 2026-01-08: Updated appropriate callouts to datetime to datetime_local, along with time and hour
+# 2025-12-29: Refactored to use helper functions (load_intro_standardized,
 #             require_study_parameters, assert_columns_exist)
-# 2024-12-27: Removed hardcoded timezone, now uses YAML configuration
-# 2024-12-27: Updated to use convert_datetime_to_local() with explicit timezone
-# 2024-12-27: Added comprehensive header documentation
-# 2024-12-26: Initial CODING_STANDARDS compliant version
+# 2025-12-27: Removed hardcoded timezone, now uses YAML configuration
+# 2025-12-27: Updated to use convert_datetime_to_local() with explicit timezone
+# 2025-12-27: Added comprehensive header documentation
+# 2025-12-26: Initial CODING_STANDARDS compliant version
 #
 # ==============================================================================
 
@@ -302,6 +256,15 @@ library(yaml)
 
 log_message("=== WORKFLOW 02: Standardize to Master Schema ===")
 
+# ------------------------------------------------------------------------------
+# Initialize validation context
+# ------------------------------------------------------------------------------
+
+validation_context <- create_validation_context(
+  workflow = "02",
+  study_name = NULL  # Will be set from params in Stage 2.2
+)
+
 # ==============================================================================
 # STAGE 2.1: LOAD DATA
 # ==============================================================================
@@ -319,6 +282,17 @@ assert_columns_exist(raw_combined, "schema_version",
 
 log_message(sprintf("[Stage 2.1] Loaded data: %s rows", nrow(raw_combined)))
 
+# Log data loading
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "data_loaded",
+  description = "Loaded intro-standardized data",
+  count = nrow(raw_combined)
+)
+
+# Store input row count for comparison
+n_rows_input <- nrow(raw_combined)
+
 # ==============================================================================
 # STAGE 2.2: DETECTOR MAPPING
 # ==============================================================================
@@ -329,6 +303,9 @@ message("└──────────────────────�
 
 # Load study parameters (validates file exists)
 params <- require_study_parameters()
+
+# Update validation context with study name
+validation_context$study_name <- params$study_parameters$study_name
 
 # Validate detector_mapping exists
 if (is.null(params$study_parameters$detector_mapping)) {
@@ -417,15 +394,33 @@ message("\n┌──────────────────────
 message("│          STAGE 2.3: Transform to Unified Schema                │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# Use existing standardize_kpro_schema() function
-# This should handle v1/v2/v3 transformation internally
+# Capture schema distribution before transformation
+schema_before <- table(raw_combined$schema_version)
+
 message("\nTransforming all schemas to unified format...")
 
+# Use existing standardize_kpro_schema() function
+# This should handle v1/v2/v3 transformation internally
 unified_data <- standardize_kpro_schema(raw_combined)
 
 message("✓ Schema transformation complete")
 
 log_message("[Stage 2.3] Transformed schemas to unified format")
+
+# Log detailed schema transformation
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "schema_transform",
+  description = "Transformed all schema versions to unified master format",
+  details = list(
+    v1_rows = as.numeric(schema_before["v1_legacy_single_column"] %||% 0),
+    v2_rows = as.numeric(schema_before["v2_transitional_4letter"] %||% 0),
+    v3_rows = as.numeric(schema_before["v3_modern_6letter"] %||% 0),
+    unknown_rows = as.numeric(schema_before["unknown"] %||% 0),
+    total_rows = nrow(unified_data),
+    transformation = "All schemas unified to master column set"
+  )
+)
 
 
 # ==============================================================================
@@ -476,6 +471,21 @@ for (i in seq_len(nrow(mapping_summary))) {
 
 log_message(sprintf("[Stage 2.3.5] Applied detector mapping: %d detectors", n_detectors_before))
 
+# Log detector mapping with details
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "detector_mapping",
+  description = sprintf("Mapped %d detectors to friendly names", n_detectors_before),
+  count = n_detectors_before,
+  details = list(
+    detectors = setNames(
+      mapping_summary$Detector,
+      mapping_summary$detector_id
+    ),
+    all_mapped_successfully = TRUE
+  )
+)
+
 # ==============================================================================
 # STAGE 2.4: TIME CONVERSIONS
 # ==============================================================================
@@ -484,32 +494,47 @@ message("\n┌──────────────────────
 message("│          STAGE 2.4: Time Conversions (UTC → Local Time)        │")
 message("└─────────────────────────────────────────────────────────────────┘\n")
 
-# -------------------------
 # Load timezone from YAML configuration
-# -------------------------
-
 if (is.null(params$study_parameters$timezone)) {
-  stop("Timezone not set in study_parameters.yaml. Please run 01_ingest_raw_data.R first.")
+  stop("Timezone not set in study_parameters.yaml")
 }
 
 user_timezone <- params$study_parameters$timezone
-message(sprintf("  Using study timezone from config: %s\n", user_timezone))
+message(sprintf("  Using study timezone: %s\n", user_timezone))
 
-# -------------------------
-# Convert datetime using timezone-aware function
-# -------------------------
-
+# Convert datetime_local using timezone-aware function
 unified_data <- convert_datetime_to_local(
   df = unified_data,
   target_tz = user_timezone,
-  date_col = "date",
-  time_col = "time",
+  date_col = "date",       # Lowercase = UTC columns from intro-standardization
+  time_col = "time",       # These will be removed later
   source_tz = "UTC"
 )
 
 message(sprintf("✓ Time conversion complete (UTC → %s)", user_timezone))
+message("  Created columns: DateTime_UTC, DateTime_local, Date_local, Time_local, Hour_local")
 
 log_message(sprintf("[Stage 2.4] Converted times to %s", user_timezone))
+
+# Log timezone conversion with date range details
+date_range_utc <- range(unified_data$DateTime_UTC, na.rm = TRUE)
+date_range_local <- range(unified_data$DateTime_local, na.rm = TRUE)
+
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "timezone_conversion",
+  description = sprintf("Converted UTC timestamps to %s local time", user_timezone),
+  details = list(
+    source_timezone = "UTC",
+    target_timezone = user_timezone,
+    utc_start = format(date_range_utc[1], "%Y-%m-%d %H:%M:%S"),
+    utc_end = format(date_range_utc[2], "%Y-%m-%d %H:%M:%S"),
+    local_start = format(date_range_local[1], "%Y-%m-%d %H:%M:%S"),
+    local_end = format(date_range_local[2], "%Y-%m-%d %H:%M:%S"),
+    duration_days = as.numeric(difftime(date_range_local[2], date_range_local[1], units = "days")),
+    columns_created = c("DateTime_UTC", "DateTime_local", "Date_local", "Time_local", "Hour_local")
+  )
+)
 
 # ==============================================================================
 # STAGE 2.5: SCHEMA ENFORCEMENT & FINALIZATION
@@ -552,9 +577,9 @@ dup_check <- check_duplicates(kpro_master)
 n_before <- nrow(kpro_master)
 
 # Remove duplicates (keep first occurrence)
-# Duplicates defined as: same Detector, DateTime, auto_id
+# Duplicates defined as: same Detector, DateTime_local, auto_id
 kpro_master <- kpro_master %>%
-  distinct(Detector, DateTime, auto_id, .keep_all = TRUE)
+  distinct(Detector, DateTime_local, auto_id, .keep_all = TRUE)
 
 n_after <- nrow(kpro_master)
 n_removed <- n_before - n_after
@@ -562,6 +587,20 @@ n_removed <- n_before - n_after
 if (n_removed > 0) {
   message(sprintf("✓ Removed %s duplicate rows", format(n_removed, big.mark = ",")))
   log_message(sprintf("[Stage 2.6] Removed %d duplicates", n_removed))
+  
+  # Log to validation context
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "duplicate",
+    description = "Removed duplicate detections",
+    count = n_removed,
+    details = list(
+      deduplication_keys = c("Detector", "DateTime_local", "auto_id"),
+      rows_before = n_before,
+      rows_after = n_after,
+      percentage_removed = round(100 * n_removed / n_before, 2)
+    )
+  )
 } else {
   message("✓ No duplicates found")
 }
@@ -581,6 +620,58 @@ message(sprintf("✓ Master file saved: %s", basename(master_file)))
 message(sprintf("  Final row count: %s", format(nrow(kpro_master), big.mark = ",")))
 
 log_message(sprintf("[Stage 2.7] Saved kpro_master: %s rows", nrow(kpro_master)))
+
+# ------------------------------------------------------------------------------
+# Register artifact and finalize validation
+# ------------------------------------------------------------------------------
+
+message("\nRegistering artifact...")
+
+# Load or initialize registry
+registry <- init_artifact_registry()
+
+# Register master file artifact
+registry <- register_artifact(
+  registry = registry,
+  artifact_name = sprintf("kpro_master_%s", format(Sys.time(), "%Y%m%d_%H%M%S")),
+  artifact_type = "masterfile",
+  workflow = "02",
+  file_path = master_file,
+  input_artifacts = c("intro_standardized"),
+  metadata = list(
+    n_rows = nrow(kpro_master),
+    n_detectors = n_distinct(kpro_master$Detector),
+    n_duplicates_removed = n_removed,
+    timezone = user_timezone,
+    date_range_start = format(min(kpro_master$DateTime_local, na.rm = TRUE)),
+    date_range_end = format(max(kpro_master$DateTime_local, na.rm = TRUE))
+  )
+)
+
+message("✓ Artifact registered in registry")
+
+# Finalize validation context
+validation_context$summary$rows_processed <- nrow(kpro_master)
+
+# Add input/output comparison for clarity
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "rows_processed",
+  description = sprintf("Pipeline complete: %d input → %d output", n_rows_input, nrow(kpro_master)),
+  count = nrow(kpro_master),
+  details = list(
+    rows_input = n_rows_input,
+    rows_output = nrow(kpro_master),
+    rows_removed_total = n_rows_input - nrow(kpro_master)
+  )
+)
+
+validation_report_path <- finalize_validation_report(
+  validation_context,
+  output_dir = here::here("results", "validation")
+)
+
+log_message(sprintf("[Workflow 02] Validation report: %s", basename(validation_report_path)))
 
 # ==============================================================================
 # STAGE 2.8: CLEAN WORKSPACE
@@ -620,7 +711,7 @@ message("\nTransformations applied:")
 message("  ✓ DetectorID → Detector mapping")
 message("  ✓ Schema unification (v1/v2/v3 → master)")
 message(sprintf("  ✓ UTC → %s time conversion", user_timezone))
-message("  ✓ DateTime column created")
+message("  ✓ DateTime_local column created")
 message("  ✓ Master schema enforced")
 message("  ✓ Duplicates removed")
 message(sprintf("  ✓ Saved: %s", basename(master_file)))
@@ -643,9 +734,11 @@ for (i in seq_len(nrow(detector_summary))) {
 message("\n========================================")
 message("✓ Workflow 02 Complete")
 message("========================================")
+
 message("\nCurrent data in environment:")
 message("  • kpro_master (ready for analysis)")
 message(sprintf("  • Checkpoint: %s", basename(master_file)))
+message(sprintf("  • Validation report: %s", basename(validation_report_path)))
 
 message("\nTo inspect data:")
 message("  head(kpro_master)")

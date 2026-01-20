@@ -650,18 +650,18 @@ create_hourly_activity_summary <- function(master_data,
   validate_master_data(master_data)
   
   # Get hour from DateTime if Hour column doesn't exist
-  if (!"Hour" %in% names(master_data)) {
-    if ("DateTime" %in% names(master_data)) {
+  if (!"Hour_local" %in% names(master_data)) {
+    if ("DateTime_local" %in% names(master_data)) {
       master_data <- master_data %>%
-        dplyr::mutate(Hour = lubridate::hour(DateTime))
+        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
     } else {
-      stop("master_data must have either 'Hour' or 'DateTime' column")
+      stop("master_data must have either 'Hour_local' or 'DateTime_local' column")
     }
   }
   
   if (by_detector) {
     summary <- master_data %>%
-      dplyr::group_by(Detector, Hour) %>%
+      dplyr::group_by(Detector, Hour_local) %>%
       dplyr::summarise(
         n_calls = dplyr::n(),
         .groups = "drop"
@@ -671,10 +671,10 @@ create_hourly_activity_summary <- function(master_data,
         pct_of_total = round(100 * n_calls / sum(n_calls), 1)
       ) %>%
       dplyr::ungroup() %>%
-      dplyr::arrange(Detector, Hour)
+      dplyr::arrange(Detector, Hour_local)
   } else {
     summary <- master_data %>%
-      dplyr::group_by(Hour) %>%
+      dplyr::group_by(Hour_local) %>%
       dplyr::summarise(
         n_calls = dplyr::n(),
         .groups = "drop"
@@ -682,7 +682,7 @@ create_hourly_activity_summary <- function(master_data,
       dplyr::mutate(
         pct_of_total = round(100 * n_calls / sum(n_calls), 1)
       ) %>%
-      dplyr::arrange(Hour)
+      dplyr::arrange(Hour_local)
   }
   
   summary

@@ -30,7 +30,7 @@
 # ----------------------------
 # Each row gets its own schema_version based on:
 #   1. If "alternates" column exists → v1_legacy_single_column
-#   2. If no "alternates", check auto_id length:
+#   2. If no "alternates", check auto_id length: 
 #      - 4 characters → v2_transitional_4letter
 #      - 6 characters → v3_modern_6letter
 #      - Other (NoID, NA, etc.) → unknown
@@ -45,6 +45,13 @@
 #   - Checkpoint CSV: outputs/01_intro_standardized_YYYYMMDD_HHMMSS.csv
 #   - study_parameters.yaml: Validated/created configuration file
 #
+# Validation:
+#   - results/validation/validation_01_YYYYMMDD_HHMMSS.html
+#   - results/validation/validation_01_YYYYMMDD_HHMMSS.yaml
+#
+# Registry:
+#   - inst/config/artifact_registry.yaml (updated)
+#
 # Future Stage 2 (Workflow 02) will transform this into kpro_master
 #
 # DEPENDENCIES
@@ -58,6 +65,9 @@
 #     - ingestion/ingestion.R: load_local_raw_data, load_external_raw_data
 #     - core/schema_detection.R: detect_row_schema
 #     - core/config.R: load_study_parameters, ensure_study_parameters
+#     - core/artifacts.R: init_artifact_registry, register_artifact,
+#                        create_validation_context, log_validation_event,
+#                        finalize_validation_report
 #
 # WORKFLOW STAGES
 # ---------------
@@ -68,6 +78,24 @@
 #   Stage 1.5: Save checkpoint CSV
 #   Stage 1.6: Clean workspace
 #   Stage 1.7: Validate/generate study_parameters.yaml
+#
+# VALIDATION TRACKING
+# -------------------
+# This workflow tracks the following validation events:
+#   - files_loaded: Number of CSV files successfully loaded
+#   - file_failed: Individual file load failures
+#   - rows_removed: Rows filtered during intro-standardization
+#   - schema_detection: Schema version distribution
+#   - schema_unknown: Rows with undetectable schema
+#   - source_breakdown: Local vs external data contribution
+#   - rows_processed: Final row count after all processing
+#
+# CHANGELOG
+# ---------
+# 2026-01-12: Fixed external file counting to use files_processed attribute from ingestion functions
+# 2026-01-12: Enhanced validation tracking (rows_removed, schema_unknown, source_breakdown, file_failed)
+# 2026-01-12: Added artifact registry and validation tracking
+# 2025-12-XX: Initial CODING_STANDARDS compliant version
 #
 # ==============================================================================
 
@@ -92,6 +120,15 @@ library(yaml)
 initialize_pipeline_log("logs/pipeline_log.txt")
 log_message("=== WORKFLOW 01: Ingest Raw Data ===")
 
+# ------------------------------------------------------------------------------
+# Initialize validation context
+# ------------------------------------------------------------------------------
+
+validation_context <- create_validation_context(
+  workflow = "01",
+  study_name = NULL  # Will be set later from YAML
+)
+
 # ==============================================================================
 # STAGE 1.1: LOAD CONFIGURATION
 # ==============================================================================
@@ -106,6 +143,9 @@ yaml_path <- "inst/config/study_parameters.yaml"
 if (file.exists(yaml_path)) {
   message("✓ Loading configuration from study_parameters.yaml")
   params <- load_study_parameters(yaml_path)
+  
+  # Update validation context with study name
+  validation_context$study_name <- params$study_parameters$study_name
   
   # Extract external data sources
   external_sources <- params$study_parameters$external_data_sources
@@ -165,7 +205,60 @@ if (n_local_files == 0) {
   }
   
 } else {
+  # Log validation event for local files
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "files_loaded",
+    description = "Loaded local CSV files from data/raw/",
+    count = n_local_files
+  )
+  
   log_message(sprintf("[Stage 1.2] Loaded %d local files", n_local_files))
+  
+  # -------------------------
+  # Track rows removed during intro-standardization
+  # -------------------------
+  
+  # NOTE: This tracking captures row removal that happens inside load_local_raw_data()
+  # Each file has N ≤ 0 or NA rows removed during intro-standardization
+  
+  total_rows_removed_local <- 0
+  
+  for (i in 1:n_local_files) {
+    file_name <- sprintf("raw_file_%03d", i)
+    
+    if (exists(file_name)) {
+      df <- get(file_name)
+      
+      # Check if the dataframe has a 'rows_removed' attribute
+      # (This would be set by the ingestion function if it tracked removal)
+      rows_removed <- attr(df, "rows_removed")
+      
+      if (!is.null(rows_removed) && rows_removed > 0) {
+        total_rows_removed_local <- total_rows_removed_local + rows_removed
+        
+        # Log per-file removal
+        validation_context <- log_validation_event(
+          validation_context,
+          event_type = "rows_removed",
+          description = sprintf("%s: Removed invalid rows (N ≤ 0 or NA)", file_name),
+          count = rows_removed,
+          details = list(
+            file = file_name,
+            rows_removed = rows_removed,
+            reason = "N ≤ 0 or NA values"
+          )
+        )
+      }
+    }
+  }
+  
+  # Log total local rows removed if any
+  if (total_rows_removed_local > 0) {
+    message(sprintf("\n  ℹ️  Removed %s invalid rows across %d local files", 
+                    format(total_rows_removed_local, big.mark = ","),
+                    n_local_files))
+  }
   
   # -------------------------
   # Report schema distribution for each local file
@@ -208,6 +301,8 @@ message("║          STAGE 1.3: Load External Data                       ║")
 message("╚════════════════════════════════════════════════════════════════╝\n")
 
 external_data <- NULL
+n_external_sources_succeeded <- 0
+total_rows_removed_external <- 0
 
 if (!is.null(external_sources) && length(external_sources) > 0) {
   
@@ -224,6 +319,18 @@ if (!is.null(external_sources) && length(external_sources) > 0) {
     # Validate path exists
     if (!dir.exists(external_dir)) {
       warning(sprintf("Directory not found: %s - skipping", external_dir))
+      
+      # Log failed source
+      validation_context <- log_validation_event(
+        validation_context,
+        event_type = "file_failed",
+        description = sprintf("External source directory not found: %s", basename(external_dir)),
+        details = list(
+          source_path = external_dir,
+          error_reason = "Directory does not exist"
+        )
+      )
+      
       next
     }
     
@@ -232,13 +339,44 @@ if (!is.null(external_sources) && length(external_sources) > 0) {
       load_external_raw_data(external_dir)
     }, error = function(e) {
       warning(sprintf("Failed to load from %s: %s", external_dir, e$message))
+      
+      # Log failed source
+      validation_context <<- log_validation_event(
+        validation_context,
+        event_type = "file_failed",
+        description = sprintf("Failed to load external source: %s", basename(external_dir)),
+        details = list(
+          source_path = external_dir,
+          error_message = e$message
+        )
+      )
+      
       NULL
     })
     
     # Add to list if successful
     if (!is.null(ext_data) && nrow(ext_data) > 0) {
       external_datasets[[paste0("source_", i)]] <- ext_data
+      n_external_sources_succeeded <- n_external_sources_succeeded + 1
       message(sprintf("  ✓ Loaded %s rows\n", format(nrow(ext_data), big.mark = ",")))
+      
+      # Track rows removed from this external source
+      rows_removed <- attr(ext_data, "rows_removed")
+      if (!is.null(rows_removed) && rows_removed > 0) {
+        total_rows_removed_external <- total_rows_removed_external + rows_removed
+        
+        validation_context <- log_validation_event(
+          validation_context,
+          event_type = "rows_removed",
+          description = sprintf("External source %d: Removed invalid rows (N ≤ 0 or NA)", i),
+          count = rows_removed,
+          details = list(
+            source_path = external_dir,
+            rows_removed = rows_removed,
+            reason = "N ≤ 0 or NA values"
+          )
+        )
+      }
     }
   }
   
@@ -246,14 +384,35 @@ if (!is.null(external_sources) && length(external_sources) > 0) {
   if (length(external_datasets) > 0) {
     external_data <- dplyr::bind_rows(external_datasets)
     
+    # Count total files from all external sources
+    n_external_files_loaded <- sum(sapply(external_datasets, function(ds) {
+      attr(ds, "files_processed") %||% 0  # Get files_processed attribute, default to 0
+    }))
+    
+    # Log validation event for external files
+    validation_context <- log_validation_event(
+      validation_context,
+      event_type = "files_loaded",
+      description = sprintf("Loaded %d files from %d external source(s)", 
+                            n_external_files_loaded,
+                            length(external_datasets)),
+      count = n_external_files_loaded
+    )
+    
     log_message(sprintf("[Stage 1.3] Loaded %s rows from %d external source(s)", 
                         format(nrow(external_data), big.mark = ","),
                         length(external_datasets)))
     
+    # Report total external rows removed
+    if (total_rows_removed_external > 0) {
+      message(sprintf("\n  ℹ️  Removed %s invalid rows from external sources", 
+                      format(total_rows_removed_external, big.mark = ",")))
+    }
+    
     # -------------------------
     # Report schema distribution for external data
     # -------------------------
-    message("Schema Detection Summary (external data):")
+    message("\nSchema Detection Summary (external data):")
     
     schema_counts <- table(external_data$schema_version)
     
@@ -320,7 +479,42 @@ raw_combined <- dplyr::bind_rows(datasets_to_combine)
 
 message(sprintf("\n✓ Combined dataset: %s total rows", format(nrow(raw_combined), big.mark = ",")))
 
+# -------------------------
+# Log source breakdown
+# -------------------------
+
+# Calculate contribution from each source
+n_local <- sum(sapply(datasets_to_combine[grepl("raw_file", names(datasets_to_combine))], nrow))
+n_external <- if (!is.null(datasets_to_combine$external)) nrow(datasets_to_combine$external) else 0
+
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "source_breakdown",
+  description = "Data source contribution summary",
+  details = list(
+    local_rows = n_local,
+    external_rows = n_external,
+    local_percentage = round(100 * n_local / nrow(raw_combined), 1),
+    external_percentage = round(100 * n_external / nrow(raw_combined), 1),
+    total_rows = nrow(raw_combined),
+    local_files = n_local_files,
+    external_sources = n_external_sources_succeeded
+  )
+)
+
+# Log validation event for combined data
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "rows_processed",
+  description = "Combined all datasets",
+  count = nrow(raw_combined)
+)
+validation_context$summary$rows_processed <- nrow(raw_combined)
+
+# -------------------------
 # Show combined schema distribution
+# -------------------------
+
 message("\nCombined Schema Distribution:")
 
 schema_counts <- table(raw_combined$schema_version)
@@ -332,6 +526,15 @@ for (version in names(schema_counts)) {
                   format(count, big.mark = ","),
                   pct))
 }
+
+# Log schema distribution in validation context
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "schema_detection",
+  description = "Detected schema versions across all data",
+  details = list(schema_distribution = as.list(schema_counts))
+)
+validation_context$summary$schema_distribution <- as.list(schema_counts)
 
 # Warn if multiple versions
 if (length(schema_counts) > 1) {
@@ -367,6 +570,32 @@ log_message(sprintf("[Stage 1.5] Saved intro-standardized checkpoint: %s (%s row
 
 message(sprintf("✓ Checkpoint saved: %s", basename(checkpoint_file)))
 message(sprintf("  Location: %s", checkpoint_file))
+
+# ------------------------------------------------------------------------------
+# Initialize artifact registry and register checkpoint
+# ------------------------------------------------------------------------------
+
+message("\nRegistering artifact...")
+
+# Initialize artifact registry
+registry <- init_artifact_registry()
+
+# Register checkpoint artifact
+registry <- register_artifact(
+  registry = registry,
+  artifact_name = sprintf("intro_standardized_%s", format(Sys.time(), "%Y%m%d_%H%M%S")),
+  artifact_type = "checkpoint",
+  workflow = "01",
+  file_path = checkpoint_file,
+  metadata = list(
+    n_rows = nrow(raw_combined),
+    n_files = n_local_files + n_external_sources_succeeded,
+    schema_distribution = as.list(table(raw_combined$schema_version)),
+    rows_removed_total = total_rows_removed_local + total_rows_removed_external
+  )
+)
+
+message("✓ Artifact registered in registry")
 
 # ==============================================================================
 # STAGE 1.6: CLEAN WORKSPACE
@@ -431,6 +660,43 @@ message("✓ study_parameters.yaml validated and synchronized")
 log_message("[Stage 1.7] Configuration validated")
 
 # ==============================================================================
+# TRACK SCHEMA UNKNOWN ROWS
+# ==============================================================================
+
+# Check for rows with unknown schema
+unknown_count <- sum(raw_combined$schema_version == "unknown", na.rm = TRUE)
+
+if (unknown_count > 0) {
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "schema_unknown",
+    description = sprintf("%d rows with undetectable schema version", unknown_count),
+    count = unknown_count,
+    details = list(
+      percentage = round(100 * unknown_count / nrow(raw_combined), 2),
+      possible_reasons = c("NoID rows", "Unexpected auto_id length", "Missing auto_id column"),
+      impact = "These rows will be processed but may have limited metadata"
+    )
+  )
+}
+
+# ==============================================================================
+# FINALIZE VALIDATION REPORT
+# ==============================================================================
+
+message("\n╔════════════════════════════════════════════════════════════════╗")
+message("║          Generating Validation Report                        ║")
+message("╚════════════════════════════════════════════════════════════════╝\n")
+
+# Finalize validation report
+validation_report_path <- finalize_validation_report(
+  validation_context,
+  output_dir = here::here("results", "validation")
+)
+
+log_message(sprintf("[Workflow 01] Validation report: %s", basename(validation_report_path)))
+
+# ==============================================================================
 # WORKFLOW 01 COMPLETE
 # ==============================================================================
 
@@ -447,14 +713,20 @@ message("  ✓ Source file tracked")
 message("  ✓ All data combined into raw_combined")
 message(sprintf("  ✓ Checkpoint saved: %s", basename(checkpoint_file)))
 message("  ✓ study_parameters.yaml validated")
+message(sprintf("  ✓ Validation report: %s", basename(validation_report_path)))
+message("  ✓ Artifact registered in registry")
 
-# Check for unknown schemas
-unknown_count <- sum(raw_combined$schema_version == "unknown", na.rm = TRUE)
+# Show data quality summary
+total_rows_removed <- total_rows_removed_local + total_rows_removed_external
+if (total_rows_removed > 0) {
+  message("\nData Quality:")
+  message(sprintf("  • Rows removed (N ≤ 0 or NA): %s", format(total_rows_removed, big.mark = ",")))
+}
+
 if (unknown_count > 0) {
-  message(sprintf("\n⚠️  Warning: %s rows (%.1f%%) have unknown schema", 
+  message(sprintf("  • Unknown schema rows: %s (%.1f%%)", 
                   format(unknown_count, big.mark = ","),
                   100 * unknown_count / nrow(raw_combined)))
-  message("    These may be NoID rows or have unexpected code lengths")
 }
 
 message(sprintf("\nFinal dataset: %s rows", format(nrow(raw_combined), big.mark = ",")))
@@ -462,10 +734,16 @@ message(sprintf("\nFinal dataset: %s rows", format(nrow(raw_combined), big.mark 
 # Show data sources summary
 message("\nData sources:")
 if (n_local_files > 0) {
-  message(sprintf("  • Local: %d file(s) from data/raw/", n_local_files))
+  message(sprintf("  • Local: %d file(s) from data/raw/ (%s rows, %.1f%%)", 
+                  n_local_files,
+                  format(n_local, big.mark = ","),
+                  100 * n_local / nrow(raw_combined)))
 }
-if (!is.null(external_sources) && length(external_sources) > 0) {
-  message(sprintf("  • External: %d source(s) from YAML", length(external_sources)))
+if (n_external_sources_succeeded > 0) {
+  message(sprintf("  • External: %d source(s) from YAML (%s rows, %.1f%%)", 
+                  n_external_sources_succeeded,
+                  format(n_external, big.mark = ","),
+                  100 * n_external / nrow(raw_combined)))
 }
 
 message("\n========================================")
@@ -475,8 +753,9 @@ message("========================================")
 message("\nCurrent data in environment:")
 message("  • raw_combined (ready for Workflow 02)")
 message(sprintf("  • Checkpoint: %s", basename(checkpoint_file)))
+message(sprintf("  • Validation report: %s", basename(validation_report_path)))
 
 message("\nNext workflow:")
-message("  source('02_standardize.R')  # Transform to master schema\n")
+message("  source('R/workflows/02_standardize.R')  # Transform to master schema\n")
 
 log_message("=== WORKFLOW 01 COMPLETE ===")

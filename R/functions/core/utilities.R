@@ -806,3 +806,248 @@ fill_readme_template <- function(template_path,
   writeLines(filled, output_path)
   invisible(TRUE)
 }
+
+# ==============================================================================
+# NEW FUNCTIONS TO ADD TO core/utilities.R
+# ==============================================================================
+# These functions provide consistent console output formatting for workflows.
+# Add to the end of utilities.R, before the closing comment.
+# ==============================================================================
+
+
+# ==============================================================================
+# CONSOLE FORMATTING HELPERS
+# ==============================================================================
+
+
+#' Print Stage Header Box
+#'
+#' @description
+#' Prints a consistently formatted single-line ASCII box for workflow stages.
+#' Uses UTF-8 box-drawing characters per CODING_STANDARDS v2.1.
+#'
+#' @param stage_num Character. Stage number (e.g., "7.1", "2.3")
+#' @param title Character. Stage title (e.g., "Load Configuration")
+#' @param width Integer. Total width of box interior. Default: 65
+#'
+#' @return Invisible NULL.
+#'
+#' @section CONTRACT:
+#' - Uses single-line box characters (┌─┐)
+#' - Consistent width across all workflows
+#' - Auto-pads title for centering
+#'
+#' @section DOES NOT:
+#' - Write to log file (use log_message separately)
+#' - Validate stage number format
+#'
+#' @examples
+#' \dontrun{
+#' print_stage_header("7.1", "Load Configuration")
+#' print_stage_header("2.3", "Apply Detector Mapping")
+#' }
+#'
+#' @export
+print_stage_header <- function(stage_num, title, width = 65) {
+  
+  # Build stage text
+  stage_text <- sprintf("STAGE %s: %s", stage_num, title)
+  
+  
+  # Calculate padding for centering
+  pad_total <- width - nchar(stage_text)
+  pad_left <- floor(pad_total / 2)
+  pad_right <- ceiling(pad_total / 2)
+  
+  # Build centered line
+  centered <- sprintf("%s%s%s", 
+                      strrep(" ", pad_left),
+                      stage_text,
+                      strrep(" ", pad_right))
+  
+  # Print box
+  message(sprintf("\n┌%s┐", strrep("─", width)))
+  message(sprintf("│%s│", centered))
+  message(sprintf("└%s┘\n", strrep("─", width)))
+  
+  invisible(NULL)
+}
+
+
+#' Print Workflow Completion Summary
+#'
+#' @description
+#' Prints a formatted double-line ASCII box with workflow completion details.
+#' Used at the end of each workflow to summarize outputs.
+#'
+#' @param workflow Character. Workflow number (e.g., "07", "05")
+#' @param title Character. Summary title
+#' @param items Named list. Items to display (name = description)
+#' @param width Integer. Total width of box interior. Default: 65
+#'
+#' @return Invisible NULL.
+#'
+#' @section CONTRACT:
+#' - Uses double-line box characters (╔═╗)
+#' - Displays each item on its own line
+#' - Consistent width across all workflows
+#'
+#' @section DOES NOT:
+#' - Write to log file
+#' - Validate item content
+#'
+#' @examples
+#' \dontrun{
+#' print_workflow_summary(
+#'   workflow = "07",
+#'   title = "Report Generated",
+#'   items = list(
+#'     "Report" = "bat_activity_report_20260109.html",
+#'     "Duration" = "12.3 seconds"
+#'   )
+#' )
+#' }
+#'
+#' @export
+print_workflow_summary <- function(workflow, title, items, width = 65) {
+  
+  # Build header text
+  header_text <- sprintf("WORKFLOW %s COMPLETE: %s", workflow, title)
+  
+  # Calculate padding for centering
+  pad_total <- width - nchar(header_text)
+  pad_left <- floor(pad_total / 2)
+  pad_right <- ceiling(pad_total / 2)
+  
+  centered <- sprintf("%s%s%s",
+                      strrep(" ", pad_left),
+                      header_text,
+                      strrep(" ", pad_right))
+  
+  # Print header box
+  message(sprintf("\n╔%s╗", strrep("═", width)))
+  message(sprintf("║%s║", centered))
+  message(sprintf("╚%s╝", strrep("═", width)))
+  
+  # Print items
+  if (length(items) > 0) {
+    message("")
+    for (name in names(items)) {
+      message(sprintf("  • %s: %s", name, items[[name]]))
+    }
+  }
+  
+  invisible(NULL)
+}
+
+
+#' Print Pipeline Complete Summary
+#'
+#' @description
+#' Prints a comprehensive pipeline completion summary with all outputs
+#' and next steps guidance. Used only at the end of Workflow 07.
+#'
+#' @param outputs Named list. Output descriptions by workflow
+#' @param next_steps Character vector. Suggested next steps
+#' @param report_path Character. Path to final report (for browseURL hint)
+#' @param width Integer. Total width of box interior. Default: 65
+#'
+#' @return Invisible NULL.
+#'
+#' @section CONTRACT:
+#' - Uses double-line box characters for main header
+#' - Lists all pipeline outputs
+#' - Provides actionable next steps
+#' - Shows browseURL command for report
+#'
+#' @section DOES NOT:
+#' - Validate that outputs exist
+#' - Write to log file
+#'
+#' @examples
+#' \dontrun{
+#' print_pipeline_complete(
+#'   outputs = list(
+#'     "Master Data" = "outputs/final/Master_20260109.csv",
+#'     "Report" = "results/reports/bat_activity_report_20260109.html"
+#'   ),
+#'   next_steps = c(
+#'     "Review the HTML report",
+#'     "Share with collaborators"
+#'   ),
+#'   report_path = "results/reports/bat_activity_report_20260109.html"
+#' )
+#' }
+#'
+#' @export
+print_pipeline_complete <- function(outputs, next_steps, report_path, width = 65) {
+  
+  # Header text
+  header_text <- "PIPELINE COMPLETE"
+  pad_total <- width - nchar(header_text)
+  pad_left <- floor(pad_total / 2)
+  pad_right <- ceiling(pad_total / 2)
+  
+  centered <- sprintf("%s%s%s",
+                      strrep(" ", pad_left),
+                      header_text,
+                      strrep(" ", pad_right))
+  
+  # Print main header
+  
+  message(sprintf("\n╔%s╗", strrep("═", width)))
+  message(sprintf("║%s║", centered))
+  message(sprintf("╚%s╝", strrep("═", width)))
+  
+  # Print outputs section
+  message("\n📂 PIPELINE OUTPUTS")
+  message(strrep("─", 40))
+  for (name in names(outputs)) {
+    message(sprintf("  %s:", name))
+    message(sprintf("    %s", outputs[[name]]))
+  }
+  
+  # Print next steps section
+  message("\n📋 NEXT STEPS")
+  message(strrep("─", 40))
+  for (i in seq_along(next_steps)) {
+    message(sprintf("  %d. %s", i, next_steps[i]))
+  }
+  
+  # Print browseURL hint
+  if (!is.null(report_path) && nchar(report_path) > 0) {
+    message("\n🔗 VIEW REPORT")
+    message(strrep("─", 40))
+    message(sprintf("  browseURL('%s')", report_path))
+  }
+  
+  message("")
+  
+  invisible(NULL)
+}
+
+
+#' Null Coalescing Operator
+#'
+#' @description
+#' Returns the left operand if not NULL, otherwise returns the right operand.
+#' Common pattern for default values.
+#'
+#' @param x Left operand (value to check)
+#' @param y Right operand (default value)
+#'
+#' @return x if not NULL, otherwise y
+#'
+#' @examples
+#' \dontrun{
+#' value <- NULL
+#' result <- value %||% "default"  # Returns "default"
+#'
+#' value <- "actual"
+#' result <- value %||% "default"  # Returns "actual"
+#' }
+#'
+#' @export
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
+}

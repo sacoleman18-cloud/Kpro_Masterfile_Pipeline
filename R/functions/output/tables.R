@@ -728,7 +728,7 @@ format_hourly_summary_gt <- function(hourly_summary,
     stop("hourly_summary must be a data frame")
   }
   
-  required_cols <- c("Hour", "n_calls", "pct_of_total")
+  required_cols <- c("Hour_local", "n_calls", "pct_of_total")
   missing_cols <- setdiff(required_cols, names(hourly_summary))
   
   if (length(missing_cols) > 0) {
@@ -747,9 +747,9 @@ format_hourly_summary_gt <- function(hourly_summary,
   
   display_df <- hourly_summary %>%
     dplyr::mutate(
-      Hour_display = sprintf("%02d:00", Hour)
+      Hour_display = sprintf("%02d:00", Hour_local)
     ) %>%
-    dplyr::select(-Hour) %>%
+    dplyr::select(-Hour_local) %>%
     dplyr::rename(Hour = Hour_display)
   
   # Reorder columns

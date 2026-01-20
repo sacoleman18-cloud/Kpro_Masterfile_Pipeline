@@ -1,0 +1,1088 @@
+# ==============================================================================
+# KPRO MASTERFILE PIPELINE — RELEASE MANIFEST
+# ==============================================================================
+# This manifest provides complete provenance and audit trail for a pipeline run.
+# All artifacts, hashes, and validation results are captured for reproducibility.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: RELEASE METADATA
+# ------------------------------------------------------------------------------
+# Identifies this specific release and the pipeline version that produced it.
+
+release_metadata:
+  release_name: "kpro_release_<STUDY_ID>_<YYYYMMDD_HHMMSS>"
+  release_id: "<UUID_HERE>"  # Unique identifier for this release
+  created_at_utc: "<YYYY-MM-DDTHH:MM:SSZ>"
+  pipeline_version: "2.1"
+  coding_standards_version: "2.1"
+  
+  git_info:
+    commit_sha: "<GIT_COMMIT_SHA_HERE>"
+    branch: "<GIT_BRANCH_HERE>"
+    tag: "<GIT_TAG_IF_EXISTS>"
+    is_dirty: <true|false>  # Whether working directory had uncommitted changes
+    remote_url: "https://github.com/SaColeman18-cloud/KPro_Masterfile_Pipeline"
+  
+  generator:
+    script: "07_generate_report.R"
+    r_version: "<R_VERSION_STRING>"
+    platform: "<PLATFORM_STRING>"
+    locale: "<LOCALE_STRING>"
+
+# ------------------------------------------------------------------------------
+# SECTION 2: STUDY METADATA
+# ------------------------------------------------------------------------------
+# Describes the ecological study that produced this data.
+
+study_metadata:
+  study_id: "<STUDY_ID>"
+  study_name: "<STUDY_NAME>"
+  
+  temporal_scope:
+    start_date: "<YYYY-MM-DD>"
+    end_date: "<YYYY-MM-DD>"
+    duration_days: <INTEGER>
+    timezone: "<TIMEZONE_STRING>"  # e.g., "America/Chicago"
+  
+  spatial_scope:
+    n_detectors: <INTEGER>
+    detector_ids:
+      - id: "<HARDWARE_ID_1>"
+        name: "<FRIENDLY_NAME_1>"
+      - id: "<HARDWARE_ID_2>"
+        name: "<FRIENDLY_NAME_2>"
+      # ... additional detectors
+  
+  effort_summary:
+    total_detector_nights: <INTEGER>
+    total_recording_hours: <FLOAT>
+    mean_hours_per_night: <FLOAT>
+    
+  recording_schedule:
+    advanced_scheduling: <true|false>
+    recording_start: "<HH:MM:SS>"
+    recording_end: "<HH:MM:SS>"
+    intended_hours_per_night: <INTEGER>
+
+# ------------------------------------------------------------------------------
+# SECTION 3: SOURCE INPUTS
+# ------------------------------------------------------------------------------
+# Documents all raw data that entered the pipeline with integrity hashes.
+
+source_inputs:
+  
+  # Local raw files from data/raw/ directory
+  local_sources:
+    directory: "data/raw/"
+    file_count: <INTEGER>
+    total_rows: <INTEGER>
+    files:
+      - filename: "<FILENAME_1>.csv"
+        rows: <INTEGER>
+        size_bytes: <INTEGER>
+        sha256: "<SHA256_HASH>"
+        schema_versions_detected:
+          - version: "v1_legacy_single_column"
+            row_count: <INTEGER>
+          - version: "v2_transitional_4letter"
+            row_count: <INTEGER>
+          - version: "v3_modern_6letter"
+            row_count: <INTEGER>
+          - version: "unknown"
+            row_count: <INTEGER>
+      # ... additional local files
+  
+  # External data sources from YAML configuration
+  external_sources:
+    - path: "<EXTERNAL_PATH_1>"
+      recursive_scan: true
+      files_found: <INTEGER>
+      files_valid: <INTEGER>
+      files_skipped: <INTEGER>
+      total_rows: <INTEGER>
+      sha256_aggregate: "<SHA256_OF_CONCATENATED_FILE_HASHES>"
+      files:
+        - filename: "<ID_CSV_FILENAME_1>"
+          relative_path: "<RELATIVE_PATH>"
+          rows: <INTEGER>
+          sha256: "<SHA256_HASH>"
+        # ... additional external files
+    # ... additional external sources
+  
+  # Aggregate input statistics
+  input_totals:
+    total_files_processed: <INTEGER>
+    total_files_skipped: <INTEGER>
+    total_rows_ingested: <INTEGER>
+    total_rows_after_intro_standardization: <INTEGER>
+    rows_removed_n_zero_or_na: <INTEGER>
+
+# ------------------------------------------------------------------------------
+# SECTION 4: ARTIFACTS
+# ------------------------------------------------------------------------------
+# Complete inventory of all outputs produced by this pipeline run.
+
+artifacts:
+  
+  # ---------------------------------------------------------------------------
+  # 4.1 Checkpoints (intermediate workflow outputs)
+  # ---------------------------------------------------------------------------
+  checkpoints:
+    
+    - artifact_id: "checkpoint_01_intro_standardized"
+      workflow: "01_ingest_raw_data"
+      path: "outputs/checkpoints/01_intro_standardized_<TIMESTAMP>.csv"
+      description: "Raw data with intro-standardization applied (schema detected, source tracked)"
+      row_count: <INTEGER>
+      column_count: <INTEGER>
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "local_sources"
+          ref: "data/raw/*.csv"
+        - type: "external_sources"
+          ref: "<EXTERNAL_PATH>"
+      columns:
+        - "detector_id"
+        - "auto_id"
+        - "schema_version"
+        - "source_file"
+        # ... additional columns
+    
+    - artifact_id: "checkpoint_02_kpro_master"
+      workflow: "02_standardize"
+      path: "outputs/checkpoints/02_kpro_master_<TIMESTAMP>.csv"
+      description: "Unified master detection file with standardized schema"
+      row_count: <INTEGER>
+      column_count: 41  # Per Master_20260112_0209.csv schema
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "checkpoint"
+          ref: "checkpoint_01_intro_standardized"
+        - type: "config"
+          ref: "study_parameters.yaml"
+  
+  # ---------------------------------------------------------------------------
+  # 4.2 Data Files (final outputs)
+  # ---------------------------------------------------------------------------
+  data_files:
+    
+    - artifact_id: "masterfile_final"
+      workflow: "02_standardize"
+      path: "outputs/final/Master_<TIMESTAMP>.csv"
+      description: "Canonical master detection file - all bat call detections for study"
+      row_count: <INTEGER>
+      column_count: 41
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "checkpoint"
+          ref: "checkpoint_02_kpro_master"
+      schema:
+        key_columns:
+          - name: "Detector"
+            type: "character"
+            description: "Human-readable detector name"
+          - name: "DateTime_local"
+            type: "POSIXct"
+            description: "Detection timestamp in study timezone"
+          - name: "auto_id"
+            type: "character"
+            description: "KPro automated species identification (6-letter code)"
+          - name: "match_ratio"
+            type: "numeric"
+            description: "Classification confidence metric"
+        temporal_columns:
+          - "Date_local"
+          - "Time_local"
+          - "Hour_local"
+          - "DateTime_UTC"
+        acoustic_columns:
+          - "pulses"
+          - "dur"
+          - "fc"
+          - "sc"
+          - "fmax"
+          - "fmin"
+          - "fmean"
+    
+    - artifact_id: "cpn_template_original"
+      workflow: "03_generate_cpn_template"
+      path: "outputs/03_CallsPerNight_Template_ORIGINAL_<TIMESTAMP>.csv"
+      description: "Original CPN template before user edits (preserved for diff comparison)"
+      row_count: <INTEGER>
+      column_count: 6
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "artifact"
+          ref: "masterfile_final"
+    
+    - artifact_id: "cpn_template_edit"
+      workflow: "03_generate_cpn_template"
+      path: "outputs/03_CallsPerNight_Template_EDIT_THIS_<TIMESTAMP>.csv"
+      description: "CPN template for user editing (recording hour corrections)"
+      row_count: <INTEGER>
+      column_count: 6
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "artifact"
+          ref: "cpn_template_original"
+      user_editable: true
+      edit_instructions: "Modify RecordingHours column to correct for detector malfunctions"
+    
+    - artifact_id: "cpn_final"
+      workflow: "04_finalize_cpn"
+      path: "results/csv/CallsPerNight_final_v<VERSION>.csv"
+      description: "Finalized Calls-Per-Night dataset ready for ecological modeling"
+      row_count: <INTEGER>
+      column_count: 8
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      version: <INTEGER>
+      derived_from:
+        - type: "artifact"
+          ref: "cpn_template_edit"
+        - type: "user_input"
+          ref: "recording_hour_corrections"
+      schema:
+        columns:
+          - name: "Detector"
+            type: "character"
+          - name: "Night"
+            type: "Date"
+          - name: "CallsPerNight"
+            type: "integer"
+          - name: "RecordingHours"
+            type: "numeric"
+          - name: "StartDateTime"
+            type: "character"
+          - name: "EndDateTime"
+            type: "character"
+          - name: "Status"
+            type: "character"
+            allowed_values: ["Full", "Partial", "NoData"]
+          - name: "CallsPerHour"
+            type: "numeric"
+  
+  # ---------------------------------------------------------------------------
+  # 4.3 Summary Objects (pre-computed analytics)
+  # ---------------------------------------------------------------------------
+  summaries:
+    
+    - artifact_id: "summary_data_rds"
+      workflow: "05_summary_stats"
+      path: "results/rds/summary_data_<TIMESTAMP>.rds"
+      description: "Pre-computed summary statistics for report rendering"
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "artifact"
+          ref: "cpn_final"
+        - type: "artifact"
+          ref: "masterfile_final"
+      contents:
+        
+        - element: "study_summary"
+          type: "data.frame"
+          description: "Overall study metrics"
+          metrics:
+            - "n_detectors"
+            - "n_detector_nights"
+            - "start_date"
+            - "end_date"
+            - "duration_days"
+            - "total_calls"
+            - "total_hours"
+            - "mean_cph"
+            - "cv_percent"
+            - "success_percent"
+        
+        - element: "detector_summary"
+          type: "data.frame"
+          description: "Per-detector statistics"
+          row_count: <N_DETECTORS>
+          metrics:
+            - "Detector"
+            - "Nights"
+            - "Total_Hrs"
+            - "Mean_Hrs"
+            - "Success_Pct"
+            - "Total_Calls"
+            - "Mean_CPH"
+            - "Median_CPH"
+            - "SD"
+            - "CV_Pct"
+            - "Zero_Pct"
+        
+        - element: "species_summary"
+          type: "data.frame"
+          description: "Species composition and frequency"
+          row_count: <N_SPECIES>
+          metrics:
+            - "species_code"
+            - "total_detections"
+            - "proportion"
+            - "n_detector_nights"
+        
+        - element: "metadata"
+          type: "list"
+          description: "Generation metadata"
+          fields:
+            - "generated_at"
+            - "pipeline_version"
+            - "source_cpn_file"
+            - "source_master_file"
+    
+    - artifact_id: "summary_xlsx"
+      workflow: "05_summary_stats"
+      path: "results/summary_statistics_<TIMESTAMP>.xlsx"
+      description: "Excel workbook with formatted summary tables"
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "artifact"
+          ref: "summary_data_rds"
+      sheets:
+        - "Study Overview"
+        - "Detector Summary"
+        - "Species Summary"
+  
+  # ---------------------------------------------------------------------------
+  # 4.4 Figures (pre-computed visualizations)
+  # ---------------------------------------------------------------------------
+  figures:
+    
+    - artifact_id: "plot_objects_rds"
+      workflow: "06_exploratory_plots"
+      path: "results/rds/plot_objects_<TIMESTAMP>.rds"
+      description: "Pre-computed ggplot objects for report rendering"
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "artifact"
+          ref: "cpn_final"
+        - type: "artifact"
+          ref: "masterfile_final"
+      structure: "nested_list"
+      
+      categories:
+        
+        - category: "quality"
+          description: "Recording effort and data quality visualizations"
+          plot_count: 6
+          plots:
+            - name: "recording_status_overall"
+              filename: "recording_status_overall_<TIMESTAMP>.png"
+              description: "Overall recording status distribution"
+            - name: "recording_status_summary"
+              filename: "recording_status_summary_<TIMESTAMP>.png"
+              description: "Recording status counts by category"
+            - name: "recording_status_percent"
+              filename: "recording_status_percent_<TIMESTAMP>.png"
+              description: "Recording status as percentages"
+            - name: "data_completeness_calendar"
+              filename: "data_completeness_calendar_<TIMESTAMP>.png"
+              description: "Calendar heatmap of data completeness"
+            - name: "missing_nights"
+              filename: "missing_nights_<TIMESTAMP>.png"
+              description: "Visualization of missing detector-nights"
+            - name: "recording_effort_heatmap"
+              filename: "recording_effort_heatmap_<TIMESTAMP>.png"
+              description: "Heatmap of recording hours by detector and night"
+            - name: "effort_by_detector"
+              filename: "effort_by_detector_<TIMESTAMP>.png"
+              description: "Total recording effort per detector"
+        
+        - category: "detector"
+          description: "Detector-level activity and comparison visualizations"
+          plot_count: 8
+          plots:
+            - name: "total_calls_by_detector"
+              filename: "total_calls_by_detector_<TIMESTAMP>.png"
+              description: "Total call counts per detector"
+            - name: "detector_boxplots"
+              filename: "detector_boxplots_<TIMESTAMP>.png"
+              description: "Distribution of nightly activity by detector"
+            - name: "detector_activity_caterpillar"
+              filename: "detector_activity_caterpillar_<TIMESTAMP>.png"
+              description: "Caterpillar plot of detector activity with confidence intervals"
+            - name: "correlation_heatmap"
+              filename: "correlation_heatmap_<TIMESTAMP>.png"
+              description: "Pairwise correlation of detector activity"
+            - name: "synchrony"
+              filename: "synchrony_<TIMESTAMP>.png"
+              description: "Synchrony of activity across detectors"
+            - name: "detector_rank_over_time"
+              filename: "detector_rank_over_time_<TIMESTAMP>.png"
+              description: "How detector rankings change over study period"
+            - name: "activity_with_without_outliers"
+              filename: "activity_with_without_outliers_<TIMESTAMP>.png"
+              description: "Activity comparison with and without outlier nights"
+            - name: "nights_by_detector"
+              filename: "nights_by_detector_<TIMESTAMP>.png"
+              description: "Number of active nights per detector"
+        
+        - category: "species"
+          description: "Species composition and distribution visualizations"
+          plot_count: 5
+          plots:
+            - name: "species_composition_bar"
+              filename: "species_composition_bar_<TIMESTAMP>.png"
+              description: "Bar chart of species composition"
+            - name: "species_by_detector_heatmap"
+              filename: "species_by_detector_heatmap_<TIMESTAMP>.png"
+              description: "Heatmap of species detections by detector"
+            - name: "species_hourly_profile"
+              filename: "species_hourly_profile_<TIMESTAMP>.png"
+              description: "Hourly activity profiles by species"
+            - name: "species_accumulation_curve"
+              filename: "species_accumulation_curve_<TIMESTAMP>.png"
+              description: "Species accumulation over sampling effort"
+            - name: "noid_proportion"
+              filename: "noid_proportion_<TIMESTAMP>.png"
+              description: "Proportion of unidentified calls (NoID)"
+        
+        - category: "temporal"
+          description: "Temporal pattern visualizations"
+          plot_count: 7
+          plots:
+            - name: "activity_over_time"
+              filename: "activity_over_time_<TIMESTAMP>.png"
+              description: "Nightly activity trend over study period"
+            - name: "hourly_activity_profile"
+              filename: "hourly_activity_profile_<TIMESTAMP>.png"
+              description: "Average activity by hour of night"
+            - name: "weekly_activity"
+              filename: "weekly_activity_<TIMESTAMP>.png"
+              description: "Activity patterns by day of week"
+            - name: "activity_by_month"
+              filename: "activity_by_month_<TIMESTAMP>.png"
+              description: "Monthly activity summary"
+            - name: "cumulative_calls_over_time"
+              filename: "cumulative_calls_over_time_<TIMESTAMP>.png"
+              description: "Cumulative call accumulation curve"
+            - name: "callsperhour_distribution"
+              filename: "callsperhour_distribution_<TIMESTAMP>.png"
+              description: "Distribution of calls-per-hour values"
+      
+      totals:
+        quality_plots: 6
+        detector_plots: 8
+        species_plots: 5
+        temporal_plots: 7
+        total_plots: 26
+    
+    # Individual PNG exports
+    png_exports:
+      directory: "results/figures/"
+      total_files: 26
+      format: "PNG"
+      resolution_dpi: 300
+      # Individual files listed under categories above
+  
+  # ---------------------------------------------------------------------------
+  # 4.5 Reports
+  # ---------------------------------------------------------------------------
+  reports:
+    
+    - artifact_id: "quarto_report"
+      workflow: "07_generate_report"
+      path: "results/reports/bat_activity_report_<TIMESTAMP>.html"
+      type: "Quarto HTML"
+      description: "Publication-grade summary report with all visualizations"
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      self_contained: true
+      derived_from:
+        - type: "artifact"
+          ref: "summary_data_rds"
+        - type: "artifact"
+          ref: "plot_objects_rds"
+        - type: "config"
+          ref: "study_parameters.yaml"
+      template: "reports/bat_activity_report.qmd"
+      render_params:
+        summary_rds: "<PATH_TO_SUMMARY_RDS>"
+        plots_rds: "<PATH_TO_PLOTS_RDS>"
+  
+  # ---------------------------------------------------------------------------
+  # 4.6 Release Bundle
+  # ---------------------------------------------------------------------------
+  release_bundle:
+    
+    - artifact_id: "release_zip"
+      workflow: "07_generate_report"
+      path: "results/releases/kpro_release_<STUDY_ID>_<TIMESTAMP>.zip"
+      description: "Portable, self-contained release for downstream projects"
+      size_bytes: <INTEGER>
+      sha256: "<SHA256_HASH>"
+      derived_from:
+        - type: "artifact"
+          ref: "cpn_final"
+        - type: "artifact"
+          ref: "masterfile_final"
+        - type: "artifact"
+          ref: "summary_data_rds"
+        - type: "artifact"
+          ref: "plot_objects_rds"
+        - type: "artifact"
+          ref: "quarto_report"
+      
+      bundle_structure:
+        - "manifest.yaml"
+        - "data/calls_per_night_raw.csv"  # GAMM project input
+        - "data/kpro_master.csv"
+        - "data/summary/detector_summary.csv"
+        - "data/summary/species_summary.csv"
+        - "data/summary/study_summary.csv"
+        - "figures/quality/*.png"
+        - "figures/detector/*.png"
+        - "figures/species/*.png"
+        - "figures/temporal/*.png"
+        - "reports/bat_activity_report.html"
+      
+      downstream_compatibility:
+        - project: "NB GAMM Bat"
+          input_file: "data/calls_per_night_raw.csv"
+          schema_version: "1.0"
+  
+  # ---------------------------------------------------------------------------
+  # 4.7 Validation Reports
+  # ---------------------------------------------------------------------------
+  validation_reports:
+    
+    - artifact_id: "validation_01"
+      workflow: "01_ingest_raw_data"
+      path: "results/validation/validation_01_<TIMESTAMP>.html"
+      description: "Ingestion validation report"
+      sha256: "<SHA256_HASH>"
+    
+    - artifact_id: "validation_02"
+      workflow: "02_standardize"
+      path: "results/validation/validation_02_<TIMESTAMP>.html"
+      description: "Standardization validation report"
+      sha256: "<SHA256_HASH>"
+    
+    - artifact_id: "validation_03"
+      workflow: "03_generate_cpn_template"
+      path: "results/validation/validation_03_<TIMESTAMP>.html"
+      description: "CPN template generation validation report"
+      sha256: "<SHA256_HASH>"
+    
+    - artifact_id: "validation_04"
+      workflow: "04_finalize_cpn"
+      path: "results/validation/validation_04_<TIMESTAMP>.html"
+      description: "CPN finalization validation report"
+      sha256: "<SHA256_HASH>"
+    
+    - artifact_id: "validation_05"
+      workflow: "05_summary_stats"
+      path: "results/validation/validation_05_<TIMESTAMP>.html"
+      description: "Summary statistics validation report"
+      sha256: "<SHA256_HASH>"
+    
+    - artifact_id: "validation_06"
+      workflow: "06_exploratory_plots"
+      path: "results/validation/validation_06_<TIMESTAMP>.html"
+      description: "Plot generation validation report"
+      sha256: "<SHA256_HASH>"
+    
+    - artifact_id: "validation_07"
+      workflow: "07_generate_report"
+      path: "results/validation/validation_07_<TIMESTAMP>.html"
+      description: "Report and release validation report"
+      sha256: "<SHA256_HASH>"
+
+# ------------------------------------------------------------------------------
+# SECTION 5: VALIDATION FLAGS
+# ------------------------------------------------------------------------------
+# Results of all validation checks performed during pipeline execution.
+
+validation_flags:
+  
+  # Schema validation results
+  schema_validation:
+    intro_standardization_passed: <true|false>
+    unified_schema_enforced: <true|false>
+    cpn_schema_valid: <true|false>
+    all_required_columns_present: <true|false>
+    
+    schema_version_breakdown:
+      v1_legacy_single_column:
+        row_count: <INTEGER>
+        percentage: <FLOAT>
+      v2_transitional_4letter:
+        row_count: <INTEGER>
+        percentage: <FLOAT>
+      v3_modern_6letter:
+        row_count: <INTEGER>
+        percentage: <FLOAT>
+      unknown:
+        row_count: <INTEGER>
+        percentage: <FLOAT>
+    
+    mixed_schemas_in_single_file: <true|false>
+    mixed_schema_files:
+      - filename: "<FILENAME>"
+        schema_counts:
+          v2: <INTEGER>
+          v3: <INTEGER>
+  
+  # Detector mapping validation
+  detector_mapping:
+    all_detectors_mapped: <true|false>
+    placeholders_remaining: <INTEGER>  # Count of "ENTER_NAME_HERE" values
+    duplicate_names_detected: <true|false>
+    mapping_complete: <true|false>
+    
+    detectors:
+      - hardware_id: "<ID>"
+        friendly_name: "<NAME>"
+        mapped: <true|false>
+        total_detections: <INTEGER>
+  
+  # Temporal completeness validation
+  temporal_completeness:
+    study_dates_valid: <true|false>
+    all_nights_covered: <true|false>
+    missing_nights_count: <INTEGER>
+    
+    missing_nights:
+      - detector: "<DETECTOR_NAME>"
+        night: "<YYYY-MM-DD>"
+        status: "NoData"
+      # ... additional missing nights
+    
+    partial_nights_count: <INTEGER>
+    partial_nights:
+      - detector: "<DETECTOR_NAME>"
+        night: "<YYYY-MM-DD>"
+        expected_hours: <FLOAT>
+        actual_hours: <FLOAT>
+        status: "Partial"
+  
+  # Data quality validation
+  data_quality:
+    rows_with_n_zero_or_na: <INTEGER>
+    rows_with_unknown_schema: <INTEGER>
+    duplicate_rows_removed: <INTEGER>
+    invalid_files_skipped: <INTEGER>
+    
+    invalid_files:
+      - filename: "<FILENAME>"
+        reason: "<REASON_FOR_REJECTION>"
+      # ... additional invalid files
+  
+  # Recording effort validation
+  recording_effort:
+    user_edits_applied: <true|false>
+    nights_with_user_corrections: <INTEGER>
+    total_hours_adjusted: <FLOAT>
+    
+    status_distribution:
+      Full:
+        count: <INTEGER>
+        percentage: <FLOAT>
+      Partial:
+        count: <INTEGER>
+        percentage: <FLOAT>
+      NoData:
+        count: <INTEGER>
+        percentage: <FLOAT>
+  
+  # Species validation
+  species_validation:
+    unique_auto_id_codes: <INTEGER>
+    noid_percentage: <FLOAT>
+    unknown_species_codes: <INTEGER>
+    
+    species_codes_found:
+      - code: "<SPECIES_CODE>"
+        count: <INTEGER>
+      # ... additional species
+  
+  # Artifact integrity validation
+  artifact_integrity:
+    all_expected_artifacts_created: <true|false>
+    missing_artifacts: []  # List of missing artifact IDs
+    hash_verification_passed: <true|false>
+    
+    artifacts_verified:
+      - artifact_id: "<ID>"
+        exists: <true|false>
+        hash_matches: <true|false>
+  
+  # Overall validation status
+  overall_status:
+    all_validations_passed: <true|false>
+    critical_failures: <INTEGER>
+    warnings: <INTEGER>
+    info_messages: <INTEGER>
+
+# ------------------------------------------------------------------------------
+# SECTION 6: EXECUTION PROFILES
+# ------------------------------------------------------------------------------
+# Performance metrics for pipeline execution.
+
+execution_profiles:
+  
+  # Overall execution
+  overall:
+    total_runtime_seconds: <FLOAT>
+    total_runtime_formatted: "<HH:MM:SS>"
+    peak_memory_mb: <FLOAT>
+    total_output_size_bytes: <INTEGER>
+    total_output_size_formatted: "<SIZE_STRING>"
+  
+  # Per-workflow execution
+  workflows:
+    
+    - workflow: "01_ingest_raw_data"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      rows_processed: <INTEGER>
+      files_processed: <INTEGER>
+      output_size_bytes: <INTEGER>
+      status: "completed"  # completed | failed | skipped
+    
+    - workflow: "02_standardize"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      rows_input: <INTEGER>
+      rows_output: <INTEGER>
+      rows_removed: <INTEGER>
+      output_size_bytes: <INTEGER>
+      status: "completed"
+    
+    - workflow: "03_generate_cpn_template"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      detector_nights_generated: <INTEGER>
+      output_size_bytes: <INTEGER>
+      status: "completed"
+    
+    - workflow: "04_finalize_cpn"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      rows_processed: <INTEGER>
+      user_edits_detected: <INTEGER>
+      output_size_bytes: <INTEGER>
+      cpn_version: <INTEGER>
+      status: "completed"
+    
+    - workflow: "05_summary_stats"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      summaries_generated: <INTEGER>
+      tables_generated: <INTEGER>
+      output_size_bytes: <INTEGER>
+      status: "completed"
+    
+    - workflow: "06_exploratory_plots"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      plots_generated: 26
+      png_files_exported: 26
+      output_size_bytes: <INTEGER>
+      status: "completed"
+    
+    - workflow: "07_generate_report"
+      start_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      end_time: "<YYYY-MM-DDTHH:MM:SSZ>"
+      runtime_seconds: <FLOAT>
+      peak_memory_mb: <FLOAT>
+      quarto_render_time_seconds: <FLOAT>
+      zip_creation_time_seconds: <FLOAT>
+      report_size_bytes: <INTEGER>
+      bundle_size_bytes: <INTEGER>
+      status: "completed"
+  
+  # Output file sizes
+  output_sizes:
+    checkpoints:
+      intro_standardized_csv: <INTEGER>
+      kpro_master_csv: <INTEGER>
+    data_files:
+      cpn_template_original: <INTEGER>
+      cpn_template_edit: <INTEGER>
+      cpn_final: <INTEGER>
+      master_final: <INTEGER>
+    summaries:
+      summary_rds: <INTEGER>
+      summary_xlsx: <INTEGER>
+    figures:
+      plot_objects_rds: <INTEGER>
+      png_total: <INTEGER>
+    reports:
+      quarto_html: <INTEGER>
+    bundles:
+      release_zip: <INTEGER>
+
+# ------------------------------------------------------------------------------
+# SECTION 7: DATASET FINGERPRINTING
+# ------------------------------------------------------------------------------
+# Cryptographic hashes for complete provenance chain verification.
+
+dataset_fingerprinting:
+  
+  # Hash algorithm used
+  algorithm: "SHA256"
+  
+  # Source input hashes (for reproducibility verification)
+  source_hashes:
+    local_raw_files:
+      - file: "<FILENAME_1>.csv"
+        sha256: "<SHA256_HASH>"
+      # ... additional files
+    
+    external_raw_files:
+      - file: "<FILENAME_1>"
+        path: "<FULL_PATH>"
+        sha256: "<SHA256_HASH>"
+      # ... additional files
+    
+    # Aggregate hash of all inputs (sorted, concatenated)
+    combined_input_hash: "<SHA256_HASH>"
+  
+  # Configuration hash
+  config_hash:
+    study_parameters_yaml: "<SHA256_HASH>"
+  
+  # Primary artifact hashes
+  artifact_hashes:
+    
+    # Data artifacts
+    checkpoint_01_intro_standardized: "<SHA256_HASH>"
+    checkpoint_02_kpro_master: "<SHA256_HASH>"
+    cpn_template_original: "<SHA256_HASH>"
+    cpn_template_edit: "<SHA256_HASH>"
+    cpn_final: "<SHA256_HASH>"
+    masterfile_final: "<SHA256_HASH>"
+    
+    # Summary artifacts
+    summary_data_rds: "<SHA256_HASH>"
+    summary_xlsx: "<SHA256_HASH>"
+    
+    # Plot artifacts
+    plot_objects_rds: "<SHA256_HASH>"
+    
+    # Report artifacts
+    quarto_report_html: "<SHA256_HASH>"
+    release_bundle_zip: "<SHA256_HASH>"
+  
+  # Provenance chain (ordered list of hash dependencies)
+  provenance_chain:
+    - step: 1
+      name: "raw_inputs"
+      hash: "<COMBINED_INPUT_HASH>"
+      inputs: null
+    
+    - step: 2
+      name: "intro_standardized"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "raw_inputs"
+        - "study_parameters_yaml"
+    
+    - step: 3
+      name: "kpro_master"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "intro_standardized"
+        - "study_parameters_yaml"
+    
+    - step: 4
+      name: "cpn_template"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "kpro_master"
+    
+    - step: 5
+      name: "cpn_final"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "cpn_template"
+        - "user_edits"
+    
+    - step: 6
+      name: "summaries"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "cpn_final"
+        - "kpro_master"
+    
+    - step: 7
+      name: "plots"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "cpn_final"
+        - "kpro_master"
+    
+    - step: 8
+      name: "report"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "summaries"
+        - "plots"
+        - "study_parameters_yaml"
+    
+    - step: 9
+      name: "release_bundle"
+      hash: "<SHA256_HASH>"
+      inputs:
+        - "cpn_final"
+        - "kpro_master"
+        - "summaries"
+        - "plots"
+        - "report"
+  
+  # Final release fingerprint (hash of all artifact hashes)
+  release_fingerprint: "<SHA256_HASH>"
+
+# ------------------------------------------------------------------------------
+# SECTION 8: NOTES AND WARNINGS
+# ------------------------------------------------------------------------------
+# Human-readable notes about anomalies or issues detected during processing.
+
+notes_and_warnings:
+  
+  # Schema-related notes
+  schema_notes:
+    - severity: "info"
+      code: "MIXED_SCHEMAS_DETECTED"
+      message: "Multiple KPro schema versions detected in source data"
+      details:
+        v1_count: <INTEGER>
+        v2_count: <INTEGER>
+        v3_count: <INTEGER>
+        recommendation: "This is normal for multi-year studies. All schemas harmonized to unified format."
+    
+    - severity: "warning"
+      code: "UNKNOWN_SCHEMA_ROWS"
+      message: "Some rows could not be assigned a schema version"
+      details:
+        row_count: <INTEGER>
+        percentage: <FLOAT>
+        recommendation: "Review rows with schema_version='unknown' for data quality issues."
+  
+  # Data quality notes
+  data_quality_notes:
+    - severity: "info"
+      code: "ROWS_FILTERED"
+      message: "Rows with N <= 0 or NA were filtered during ingestion"
+      details:
+        rows_removed: <INTEGER>
+        percentage: <FLOAT>
+    
+    - severity: "info"
+      code: "DUPLICATES_REMOVED"
+      message: "Duplicate detection events were removed"
+      details:
+        duplicates_found: <INTEGER>
+        criteria: "Same Detector, DateTime_local, auto_id"
+  
+  # Recording effort notes
+  effort_notes:
+    - severity: "warning"
+      code: "PARTIAL_NIGHTS_DETECTED"
+      message: "Some detector-nights have less than expected recording hours"
+      details:
+        count: <INTEGER>
+        percentage: <FLOAT>
+        recommendation: "Review CPN template for accuracy. User corrections may be needed."
+    
+    - severity: "warning"
+      code: "NODATA_NIGHTS_DETECTED"
+      message: "Some detector-nights have no recorded data"
+      details:
+        count: <INTEGER>
+        detectors_affected: <INTEGER>
+        recommendation: "Verify detector deployment records for these nights."
+  
+  # Species notes
+  species_notes:
+    - severity: "info"
+      code: "HIGH_NOID_PERCENTAGE"
+      message: "Significant proportion of calls classified as NoID"
+      details:
+        percentage: <FLOAT>
+        threshold: 20.0
+        recommendation: "Consider reviewing classification settings in Kaleidoscope Pro."
+  
+  # Processing notes
+  processing_notes:
+    - severity: "info"
+      code: "USER_EDITS_APPLIED"
+      message: "User corrections were applied to recording hours"
+      details:
+        nights_edited: <INTEGER>
+        total_hours_adjusted: <FLOAT>
+    
+    - severity: "info"
+      code: "TIMEZONE_CONVERSION_APPLIED"
+      message: "All timestamps converted to local timezone"
+      details:
+        timezone: "<TIMEZONE_STRING>"
+        utc_offset: "<OFFSET_STRING>"
+  
+  # System notes
+  system_notes:
+    - severity: "info"
+      code: "PIPELINE_COMPLETED"
+      message: "Pipeline completed successfully"
+      details:
+        total_runtime: "<HH:MM:SS>"
+        artifacts_created: <INTEGER>
+  
+  # Custom user notes (optional)
+  user_notes: []
+  
+  # Summary counts
+  summary:
+    total_notes: <INTEGER>
+    by_severity:
+      info: <INTEGER>
+      warning: <INTEGER>
+      error: <INTEGER>
+      critical: <INTEGER>
+
+# ------------------------------------------------------------------------------
+# SECTION 9: MANIFEST METADATA
+# ------------------------------------------------------------------------------
+# Information about this manifest file itself.
+
+manifest_metadata:
+  manifest_version: "1.0"
+  manifest_schema: "kpro_release_manifest_v1"
+  generated_by: "07_generate_report.R"
+  generated_at_utc: "<YYYY-MM-DDTHH:MM:SSZ>"
+  
+  # Hash of this manifest (excluding this field)
+  manifest_hash: "<SHA256_HASH>"
+  
+  # Documentation references
+  documentation:
+    project_overview: "docs/Project_Overview.md"
+    coding_standards: "CODING_STANDARDS_v2.1.md"
+    yaml_parameter_guide: "inst/config/YAML_PARAMETER_GUIDE.md"
+    repository: "https://github.com/SaColeman18-cloud/KPro_Masterfile_Pipeline"
+
+# ==============================================================================
+# END OF MANIFEST
+# ==============================================================================

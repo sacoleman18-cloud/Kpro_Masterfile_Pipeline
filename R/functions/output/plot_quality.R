@@ -36,6 +36,7 @@
 # Data Completeness:
 #   - plot_data_completeness_calendar(): Calendar heatmap
 #   - plot_missing_nights(): Missing data by detector
+#   - plot_recording_effort_heatmap(): Effort × Night matrix
 #
 # USAGE
 # -----
@@ -48,7 +49,8 @@
 #
 # CHANGELOG
 # ---------
-# 2024-12-30: Initial creation with CODING_STANDARDS compliance
+# 2026-01-07: Moved plot_recording_effort_heatmap() from plot_temporal.R to plot_quality.R
+# 2025-12-30: Initial creation with CODING_STANDARDS compliance
 #
 # =============================================================================
 
@@ -753,4 +755,96 @@ plot_missing_nights <- function(calls_per_night) {
       y = "Missing Nights"
     ) +
     theme_kpro(rotate_x = TRUE)
+}
+
+#' Recording Effort Heatmap
+#'
+#' @description
+#' Creates a heatmap showing recording effort (hours) across detectors and
+#' nights. Helps identify deployment gaps, partial nights, and equipment
+#' failures that affect data quality.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
+#'   - Detector: Character. Unique detector identifier.
+#'   - Night: Date. Night of recording.
+#'   - RecordingHours: Numeric. Hours of recording per night.
+#'
+#' @return ggplot object showing effort heatmap.
+#'
+#' @details
+#' The heatmap uses a viridis color scale where:
+#' - Darker colors = more recording hours
+#' - Lighter colors = fewer recording hours
+#' - Gray = no data (detector not active or data missing)
+#'
+#' The plot automatically fills in missing detector × night combinations
+#' with NA (shown as gray), making gaps in coverage visually apparent.
+#'
+#' Typical use cases:
+#' - Identify nights when detectors failed
+#' - Spot partial recording nights (equipment issues, battery)
+#' - Verify consistent deployment across all sites
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot object
+#' - All dates in study period shown (including gaps)
+#' - Missing data shown as gray (NA)
+#' - Uses viridis color scale for accessibility
+#'
+#' @section DOES NOT:
+#' - Flag specific thresholds (e.g., "partial" nights)
+#' - Calculate expected recording hours
+#' - Interpolate missing values
+#'
+#' @examples
+#' \dontrun{
+#' p <- plot_recording_effort_heatmap(calls_per_night_final)
+#' print(p)
+#' }
+#'
+#' @export
+plot_recording_effort_heatmap <- function(calls_per_night) {
+  
+  # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Detector", "Night", "RecordingHours"),
+    date_cols = "Night",
+    numeric_cols = "RecordingHours",
+    df_name = "calls_per_night"
+  )
+  
+  # Create complete grid of all detector × night combinations
+  all_nights <- seq(
+    min(calls_per_night$Night),
+    max(calls_per_night$Night),
+    by = 1
+  )
+  all_detectors <- unique(calls_per_night$Detector)
+  
+  complete_grid <- tidyr::expand_grid(
+    Detector = all_detectors,
+    Night = all_nights
+  ) %>%
+    dplyr::left_join(
+      calls_per_night %>% dplyr::select(Detector, Night, RecordingHours),
+      by = c("Detector", "Night")
+    )
+  
+  # Build heatmap
+  ggplot(complete_grid, aes(x = Night, y = Detector, fill = RecordingHours)) +
+    geom_tile(color = "white", linewidth = 0.2) +
+    scale_fill_viridis_c(
+      option = "viridis",
+      na.value = "gray80",
+      name = "Hours"
+    ) +
+    labs(
+      title = "Recording Effort Heatmap",
+      subtitle = "Gray = no data; darker = more recording hours",
+      x = "Night",
+      y = "Detector"
+    ) +
+    theme_kpro(rotate_x = TRUE) +
+    theme(panel.grid = element_blank())
 }

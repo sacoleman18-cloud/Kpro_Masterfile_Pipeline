@@ -202,7 +202,13 @@ theme_kpro <- function(base_size = 11, rotate_x = FALSE) {
 #' 7. Reddish Purple (#CC79A7)
 #' 8. Gray (#999999)
 #'
-#' If more than 8 colors are requested, colors will recycle with a warning.
+#' 4 additional colors chosen for most contrast
+#' 9. Pale Blue (#88CCEE)
+#' 10. Dark Green (#117733)
+#' 11. Dark Purple (#882255)
+#' 12. Mauve (#AA4499)
+#' 
+#' If more than 12 colors are requested, colors will recycle with a warning.
 #'
 #' @section CONTRACT:
 #' - Returns exactly n colors
@@ -230,16 +236,23 @@ theme_kpro <- function(base_size = 11, rotate_x = FALSE) {
 #' @export
 kpro_palette_cat <- function(n = 8) {
   
-  # Okabe-Ito colorblind-safe palette
+  # Extended Okabe-Ito palette with 4 additional colorblind-safe colors
+  # First 8: Original Okabe-Ito palette
+  # Next 4: Carefully chosen supplements that maintain distinguishability
   colors <- c(
-    "#E69F00",
-    "#56B4E9",
-    "#009E73",
-    "#F0E442",
-    "#0072B2",
-    "#D55E00",
-    "#CC79A7",
-    "#999999"
+    "#E69F00",  # Orange
+    "#56B4E9",  # Sky Blue
+    "#009E73",  # Bluish Green
+    "#F0E442",  # Yellow
+    "#0072B2",  # Blue
+    "#D55E00",  # Vermillion
+    "#CC79A7",  # Reddish Purple
+    "#999999",  # Gray
+    # Supplementary colors (still colorblind-friendly)
+    "#88CCEE",  # Pale Blue
+    "#117733",  # Dark Green
+    "#882255",  # Dark Purple
+    "#AA4499"   # Mauve
   )
   
   if (n > length(colors)) {

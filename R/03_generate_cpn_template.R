@@ -4,19 +4,19 @@
 # PURPOSE
 # -------
 # Generate CallsPerNight template for manual recording hour adjustments.
-# Creates detector × night grid with pre-filled recording times (if uniform)
+# Creates detector X night grid with pre-filled recording times (if uniform)
 # and Excel formulas for calculating recording hours.
 #
 # WORKFLOW POSITION
 # -----------------
 # This is Workflow 03 in the processing pipeline:
-#   01_ingest_raw_data.R  → Load & intro-standardize raw CSVs
-#   02_standardize.R      → Transform to master schema
+#   01_ingest_raw_data.R  ✓ Load & intro-standardize raw CSVs
+#   02_standardize.R      ✓ Transform to master schema
 #   [OPTIONAL: Manual ID in Kaleidoscope]
-#   03_generate_cpn_template.R → [THIS SCRIPT] Generate template for editing
+#   03_generate_cpn_template.R ✓ [THIS SCRIPT] Generate template for editing
 #   [USER: Edit template in Excel]
-#   04_finalize_cpn.R     → Process edited template & calculate metrics
-#   05_summary_stats.R    → Generate summary statistics and tables
+#   04_finalize_cpn.R     ✓ Process edited template & calculate metrics
+#   05_summary_stats.R    ✓ Generate summary statistics and tables
 #
 # INPUTS
 # ------
@@ -30,15 +30,18 @@
 # OR Checkpoint (fallback):
 #   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv
 #
+# Configuration Files:
+#   - inst/config/study_parameters.yaml (recording period, schedule)
+#
 # MANUAL ID WORKFLOW (OPTIONAL)
 # ------------------------------
 # Users may manually review calls in Kaleidoscope Pro before running this workflow:
 #
-# 1. Run Workflow 02 → produces kpro_master.csv
+# 1. Run Workflow 02 ✓ produces kpro_master.csv
 # 2. Load kpro_master.csv into Kaleidoscope Pro
 # 3. Manually review calls, populate manual_id column
 # 4. Save updated file
-# 5. Run Workflow 03 → import manually-ID'd file when prompted
+# 5. Run Workflow 03 ✓ import manually-ID'd file when prompted
 #
 # NoID Filtering Logic:
 #   - Row is REMOVED only if BOTH auto_id AND manual_id are unidentifiable
@@ -46,11 +49,11 @@
 #   - Row is KEPT if at least ONE ID is valid (identified species)
 #
 # Examples:
-#   auto_id="NoID", manual_id="EPFU"        → KEEP (manual ID is valid)
-#   auto_id="EPFU",  manual_id="NoID"        → KEEP (auto ID is valid)
-#   auto_id="NoID",  manual_id="NoID"        → REMOVE (both unidentifiable)
-#   auto_id="NoID",  manual_id=NA            → REMOVE (both unidentifiable)
-#   auto_id="EPFU",  manual_id="MYLU"        → KEEP (both valid, prioritize manual_id)
+#   auto_id="NoID", manual_id="EPFU"        ✓ KEEP (manual ID is valid)
+#   auto_id="EPFU",  manual_id="NoID"        ✓ KEEP (auto ID is valid)
+#   auto_id="NoID",  manual_id="NoID"        ✓ REMOVE (both unidentifiable)
+#   auto_id="NoID",  manual_id=NA            ✓ REMOVE (both unidentifiable)
+#   auto_id="EPFU",  manual_id="MYLU"        ✓ KEEP (both valid, prioritize manual_id)
 #
 # This ensures we only remove calls that are truly unidentifiable,
 # while preserving calls where the user or algorithm provided a valid ID.
@@ -80,7 +83,8 @@
 #
 # Stage 3.4: Generate Template
 #   - Filters unidentifiable calls (removes only if BOTH auto_id AND manual_id are unidentifiable)
-#   - Creates Detector × Night grid for full recording period
+#   - Creates unified `species` column (manual_id > auto_id priority)
+#   - Creates Detector X Night grid for full recording period
 #   - Pre-fills uniform times if provided
 #   - Adds Excel formula for RecordingHours
 #   - Saves TWO files: ORIGINAL (for tracking) and EDIT_THIS (for user)
@@ -96,10 +100,15 @@
 #   - outputs/03_CallsPerNight_Template_ORIGINAL_YYYYMMDD_HHMMSS.csv (DO NOT EDIT)
 #   - outputs/03_CallsPerNight_Template_EDIT_THIS_YYYYMMDD_HHMMSS.csv (USER EDITS)
 #   - logs/workflow_log_YYYYMMDD.txt (processing log)
+#   - results/validation/validation_03_YYYYMMDD_HHMMSS.yaml (validation log)
+#   - results/validation/validation_03_YYYYMMDD_HHMMSS.html (validation report)
 #
 # In Memory:
 #   - cpn_template (template data for reference)
-#   - kpro_master (filtered data, for use in script 04)
+#   - kpro_master (filtered data with unified `species` column, ready for Workflow 04)
+#
+# Registry:
+#   - inst/config/artifact_registry.yaml (updated with both templates)
 #
 # STUDY NIGHT LOGIC
 # -----------------
@@ -109,10 +118,10 @@
 # Rule: Calls before recording_start time belong to PREVIOUS calendar day
 #
 # Examples (with recording_start = "18:00:00"):
-#   DateTime: 2024-10-25 22:30:00 → hour=22 (≥18) → Night: 2024-10-25 (same day)
-#   DateTime: 2024-10-26 03:15:00 → hour=3 (<18) → Night: 2024-10-25 (previous day)
-#   DateTime: 2024-10-26 07:45:00 → hour=7 (<18) → Night: 2024-10-25 (previous day)
-#   DateTime: 2024-10-26 18:00:00 → hour=18 (≥18) → Night: 2024-10-26 (same day)
+#   DateTime_local: 2024-10-25 22:30:00 ✓ hour=22 (≥18) ✓ Night: 2024-10-25 (same day)
+#   DateTime_local: 2024-10-26 03:15:00 ✓ hour=3 (<18) ✓ Night: 2024-10-25 (previous day)
+#   DateTime_local: 2024-10-26 07:45:00 ✓ hour=7 (<18) ✓ Night: 2024-10-25 (previous day)
+#   DateTime_local: 2024-10-26 18:00:00 ✓ hour=18 (≥18) ✓ Night: 2024-10-26 (same day)
 #
 # This ensures perfect alignment: Night date = calendar day when recording started.
 # For typical recording schedule (18:00 to 07:00):
@@ -131,6 +140,17 @@
 #   - Excel stores datetimes as days since 1900-01-01
 #   - Subtracting datetimes gives difference in days
 #   - Multiply by 24 to convert days to hours
+#
+# VALIDATION TRACKING
+# -------------------
+# This workflow tracks the following validation events:
+#   - data_loaded: Manual ID file import (if performed)
+#   - data_loaded: Master data loaded from memory/checkpoint
+#   - data_loaded: Recording period configuration
+#   - rows_processed: Study nights aggregated
+#   - rows_removed: NoID calls filtered (if any)
+#   - column_added: Unified species column created
+#   - rows_processed: Template generation completed
 #
 # PERFORMANCE EXPECTATIONS
 # -------------------------
@@ -154,13 +174,20 @@
 #   - tidyverse (dplyr, readr, purrr)
 #   - lubridate (date/time calculations)
 #   - hms (time parsing)
+#   - here (path management)
 #
 # Custom Functions (via load_all.R):
 #   - core/utilities.R: log_message, safe_read_csv, load_master_data
+#   - core/artifacts.R: create_validation_context, log_validation_event,
+#                       finalize_validation_report, init_artifact_registry,
+#                       register_artifact
 #   - validation/validation.R: assert_columns_exist, assert_date_range,
 #                              assert_time_format, require_study_parameters
 #   - analysis/callspernight.R: calculate_recording_hours,
 #                                generate_calls_per_night_template
+#
+# Configuration Files:
+#   - inst/config/study_parameters.yaml (recording period, schedule)
 #
 # TROUBLESHOOTING
 # ---------------
@@ -200,6 +227,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-01-12: Added unified species column creation (manual_id > auto_id priority)
+# 2026-01-12: Enhanced validation tracking with manual ID, recording period, aggregation details
+# 2026-01-12: Added artifact registration for both template files (v2.1)
+# 2026-01-08: Updated DateTime references to DateTime_local for standardization
 # 2024-12-29: Refactored to use helper functions (load_master_data,
 #             require_study_parameters, assert_columns_exist, assert_date_range,
 #             assert_time_format)
@@ -228,6 +259,16 @@ library(hms)
 
 log_message("=== WORKFLOW 03: Generate CallsPerNight Template ===")
 
+# ------------------------------------------------------------------------------
+# Initialize validation context
+# ------------------------------------------------------------------------------
+
+validation_context <- create_validation_context(
+  workflow = "03",
+  study_name = NULL  # Will be set from params in Stage 3.2
+)
+
+# ==============================================================================
 # STAGE 3.0: MANUAL ID CHECK & IMPORT
 # ==============================================================================
 
@@ -270,22 +311,22 @@ if (manual_id_response == "y") {
   # Validate required columns
   assert_columns_exist(
     kpro_master, 
-    c("Detector", "detector_id", "DateTime", "auto_id", "manual_id"),
+    c("Detector", "detector_id", "DateTime_local", "auto_id", "manual_id"),
     source_hint = "Kaleidoscope export"
   )
   
   # Check if Night column exists, calculate if missing
   if (!"Night" %in% names(kpro_master)) {
     message("  Calculating Night column (not present in file)...")
-    message("    Using noon cutoff temporarily - will recalculate in Stage 3.2 with correct timezone")
+    message("    Using noon cutoff temporarily - will recalculate in Stage 3.3 with correct timezone")
     
-    # Temporary calculation - will be recalculated in Stage 3.2 with proper timezone
+    # Temporary calculation - will be recalculated in Stage 3.3 with proper timezone
     kpro_master <- kpro_master %>%
       mutate(
         Night = if_else(
-          lubridate::hour(DateTime) < 12,
-          lubridate::as_date(DateTime) - 1,
-          lubridate::as_date(DateTime)
+          lubridate::hour(DateTime_local) < 12,
+          lubridate::as_date(DateTime_local) - 1,
+          lubridate::as_date(DateTime_local)
         )
       )
   }
@@ -294,7 +335,10 @@ if (manual_id_response == "y") {
                   format(nrow(kpro_master), big.mark = ",")))
   
   # Count manual IDs
-  manual_id_count <- sum(!is.na(kpro_master$manual_id), na.rm = TRUE)
+  manual_id_count <- sum(!is.na(kpro_master$manual_id) & 
+                           trimws(kpro_master$manual_id) != "" &
+                           !kpro_master$manual_id %in% c("NoID", "UNKNOWN"), 
+                         na.rm = TRUE)
   manual_id_pct <- 100 * manual_id_count / nrow(kpro_master)
   
   message(sprintf("  Manual IDs: %s rows (%.1f%%)", 
@@ -303,6 +347,22 @@ if (manual_id_response == "y") {
   
   log_message(sprintf("[Stage 3.0] Loaded manually-ID'd file: %s rows, %d manual IDs",
                       nrow(kpro_master), manual_id_count))
+  
+  # Log manual ID import
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "data_loaded",
+    description = sprintf("Loaded manually-ID'd file with %s manual identifications", 
+                          format(manual_id_count, big.mark = ",")),
+    count = nrow(kpro_master),
+    details = list(
+      file = basename(manual_id_file),
+      rows_total = nrow(kpro_master),
+      manual_id_count = manual_id_count,
+      manual_id_percentage = round(manual_id_pct, 1),
+      manual_id_workflow = TRUE
+    )
+  )
   
 } else {
   message("\n✓ No manual ID - will use auto_id only")
@@ -322,12 +382,20 @@ message("└──────────────────────�
 # Load master data (from memory or checkpoint) - only if not already loaded in Stage 3.0
 if (!exists("kpro_master")) {
   kpro_master <- load_master_data()
+  
+  # Log data loading (only if not from manual ID import)
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "data_loaded",
+    description = "Loaded master data from memory/checkpoint",
+    count = nrow(kpro_master)
+  )
 }
 
 # Validate required columns
 assert_columns_exist(
   kpro_master, 
-  c("Detector", "detector_id", "DateTime", "auto_id"),
+  c("Detector", "detector_id", "DateTime_local", "auto_id"),
   source_hint = "02_standardize.R"
 )
 
@@ -352,6 +420,9 @@ message("└──────────────────────�
 
 # Load study parameters (validates file exists)
 params <- require_study_parameters()
+
+# Update validation context with study name
+validation_context$study_name <- params$study_parameters$study_name
 
 # Extract recording period dates
 start_date <- as.Date(params$study_parameters$start_date)
@@ -399,6 +470,22 @@ if (!advanced_scheduling) {
 log_message(sprintf("[Stage 3.2] Recording period: %s to %s (%d nights)", 
                     start_date, end_date, total_nights))
 
+# Log recording period configuration
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "data_loaded",
+  description = sprintf("Recording period: %s to %s (%d nights)", 
+                        start_date, end_date, total_nights),
+  details = list(
+    start_date = as.character(start_date),
+    end_date = as.character(end_date),
+    total_nights = total_nights,
+    uniform_schedule = !advanced_scheduling,
+    recording_start = uniform_start,
+    recording_end = uniform_end,
+    expected_hours_per_night = if (!advanced_scheduling) expected_hours else NA
+  )
+)
 
 # ==============================================================================
 # STAGE 3.3: CALCULATE STUDY NIGHTS
@@ -412,6 +499,7 @@ message("└──────────────────────�
 # Note: This (re)calculates Night regardless of whether it exists from Stage 3.0
 # to ensure correct cutoff based on actual recording_start time
 # CRITICAL: Must force timezone on DateTime to prevent CSV timezone loss issues
+
 # Determine cutoff hour from recording_start time
 if (is.na(uniform_start)) {
   # Advanced scheduling enabled - use conservative default (noon)
@@ -434,13 +522,13 @@ study_tz <- params$study_parameters$timezone
 kpro_master <- kpro_master %>%
   mutate(
     # Ensure DateTime has correct timezone attribute
-    DateTime = lubridate::force_tz(DateTime, tzone = study_tz),
+    DateTime_local = lubridate::force_tz(DateTime_local, tzone = study_tz),
     
     # Calculate Night using timezone-aware date extraction
     Night = if_else(
-      lubridate::hour(DateTime) < recording_start_hour,
-      lubridate::as_date(DateTime, tz = study_tz) - 1,
-      lubridate::as_date(DateTime, tz = study_tz)
+      lubridate::hour(DateTime_local) < recording_start_hour,
+      lubridate::as_date(DateTime_local, tz = study_tz) - 1,
+      lubridate::as_date(DateTime_local, tz = study_tz)
     )
   )
 
@@ -449,7 +537,7 @@ message("✓ Study nights calculated")
 # Show date range
 night_range <- range(kpro_master$Night, na.rm = TRUE)
 message(sprintf("  Night range: %s to %s", night_range[1], night_range[2]))
-message(sprintf("  Total nights: %d", 
+message(sprintf("  Total nights observed: %d", 
                 as.numeric(diff(night_range)) + 1))
 
 # Aggregate CallsPerNight
@@ -459,11 +547,34 @@ calls_per_night <- kpro_master %>%
   group_by(Detector, detector_id, Night) %>%
   summarise(CallsPerNight = n(), .groups = "drop")
 
+n_detector_nights <- nrow(calls_per_night)
+n_detectors <- length(unique(calls_per_night$Detector))
+n_nights_with_calls <- length(unique(calls_per_night$Night))
+
 message(sprintf("✓ Aggregated to %s Detector×Night combinations", 
-                format(nrow(calls_per_night), big.mark = ",")))
+                format(n_detector_nights, big.mark = ",")))
+message(sprintf("  Detectors: %d", n_detectors))
+message(sprintf("  Nights with calls: %d", n_nights_with_calls))
 
 log_message(sprintf("[Stage 3.3] Calculated %d detector-night combinations", 
-                    nrow(calls_per_night)))
+                    n_detector_nights))
+
+# Log study nights aggregation
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "rows_processed",
+  description = sprintf("Aggregated to %s detector×night combinations", 
+                        format(n_detector_nights, big.mark = ",")),
+  count = n_detector_nights,
+  details = list(
+    detectors = n_detectors,
+    nights_with_calls = n_nights_with_calls,
+    night_range_start = as.character(night_range[1]),
+    night_range_end = as.character(night_range[2]),
+    cutoff_hour = recording_start_hour,
+    timezone = study_tz
+  )
+)
 
 # ==============================================================================
 # STAGE 3.4: GENERATE TEMPLATE
@@ -507,6 +618,21 @@ if (n_removed > 0) {
                       format(n_auto_noid_kept, big.mark = ",")))
     }
   }
+  
+  # Log NoID removal
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "rows_removed",
+    description = "Removed calls where both auto_id and manual_id are unidentifiable",
+    count = n_removed,
+    details = list(
+      rows_before = n_before_filter,
+      rows_after = nrow(kpro_master_filtered),
+      removal_criteria = "Both auto_id AND manual_id are NoID/NA/UNKNOWN",
+      percentage_removed = round(100 * n_removed / n_before_filter, 2)
+    )
+  )
+  
 } else {
   message("  No unidentifiable calls to remove")
 }
@@ -518,6 +644,51 @@ message(sprintf("  Remaining calls: %s",
 kpro_master <- kpro_master_filtered
 
 log_message(sprintf("[Stage 3.4] Filtered %d NoID calls", n_removed))
+
+# -------------------------
+# Create unified species column
+# -------------------------
+
+message("\nCreating unified species column...")
+
+kpro_master <- kpro_master %>%
+  mutate(
+    species = case_when(
+      # If manual_id is valid (not unidentifiable), use it
+      !is_unidentifiable(manual_id) ~ manual_id,
+      # Otherwise, if auto_id is valid, use it
+      !is_unidentifiable(auto_id) ~ auto_id,
+      # Otherwise, NA (shouldn't happen after filtering, but defensive)
+      TRUE ~ NA_character_
+    )
+  )
+
+n_species <- n_distinct(kpro_master$species, na.rm = TRUE)
+message(sprintf("✓ Unified species column created: %d unique species", n_species))
+
+# Show breakdown if manual IDs were used
+if (any(!is.na(kpro_master$manual_id) & !is_unidentifiable(kpro_master$manual_id))) {
+  n_from_manual <- sum(!is_unidentifiable(kpro_master$manual_id), na.rm = TRUE)
+  n_from_auto <- sum(is_unidentifiable(kpro_master$manual_id) & 
+                       !is_unidentifiable(kpro_master$auto_id), na.rm = TRUE)
+  
+  message(sprintf("  From manual_id: %s rows", format(n_from_manual, big.mark = ",")))
+  message(sprintf("  From auto_id: %s rows", format(n_from_auto, big.mark = ",")))
+}
+
+log_message(sprintf("[Stage 3.4] Created unified species column: %d unique species", n_species))
+
+# Log species unification
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "column_added",
+  description = sprintf("Created unified species column: %d unique species", n_species),
+  details = list(
+    unique_species = n_species,
+    priority = "manual_id > auto_id > NA",
+    rows_with_species = sum(!is.na(kpro_master$species))
+  )
+)
 
 # -------------------------
 # Generate template
@@ -566,7 +737,7 @@ template <- template %>%
     # StartDateTime: Combine Night date with StartTime
     StartDateTime_temp = if_else(
       !is.na(StartTime),
-      as.POSIXct(paste(Night, StartTime), format = "%Y-%m-%d %H:%M:%S", tz = "America/Chicago"),
+      as.POSIXct(paste(Night, StartTime), format = "%Y-%m-%d %H:%M:%S", tz = study_tz),
       as.POSIXct(NA)
     ),
     
@@ -578,9 +749,9 @@ template <- template %>%
       if_else(
         EndTime < StartTime,
         # Crossed midnight: EndTime is on next day
-        as.POSIXct(paste(Night + 1, EndTime), format = "%Y-%m-%d %H:%M:%S", tz = "America/Chicago"),
+        as.POSIXct(paste(Night + 1, EndTime), format = "%Y-%m-%d %H:%M:%S", tz = study_tz),
         # Same day: EndTime is on Night date
-        as.POSIXct(paste(Night, EndTime), format = "%Y-%m-%d %H:%M:%S", tz = "America/Chicago")
+        as.POSIXct(paste(Night, EndTime), format = "%Y-%m-%d %H:%M:%S", tz = study_tz)
       ),
       as.POSIXct(NA)
     ),
@@ -672,6 +843,65 @@ message("\n✓ Template organized: All nights for each detector grouped together
 log_message(sprintf("[Stage 3.4] Generated template: %d rows (saved as ORIGINAL and EDIT_THIS)", 
                     nrow(template)))
 
+# Log template generation completion
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "rows_processed",
+  description = sprintf("Generated CallsPerNight template with %s rows", 
+                        format(nrow(template), big.mark = ",")),
+  count = nrow(template),
+  details = list(
+    detectors = detectors_count,
+    nights = nights_count,
+    total_rows = nrow(template),
+    template_type = "Detector x Night grid",
+    uniform_schedule = !advanced_scheduling
+  )
+)
+
+# -------------------------
+# Register artifacts
+# -------------------------
+
+message("\nRegistering artifacts...")
+
+# Initialize artifact registry
+registry <- init_artifact_registry()
+
+# Register ORIGINAL template
+registry <- register_artifact(
+  registry = registry,
+  artifact_name = sprintf("cpn_template_original_%s", timestamp),
+  artifact_type = "cpn_template",
+  workflow = "03",
+  file_path = template_original_file,
+  input_artifacts = c("kpro_master"),
+  metadata = list(
+    n_rows = nrow(template),
+    n_detectors = detectors_count,
+    n_nights = nights_count,
+    template_type = "ORIGINAL",
+    uniform_schedule = !advanced_scheduling,
+    noid_removed = n_removed
+  )
+)
+
+# Register EDIT_THIS template
+registry <- register_artifact(
+  registry = registry,
+  artifact_name = sprintf("cpn_template_editable_%s", timestamp),
+  artifact_type = "cpn_template",
+  workflow = "03",
+  file_path = template_editable_file,
+  input_artifacts = c("kpro_master"),
+  metadata = list(
+    template_type = "EDIT_THIS",
+    parent_original = basename(template_original_file)
+  )
+)
+
+message("✓ Artifacts registered in registry")
+
 # ==============================================================================
 # STAGE 3.5: SAVE & DISPLAY INSTRUCTIONS
 # ==============================================================================
@@ -724,6 +954,24 @@ message("\n" %+% strrep("=", 66))
 log_message("[Stage 3.5] Templates saved - ready for user editing")
 
 # ==============================================================================
+# FINALIZE VALIDATION REPORT
+# ==============================================================================
+
+message("\n┌─────────────────────────────────────────────────────────────────┐")
+message("│          Generating Validation Report                          │")
+message("└─────────────────────────────────────────────────────────────────┘\n")
+
+# Finalize validation context
+validation_context$summary$rows_processed <- nrow(template)
+
+validation_report_path <- finalize_validation_report(
+  validation_context,
+  output_dir = here::here("results", "validation")
+)
+
+log_message(sprintf("[Workflow 03] Validation report: %s", basename(validation_report_path)))
+
+# ==============================================================================
 # WORKFLOW 03 COMPLETE
 # ==============================================================================
 
@@ -743,9 +991,9 @@ message("✓ Workflow 03 Complete")
 message("========================================")
 
 message("\nData in environment:")
-message("  • kpro_master (filtered, ready for script 04)")
+message("  • kpro_master (filtered, with unified `species` column, ready for Workflow 04)")
 message("  • cpn_template (template data for reference)")
-message(sprintf("  • EDIT_THIS file: %s", basename(template_editable_file)))
+message(sprintf("  • Validation report: %s", basename(validation_report_path)))
 
 message("\nTo edit template:")
 message(sprintf("  1. Open: %s", basename(template_editable_file)))

@@ -31,7 +31,7 @@
 #    - Generates detailed edit log with all changes
 #
 # 5. Finalization
-#    - Removes "dead nights" (NA recording hours)
+#    - RETAINS "dead nights" (RecordingHours = 0 or NA) with Status = Fail
 #    - Calculates CallsPerHour = CallsPerNight / RecordingHours
 #    - Saves with auto-incrementing version (v1, v2, v3...)
 #

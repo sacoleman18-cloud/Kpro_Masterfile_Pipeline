@@ -19,6 +19,7 @@
 #    - One row = one KPro detection event
 #    - Rows with N ≤ 0 or NA are removed immediately (no bat = no data)
 #    - Removal is logged with counts
+#    - Removal count stored as attribute for validation tracking
 #
 # 3. Column handling
 #    - ALL columns read as character type (preserves original data)
@@ -39,6 +40,10 @@
 # 7. Error handling
 #    - Individual file read failures are logged and skipped
 #    - Pipeline continues with remaining files
+#
+# 8. Validation tracking
+#    - Row removal counts stored as 'rows_removed' attribute
+#    - Accessible via attr(df, "rows_removed")
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
@@ -61,6 +66,12 @@
 #   - load_local_raw_data()
 #   - load_external_raw_data()
 #   - apply_intro_standardization()
+#
+# CHANGELOG
+# ---------
+# 2026-01-12: Added files_processed attribute tracking for validation system
+# 2026-01-12: Added rows_removed attribute tracking for validation system
+# 2025-12-XX: Initial CODING_STANDARDS compliant version
 #
 # =============================================================================
 
@@ -87,12 +98,14 @@
 #' 3. Detect schema version (v1/v2/v3)
 #' 4. Clean column names with janitor
 #' 5. Add source_file column
+#' 6. Store row removal count as attribute
 #'
 #' @section CONTRACT:
 #' - Returns data frame with cleaned structure
 #' - All columns remain as character (no type coercion yet)
 #' - Does NOT transform alternates or species codes
 #' - Returns NULL if no valid rows remain
+#' - Sets 'rows_removed' attribute on returned dataframe
 #'
 #' @section DOES NOT:
 #' - Parse dates/times
@@ -129,6 +142,9 @@ apply_intro_standardization <- function(df, file_path) {
   # ------------------------------------------------------------------------------
   # Step 2: Remove rows where n ≤ 0 or NA
   # ------------------------------------------------------------------------------
+  
+  # Initialize row removal tracking
+  n_removed <- 0
   
   # Check for 'n' column (lowercase after janitor cleaning)
   if ("n" %in% names(df)) {
@@ -200,6 +216,13 @@ apply_intro_standardization <- function(df, file_path) {
   # Add column to track which file each row came from
   df$source_file <- basename(file_path)
   
+  # ------------------------------------------------------------------------------
+  # Step 6: Store row removal count as attribute
+  # ------------------------------------------------------------------------------
+  
+  # Attach rows_removed as attribute so workflow can access it
+  attr(df, "rows_removed") <- n_removed
+  
   message(sprintf("  ✓ Intro-standardization complete: %d rows", nrow(df)))
   
   df
@@ -232,11 +255,14 @@ apply_intro_standardization <- function(df, file_path) {
 #' - Schema version detected
 #' - Column names cleaned
 #'
+#' Row removal counts are tracked via 'rows_removed' attribute on each dataframe.
+#'
 #' @section CONTRACT:
 #' - Loads ALL CSV files from directory (not just "id.csv")
 #' - Each file becomes separate dataframe in R environment
 #' - Applies same intro-standardization to each
 #' - Skips unreadable files with warning
+#' - Each dataframe has 'rows_removed' attribute for validation tracking
 #'
 #' @section DOES NOT:
 #' - Combine files into one dataframe (use load_external_raw_data for that)
@@ -246,10 +272,13 @@ apply_intro_standardization <- function(df, file_path) {
 #' @examples
 #' \dontrun{
 #' # Load all CSVs from data/raw/
-#' load_local_raw_data()
+#' n_files <- load_local_raw_data()
 #'
 #' # Result: raw_file_001, raw_file_002, ... in environment
 #' ls(pattern = "^raw_file")
+#'
+#' # Check row removal for first file
+#' attr(raw_file_001, "rows_removed")
 #' }
 #'
 #' @export
@@ -319,6 +348,7 @@ load_local_raw_data <- function(local_dir = "data/raw/",
     df_name <- sprintf("raw_file_%03d", files_loaded + 1)
     
     # Assign to specified environment (default: global)
+    # Note: rows_removed attribute is preserved through assignment
     assign(df_name, df_standardized, envir = envir)
     
     message(sprintf("  ✓ Stored as: %s\n", df_name))
@@ -336,6 +366,7 @@ load_local_raw_data <- function(local_dir = "data/raw/",
   if (files_loaded > 0) {
     message(sprintf("  Dataframes: raw_file_001 through raw_file_%03d", files_loaded))
     message("\n  Access with: raw_file_001, raw_file_002, etc.")
+    message("  Row removal counts: attr(raw_file_001, 'rows_removed')")
   }
   
   message("========================================\n")
@@ -369,12 +400,15 @@ load_local_raw_data <- function(local_dir = "data/raw/",
 #'
 #' Files are then combined with bind_rows().
 #'
+#' Total row removal count stored as 'rows_removed' attribute on returned dataframe.
+#'
 #' @section CONTRACT:
 #' - Recursively searches for files matching pattern
 #' - Applies same intro-standardization to each
 #' - Combines all into single dataframe
 #' - Skips unreadable files with warning
 #' - Returns combined dataframe (or empty tibble if no valid files)
+#' - Combined dataframe has 'rows_removed' attribute (sum across all files)
 #'
 #' @section DOES NOT:
 #' - Store as separate dataframes (use load_local_raw_data for that)
@@ -388,6 +422,9 @@ load_local_raw_data <- function(local_dir = "data/raw/",
 #'
 #' # Result: single dataframe with all id.csv files
 #' nrow(external_data)
+#'
+#' # Check total rows removed
+#' attr(external_data, "rows_removed")
 #' }
 #'
 #' @export
@@ -430,6 +467,7 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
   # ------------------------------------------------------------------------------
   
   processed_files <- list()  # Store processed dataframes
+  total_rows_removed <- 0    # Track total rows removed across all files
   
   for (i in seq_along(file_paths)) {
     fp <- file_paths[i]
@@ -454,6 +492,12 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
       next  # Skip to next file
     }
     
+    # Accumulate row removal count from this file
+    rows_removed_this_file <- attr(df_standardized, "rows_removed")
+    if (!is.null(rows_removed_this_file)) {
+      total_rows_removed <- total_rows_removed + rows_removed_this_file
+    }
+    
     # Add to list of processed files
     processed_files[[length(processed_files) + 1]] <- df_standardized
     
@@ -475,6 +519,12 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
   # Bind all dataframes together
   combined_data <- dplyr::bind_rows(processed_files)
   
+  # Store total rows removed as attribute on combined dataframe
+  attr(combined_data, "rows_removed") <- total_rows_removed
+  
+  # Store number of files processed as attribute
+  attr(combined_data, "files_processed") <- length(processed_files)
+  
   # ------------------------------------------------------------------------------
   # Report summary
   # ------------------------------------------------------------------------------
@@ -482,17 +532,17 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
   message("========================================")
   message(sprintf("✓ Combined %d files", length(processed_files)))
   message(sprintf("  Total rows: %s", format(nrow(combined_data), big.mark = ",")))
+  message(sprintf("  Rows removed: %s", format(total_rows_removed, big.mark = ",")))
   message(sprintf("  Unique DetectorIDs: %d", length(unique(combined_data$detector_id))))
   
   # Show schema version distribution
   schema_dist <- table(combined_data$schema_version)
   message("\n  Schema distribution:")
   for (version in names(schema_dist)) {
-    message(sprintf("    - %s: %d files", version, schema_dist[version]))
+    message(sprintf("    - %s: %d rows", version, schema_dist[version]))
   }
   
   message("========================================\n")
   
   combined_data
 }
-

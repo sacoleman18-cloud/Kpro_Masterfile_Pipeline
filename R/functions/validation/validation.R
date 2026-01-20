@@ -716,7 +716,7 @@ validate_cpn_data <- function(cpn_data,
 #' @return Invisible TRUE if valid.
 #'
 #' @section CONTRACT:
-#' - Validates: Detector, DateTime, auto_id
+#' - Validates: Detector, DateTime_local, auto_id
 #' - Stops on first failure
 #'
 #' @section DOES NOT:
@@ -731,7 +731,7 @@ validate_cpn_data <- function(cpn_data,
 #' @export
 validate_master_data <- function(master_data) {
   
-  required <- c("Detector", "DateTime", "auto_id")
+  required <- c("Detector", "DateTime_local", "auto_id")
   
   validate_data_frame(
     master_data,
@@ -966,4 +966,120 @@ validate_calls_per_night <- function(df, max_calls = 10000) {
         CallsPerNight < 0 |
         CallsPerNight > max_calls
     )
+}
+
+#' Finalize Master Columns
+#'
+#' @description
+#' Removes unwanted columns, ensures all required columns exist, and reorders
+#' to master schema layout.
+#'
+#' @param df Data frame after datetime_local conversion
+#'
+#' @return Data frame with finalized column structure
+#'
+#' @export
+finalize_master_columns <- function(df) {
+  
+  # -------------------------
+  # Remove unwanted columns
+  # -------------------------
+  
+  columns_to_remove <- c(
+    "orgid", "userid", "review_orig", "review_userid",
+    "inpathmd5", "outpathmd5fs", "outpathmd5zc",
+    "date", "time", "hour",  # Remove lowercase UTC columns
+    "date_12", "time_12", "hour_12"  # Remove 12-hour format columns
+  )
+  
+  # Find which columns actually exist (case-insensitive)
+  cols_to_drop <- c()
+  for (col in columns_to_remove) {
+    actual_col <- grep(paste0("^", col, "$"), names(df), ignore.case = TRUE, value = TRUE)
+    if (length(actual_col) > 0) {
+      cols_to_drop <- c(cols_to_drop, actual_col)
+    }
+  }
+  
+  if (length(cols_to_drop) > 0) {
+    message(sprintf("  Removing %d unwanted columns", length(cols_to_drop)))
+    df <- df %>%
+      dplyr::select(-dplyr::all_of(cols_to_drop))
+  }
+  
+  # -------------------------
+  # Define master column order
+  # -------------------------
+  
+  # Core identification columns
+  core_cols <- c(
+    "Detector",
+    "DateTime_local",
+    "Date_local",
+    "Time_local",
+    "Hour_local"
+  )
+  
+  # Species identification columns (auto_id through margin)
+  species_cols <- c(
+    "auto_id", "match_ratio", "match_dist_1", "match_dist_2", "match_dist_3",
+    "match_dist_4", "reject_class_1", "reject_class_2", "reject_class_3",
+    "fc", "sc", "slope", "offset", "margin"
+  )
+  
+  # Alternate species columns
+  alternate_cols <- c("alternate_1", "alternate_2", "alternate_3")
+  
+  # Manual ID
+  manual_cols <- c("manual_id")
+  
+  # Acoustic parameters (n through files)
+  acoustic_cols <- c(
+    "n", "pulses", "dur", "frq_max", "frq_min", "frq_bw", "te",
+    "pulse_max", "dur_pulse", "frq_max_pulse", "frq_min_pulse",
+    "frq_bw_pulse", "frq_ctr_pulse", "frq_knee", "frq_ctr", "body",
+    "toe", "calls", "files"
+  )
+  
+  # Call characteristics (channel through duration)
+  call_cols <- c(
+    "channel", "fmax", "fmin", "duration"
+  )
+  
+  # Metadata columns
+  metadata_cols <- c(
+    "detector_id", "source_file", "folder", "in_file",
+    "out_file_fs", "out_file_zc"
+  )
+  
+  # Combine in requested order
+  desired_order <- c(
+    core_cols,
+    species_cols,
+    alternate_cols,
+    manual_cols,
+    acoustic_cols,
+    call_cols,
+    metadata_cols
+  )
+  
+  # -------------------------
+  # Reorder columns
+  # -------------------------
+  
+  # Find which desired columns exist
+  existing_desired <- intersect(desired_order, names(df))
+  
+  # Find any columns not in desired order (put at end)
+  extra_cols <- setdiff(names(df), desired_order)
+  
+  # Reorder: desired columns first, then extras
+  final_order <- c(existing_desired, extra_cols)
+  
+  df <- df %>%
+    dplyr::select(dplyr::all_of(final_order))
+  
+  message(sprintf("  ✓ Finalized %d columns in master schema order", ncol(df)))
+  
+  df
 }

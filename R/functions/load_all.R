@@ -4,7 +4,7 @@
 #
 # PURPOSE
 # -------
-# Sources all function modules in strict dependency order. Run this once at
+# Sources all function modules in strict dependency order.  Run this once at
 # the top of any workflow script to load the complete function library.
 #
 # USAGE
@@ -14,7 +14,7 @@
 # DEPENDENCY LAYERS
 # -----------------
 # Functions are organized into layers. Each layer may depend on previous
-# layers but NEVER on subsequent layers. This prevents circular dependencies.
+# layers but NEVER on subsequent layers. This prevents circular dependencies. 
 #
 #   Layer 1: core/
 #            Base utilities with zero internal dependencies
@@ -32,7 +32,7 @@
 #            Recording hours, detector mapping, summarization
 #
 #   Layer 6: output/
-#            Visualizations and GT tables
+#            Visualizations, GT tables, and report generation
 #
 # ADDING NEW MODULES
 # ------------------
@@ -43,7 +43,7 @@
 #
 # TROUBLESHOOTING
 # ---------------
-# "Object not found" errors usually mean:
+# "Object not found" errors usually mean: 
 #   - A module is sourced before its dependency
 #   - A function was moved but load_all.R wasn't updated
 #   - Check the layer ordering below
@@ -57,7 +57,7 @@ base_path <- "R/functions"
 # LAYER 1: CORE
 # =============================================================================
 # Foundational utilities with ZERO internal dependencies.
-# Everything else depends on these. Must be loaded first.
+# Everything else depends on these. Must be loaded first. 
 #
 # Contents:
 #   utilities.R — Logging, safe I/O, checkpoint loaders, path generation
@@ -78,16 +78,50 @@ base_path <- "R/functions"
 #   schema_detection.R — Row-level KPro version detection
 #     - detect_row_schema()
 #     - get_schema_summary()
+#     - summarize_schema_distribution()
+#     - get_dominant_schema()
+#     - validate_schema_detection()
 #
 #   config.R — YAML parameter management
 #     - load_study_parameters()
 #     - save_study_parameters()
-#     - create_study_parameters_template()
+#     - build_study_config()
+#     - ensure_study_parameters()
+#     - validate_study_config()
+#     - get_external_sources()
+#     - reconcile_detector_mapping()
+#
+#   artifacts.R — Artifact Registry & Provenance System (NEW)
+#     Registry Management:
+#       - init_artifact_registry()
+#       - register_artifact()
+#       - get_artifact()
+#       - list_artifacts()
+#       - get_latest_artifact()
+#     
+#     Hashing & Provenance:
+#       - hash_file()
+#       - hash_dataframe()
+#       - verify_artifact()
+#     
+#     Validation Tracking:
+#       - create_validation_context()
+#       - log_validation_event()
+#       - finalize_validation_report()
+#       - generate_validation_html() (internal)
+#
+#   release.R — Study Release Bundle Generator (NEW)
+#     Bundle Creation:
+#       - create_release_bundle()
+#       - validate_release_inputs()
+#       - generate_manifest() (internal)
 # -----------------------------------------------------------------------------
 
 source(file.path(base_path, "core/utilities.R"))
 source(file.path(base_path, "core/schema_detection.R"))
 source(file.path(base_path, "core/config.R"))
+source(file.path(base_path, "core/artifacts.R"))
+source(file.path(base_path, "core/release.R"))
 
 
 # =============================================================================
@@ -123,10 +157,12 @@ source(file.path(base_path, "ingestion/ingestion.R"))
 #     - transform_v2_to_unified()
 #     - transform_v3_to_unified()
 #     - standardize_kpro_schema()
+#     - validate_unified_schema()
 #
 #   datetime_conversion.R — Timezone handling
 #     - convert_datetime_to_local()
-#     - add_derived_time_columns()
+#     - is_valid_timezone()
+#     - summarize_date_formats()
 # -----------------------------------------------------------------------------
 
 source(file.path(base_path, "standardization/standardization.R"))
@@ -166,6 +202,7 @@ source(file.path(base_path, "standardization/datetime_conversion.R"))
 #
 #     Schema Enforcement:
 #       - enforce_unified_schema()
+#       - finalize_master_columns()
 #
 #     Quality Checks:
 #       - check_column_completeness()
@@ -189,6 +226,11 @@ source(file.path(base_path, "validation/validation.R"))
 #     - generate_calls_per_night_template()
 #     - apply_schedule()
 #     - save_callspernight_with_version()
+#     - extract_time()
+#     - parse_date_safe()
+#     - parse_datetime_safe()
+#     - is_Date()
+#     - format_datetime_for_log()
 #
 #   detector_mapping.R — Detector name management
 #     - load_detector_mapping()
@@ -202,8 +244,8 @@ source(file.path(base_path, "validation/validation.R"))
 #     - create_species_summary_by_detector()
 #     - create_species_accumulation_summary()
 #     - create_hourly_activity_summary()
-#     - calculate_coefficient_of_variation()
 #     - create_effort_summary_table()
+#     - calculate_coefficient_of_variation()
 #     - save_master_with_timestamp()
 # -----------------------------------------------------------------------------
 
@@ -219,24 +261,111 @@ source(file.path(base_path, "analysis/summarization.R"))
 #
 # Dependencies: core/, analysis/
 #
-# Contents:
-#   visualization.R — Plotting functions
-#     - plot_recording_effort_heatmap()
-#     - plot_activity_over_time()
-#     - plot_correlation_heatmap()
-#     - plot_synchrony()
-#     - plot_species_composition()
+# OUTPUT LAYER STRUCTURE
+# ----------------------
+# The output layer consists of specialized plotting modules organized by
+# visualization category. All modules depend on plot_helpers.R which provides
+# shared utilities. 
 #
-#   tables.R — GT table formatting and export
-#     - format_detector_summary_gt()
-#     - format_species_summary_gt()
-#     - format_study_summary_gt()
-#     - format_hourly_summary_gt()
-#     - save_gt_table()
+# Contents:
+#   plot_helpers.R — Shared plotting utilities (MUST BE LOADED FIRST)
+#     Theme Functions:
+#       - theme_kpro()
+#     
+#     Color Palette Functions:
+#       - kpro_palette_cat()
+#       - kpro_palette_seq()
+#       - kpro_status_colors()
+#     
+#     Validation Functions:
+#       - validate_plot_input()
+#     
+#     Formatting Utilities: 
+#       - format_number()
+#       - format_pct()
+#
+#   plot_quality.R — Data quality and effort visualizations (8 functions)
+#     Recording Status (3 functions):
+#       - plot_recording_status_summary()
+#       - plot_recording_status_percent()
+#       - plot_recording_status_overall()
+#     
+#     Effort Analysis (3 functions):
+#       - plot_effort_by_detector()
+#       - plot_nights_by_detector()
+#       - plot_recording_effort_heatmap()
+#     
+#     Completeness (2 functions):
+#       - plot_data_completeness_calendar()
+#       - plot_missing_nights()
+#
+#   plot_detector.R — Detector performance and comparison (7 functions)
+#     Activity Comparison (4 functions):
+#       - plot_total_calls_by_detector()
+#       - plot_detector_activity_caterpillar()
+#       - plot_detector_boxplots()
+#       - plot_activity_with_without_outliers()
+#     
+#     Correlation Analysis (2 functions):
+#       - plot_correlation_heatmap()
+#       - plot_synchrony()
+#     
+#     Ranking (1 function):
+#       - plot_detector_rank_over_time()
+#
+#   plot_species.R — Species composition and diversity (5 functions)
+#     Composition (2 functions):
+#       - plot_species_composition_bar()
+#       - plot_species_by_detector_heatmap()
+#     
+#     Temporal Patterns (2 functions):
+#       - plot_species_accumulation_curve()
+#       - plot_species_hourly_profile()
+#     
+#     Quality (1 function):
+#       - plot_noid_proportion()
+#
+#   plot_temporal.R — Temporal activity patterns (6 functions)
+#     Nightly Patterns (2 functions):
+#       - plot_activity_over_time()
+#       - plot_cumulative_calls_over_time()
+#     
+#     Within-Night Patterns (2 functions):
+#       - plot_hourly_activity_profile()
+#       - plot_callsperhour_distribution()
+#     
+#     Seasonal Patterns (2 functions):
+#       - plot_weekly_activity()
+#       - plot_activity_by_month()
+#
+#   tables.R — GT table formatting and export (5 functions)
+#     Summary Tables (4 functions):
+#       - format_detector_summary_gt()
+#       - format_species_summary_gt()
+#       - format_study_summary_gt()
+#       - format_hourly_summary_gt()
+#     
+#     Export Utilities (1 function):
+#       - save_gt_table()
+#
+#   report.R — Quarto Report Generation (NEW)
+#     - generate_quarto_report()
 # -----------------------------------------------------------------------------
 
-source(file.path(base_path, "output/visualization.R"))
+# Load plot helpers FIRST (all other plot modules depend on it)
+source(file.path(base_path, "output/plot_helpers.R"))
+
+# Load plot modules in any order (they only depend on plot_helpers)
+source(file.path(base_path, "output/plot_quality.R"))
+source(file.path(base_path, "output/plot_detector.R"))
+source(file.path(base_path, "output/plot_species.R"))
+source(file.path(base_path, "output/plot_temporal.R"))
+
+# Load GT table formatting
 source(file.path(base_path, "output/tables.R"))
+
+# Load Quarto report generator
+source(file.path(base_path, "output/report.R"))
 
 
 # =============================================================================
@@ -249,30 +378,38 @@ message("
 ================================================================================
 
  Layer 1: core/
-          |- utilities.R ............ Logging, I/O, checkpoints, paths
-          |- schema_detection.R ..... Row-level KPro version detection
-          |- config.R ............... YAML parameter management
+          ├─ utilities.R ........ ....  Logging, I/O, checkpoints, paths
+          ├─ schema_detection.R . .... Row-level KPro version detection
+          ├─ config.R ...............  YAML parameter management
+          ├─ artifacts.R ............  Artifact registry & provenance (NEW)
+          └─ release.R ..............  Release bundle generator (NEW)
 
  Layer 2: ingestion/
-          |- ingestion.R ............ Raw data loading
+          └─ ingestion.R ........ .... Raw data loading
 
  Layer 3: standardization/
-          |- standardization.R ...... Schema transformation
-          |- datetime_conversion.R .. Timezone handling
+          ├─ standardization.R .. .... Schema transformation
+          └─ datetime_conversion.R ..  Timezone handling
 
  Layer 4: validation/
-          |- validation.R ........... Assertions, validators, enforcement
+          └─ validation.R ........ ... Assertions, validators, enforcement
 
  Layer 5: analysis/
-          |- callspernight.R ........ Template generation, recording hours
-          |- detector_mapping.R ..... Detector name management
-          |- summarization.R ........ Summary statistics
+          ├─ callspernight.R ........ Template generation, recording hours
+          ├─ detector_mapping.R . .... Detector name management
+          └─ summarization.R .... .... Summary statistics
 
  Layer 6: output/
-          |- visualization.R ........ Plots and figures
-          |- tables.R ............... GT tables and export
+          ├─ plot_helpers.R .........  Shared plotting utilities (loaded first)
+          ├─ plot_quality.R .........  Data quality visualizations (8 functions)
+          ├─ plot_detector.R .... .... Detector performance plots (7 functions)
+          ├─ plot_species.R .........  Species composition plots (5 functions)
+          ├─ plot_temporal.R .... .... Temporal pattern plots (6 functions)
+          ├─ tables.R ............ ...  GT table formatting (5 functions)
+          └─ report.R ...............  Quarto report generation (NEW)
 
 ================================================================================
- Ready. Run your workflow scripts.
+ Ready.  Run your workflow scripts. 
+ Total functions:  32 plots + 5 table formatters + 14 artifact/release functions
 ================================================================================
 ")
