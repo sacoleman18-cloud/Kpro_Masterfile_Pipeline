@@ -1,6 +1,6 @@
-# =============================================================================
-# standardization/datetime_conversion.R – DATE/TIME CONVERSION (LOCKED CONTRACT)
-# =============================================================================
+# ==============================================================================
+# datetime_conversion.R - DATE/TIME CONVERSION (LOCKED CONTRACT)
+# ==============================================================================
 # PURPOSE
 # -------
 # Parses mixed date/time formats and converts to standardized datetime columns
@@ -44,6 +44,7 @@
 #
 # DEPENDENCIES
 # ------------
+#   - validation/validation.R: assert_data_frame, assert_columns_exist, assert_scalar_string
 #   - lubridate: parse_date_time, with_tz, as_date, force_tz
 #   - dplyr: mutate, select
 #
@@ -55,12 +56,16 @@
 #
 # CHANGELOG
 # ---------
-# 2024-12-27: Renamed convert_datetime_to_cst() → convert_datetime_to_local()
+# 2026-01-30: Refactored to use centralized assert_* functions from validation.R
+# 2026-01-26: Added verbose parameter to convert_datetime_to_local() (default: FALSE)
+# 2026-01-26: Gated all console messages with if (verbose)
+# 2026-01-26: Fixed emoji encoding (ASCII replacements)
+# 2024-12-27: Renamed convert_datetime_to_cst() -> convert_datetime_to_local()
 # 2024-12-27: Made target_tz a REQUIRED parameter (no default)
 # 2024-12-27: Fixed all UTF-8 encoding corruption
 # 2024-12-27: Removed all CST-specific references and hardcoded timezone assumptions
 #
-# =============================================================================
+# ==============================================================================
 
 
 # ------------------------------------------------------------------------------
@@ -79,6 +84,7 @@
 #' @param date_col Name of date column (default: "date")
 #' @param time_col Name of time column (default: "time")
 #' @param source_tz Source timezone (default: "UTC")
+#' @param verbose Logical. Print status messages? Default: FALSE
 #'
 #' @return Data frame with datetime columns:
 #'   - DateTime_UTC: Combined datetime in UTC (POSIXct)
@@ -87,15 +93,32 @@
 #'   - Time_local: Time in user's local timezone (character HH:MM:SS)
 #'   - Hour_local: Hour in user's local timezone (integer 0-23)
 #'
+#' @section CONTRACT:
+#' - Requires target_tz parameter (no default timezone)
+#' - Validates timezone against OlsonNames()
+#' - Creates DateTime_UTC and DateTime_local columns
+#' - Handles mixed date formats automatically
+#' - Removes intermediate parsing columns
+#'
+#' @section DOES NOT:
+#' - Use hardcoded timezones
+#' - Modify original date/time columns
+#' - Filter rows based on date/time
+#'
 #' @export
 convert_datetime_to_local <- function(df,
                                       target_tz,
                                       date_col = "date",
                                       time_col = "time",
-                                      source_tz = "UTC") {
+                                      source_tz = "UTC",
+                                      verbose = FALSE) {
   
-  # Input validation
-  if (!is.data.frame(df)) stop("df must be a data frame")
+  # ----------------------------------------------------------------------------
+  # Input validation (using centralized assertions)
+  # ----------------------------------------------------------------------------
+  
+  assert_data_frame(df, "df")
+  
   if (nrow(df) == 0) {
     warning("Empty data frame provided, returning as-is")
     return(df)
@@ -110,17 +133,24 @@ convert_datetime_to_local <- function(df,
     )
   }
   
-  # Validate timezone
+  assert_scalar_string(target_tz, "target_tz")
+  
+  # Validate timezone against OlsonNames
   if (!target_tz %in% OlsonNames()) {
-    stop(sprintf("Invalid timezone: '%s'", target_tz))
+    stop(sprintf(
+      "Invalid timezone: '%s'\n  Use OlsonNames() to see valid timezone names.",
+      target_tz
+    ))
   }
   
-  # Check columns exist
-  if (!date_col %in% names(df)) stop(sprintf("Date column '%s' not found", date_col))
-  if (!time_col %in% names(df)) stop(sprintf("Time column '%s' not found", time_col))
+  # Check required columns exist
+  assert_columns_exist(df, c(date_col, time_col), source_hint = "raw data ingestion")
   
+  # ----------------------------------------------------------------------------
   # Parse dates
-  message("  Parsing date column (handling mixed formats)...")
+  # ----------------------------------------------------------------------------
+  
+  if (verbose) message("  Parsing date column (handling mixed formats)...")
   df <- df %>%
     dplyr::mutate(
       date_parsed = lubridate::parse_date_time(
@@ -134,10 +164,15 @@ convert_datetime_to_local <- function(df,
   if (failed_dates > 0) {
     warning(sprintf("%s date(s) failed to parse", format(failed_dates, big.mark = ",")))
   }
-  message(sprintf("    ✓ Parsed %s dates", format(nrow(df) - failed_dates, big.mark = ",")))
+  if (verbose) {
+    message(sprintf("    [OK] Parsed %s dates", format(nrow(df) - failed_dates, big.mark = ",")))
+  }
   
+  # ----------------------------------------------------------------------------
   # Parse times
-  message("  Parsing time column...")
+  # ----------------------------------------------------------------------------
+  
+  if (verbose) message("  Parsing time column...")
   df <- df %>%
     dplyr::mutate(
       time_parsed = lubridate::parse_date_time(
@@ -151,10 +186,15 @@ convert_datetime_to_local <- function(df,
   if (failed_times > 0) {
     warning(sprintf("%s time(s) failed to parse", format(failed_times, big.mark = ",")))
   }
-  message(sprintf("    ✓ Parsed %s times", format(nrow(df) - failed_times, big.mark = ",")))
+  if (verbose) {
+    message(sprintf("    [OK] Parsed %s times", format(nrow(df) - failed_times, big.mark = ",")))
+  }
   
+  # ----------------------------------------------------------------------------
   # Combine date + time into DateTime_UTC
-  message(sprintf("  Combining date and time (assuming %s timezone)...", source_tz))
+  # ----------------------------------------------------------------------------
+  
+  if (verbose) message(sprintf("  Combining date and time (assuming %s timezone)...", source_tz))
   df <- df %>%
     dplyr::mutate(
       DateTime_UTC_temp = lubridate::ymd_hms(
@@ -173,10 +213,13 @@ convert_datetime_to_local <- function(df,
       DateTime_UTC = lubridate::force_tz(DateTime_UTC_temp, tzone = "UTC")
     )
   
-  message(sprintf("    ✓ Created DateTime_UTC in UTC"))
+  if (verbose) message("    [OK] Created DateTime_UTC in UTC")
   
+  # ----------------------------------------------------------------------------
   # Convert to target timezone
-  message(sprintf("  Converting UTC → %s...", target_tz))
+  # ----------------------------------------------------------------------------
+  
+  if (verbose) message(sprintf("  Converting UTC -> %s...", target_tz))
   df <- df %>%
     dplyr::mutate(
       # Convert to local timezone (preserves instant, changes display)
@@ -190,35 +233,53 @@ convert_datetime_to_local <- function(df,
       Hour_local = as.integer(lubridate::hour(DateTime_local))
     )
   
-  message(sprintf("    ✓ Converted to %s", target_tz))
+  if (verbose) message(sprintf("    [OK] Converted to %s", target_tz))
   
+  # ----------------------------------------------------------------------------
   # Verify timezone conversion worked
-  sample_utc <- df$DateTime_UTC[1]
-  sample_local <- df$DateTime_local[1]
+  # ----------------------------------------------------------------------------
   
-  if (!is.na(sample_utc) && !is.na(sample_local)) {
-    utc_tz <- attr(sample_utc, "tzone")
-    local_tz <- attr(sample_local, "tzone")
+  if (verbose) {
+    sample_utc <- df$DateTime_UTC[1]
+    sample_local <- df$DateTime_local[1]
     
-    message(sprintf("    Verification:"))
-    message(sprintf("      UTC:   %s (tz=%s)", sample_utc, utc_tz))
-    message(sprintf("      Local: %s (tz=%s)", sample_local, local_tz))
+    if (!is.na(sample_utc) && !is.na(sample_local)) {
+      utc_tz <- attr(sample_utc, "tzone")
+      local_tz <- attr(sample_local, "tzone")
+      
+      message("    Verification:")
+      message(sprintf("      UTC:   %s (tz=%s)", sample_utc, utc_tz))
+      message(sprintf("      Local: %s (tz=%s)", sample_local, local_tz))
+    }
   }
   
+  # ----------------------------------------------------------------------------
   # Check for DST transitions
-  date_range <- range(df$Date_local, na.rm = TRUE)
-  if (any(lubridate::month(date_range) %in% c(3, 11))) {
-    message("    ⚠️  Data spans potential DST transition months")
+  # ----------------------------------------------------------------------------
+  
+  if (verbose) {
+    date_range <- range(df$Date_local, na.rm = TRUE)
+    if (any(lubridate::month(date_range) %in% c(3, 11))) {
+      message("    [!] Data spans potential DST transition months")
+    }
   }
   
+  # ----------------------------------------------------------------------------
   # Clean up intermediate columns
+  # ----------------------------------------------------------------------------
+  
   df <- df %>%
     dplyr::select(-date_parsed, -time_parsed, -DateTime_UTC_temp)
   
+  # ----------------------------------------------------------------------------
   # Summary
-  total_success <- sum(!is.na(df$DateTime_local))
-  message(sprintf("\n  DateTime conversion complete: %s successful", 
-                  format(total_success, big.mark = ",")))
+  # ----------------------------------------------------------------------------
+  
+  if (verbose) {
+    total_success <- sum(!is.na(df$DateTime_local))
+    message(sprintf("\n  DateTime conversion complete: %s successful", 
+                    format(total_success, big.mark = ",")))
+  }
   
   df
 }
@@ -266,8 +327,9 @@ is_valid_timezone <- function(tz_name) {
 #'
 #' @param date_vector Character or Date vector to analyze
 #' @param n_sample Number of examples to show per format (default: 3)
+#' @param verbose Logical. Print summary? Default: TRUE
 #'
-#' @return Invisible NULL (prints summary to console)
+#' @return Invisible NULL (prints summary to console when verbose = TRUE)
 #'
 #' @details
 #' Identifies common date format patterns:
@@ -280,7 +342,7 @@ is_valid_timezone <- function(tz_name) {
 #' Prints count and examples of each format found.
 #'
 #' @section CONTRACT:
-#' - Prints summary to console
+#' - Prints summary to console when verbose = TRUE
 #' - Returns invisible NULL
 #' - Samples n_sample examples per format
 #'
@@ -303,14 +365,14 @@ is_valid_timezone <- function(tz_name) {
 #' }
 #'
 #' @keywords internal
-summarize_date_formats <- function(date_vector, n_sample = 3) {
+summarize_date_formats <- function(date_vector, n_sample = 3, verbose = TRUE) {
   
   # Convert to character
   dates_char <- as.character(date_vector)
   dates_char <- dates_char[!is.na(dates_char)]
   
   if (length(dates_char) == 0) {
-    message("No non-NA dates found")
+    if (verbose) message("No non-NA dates found")
     return(invisible(NULL))
   }
   
@@ -324,13 +386,13 @@ summarize_date_formats <- function(date_vector, n_sample = 3) {
     "Other" = ".*"
   )
   
-  message("\n=== Date Format Summary ===")
+  if (verbose) message("\n=== Date Format Summary ===")
   
   for (format_name in names(patterns)) {
     pattern <- patterns[[format_name]]
     matches <- grep(pattern, dates_char, value = TRUE)
     
-    if (length(matches) > 0) {
+    if (length(matches) > 0 && verbose) {
       message(sprintf("\nFormat %s: %s date(s)", 
                       format_name, 
                       format(length(matches), big.mark = ",")))
@@ -342,7 +404,7 @@ summarize_date_formats <- function(date_vector, n_sample = 3) {
     }
   }
   
-  message("\n")
+  if (verbose) message("\n")
   
   invisible(NULL)
 }

@@ -1,5 +1,5 @@
 # =============================================================================
-# MODULE: artifacts.R — Artifact Registry & Provenance System
+# MODULE: artifacts.R - Artifact Registry & Provenance System
 # =============================================================================
 # PURPOSE
 # -------
@@ -61,9 +61,13 @@
 #   - data_loaded: Data loaded into memory
 #
 # Data Quality:
-#   - rows_removed: Rows filtered out (N ≤ 0, NA, invalid)
+#   - rows_removed: Rows filtered out (N <= 0, NA, invalid)
 #   - schema_unknown: Rows with undetectable schema version
 #   - duplicate: Duplicate rows detected/removed
+#
+# Data Filters (NEW):
+#   - filter_noid: NoID detections removed via user filter
+#   - filter_zero_pulses: Zero-pulse calls removed via user filter
 #
 # Transformations:
 #   - schema_transform: Schema version transformations applied
@@ -83,6 +87,9 @@
 #
 # CHANGELOG
 # ---------
+# 2026-01-30: Added filter_noid and filter_zero_pulses event tracking
+# 2026-01-30: Enhanced Summary Metrics card with collapsible breakdown
+# 2026-01-30: Added CSS styling for details/summary elements
 # 2026-01-12: Enhanced HTML reports with collapsible details and workflow-specific sections
 # 2026-01-12: Added additional summary metrics (files_loaded, schema_unknown, etc.)
 # 2026-01-12: Initial version
@@ -149,7 +156,7 @@ init_artifact_registry <- function(registry_path = REGISTRY_PATH) {
   # Load existing or create new
   if (file.exists(registry_path)) {
     registry <- yaml::read_yaml(registry_path)
-    message(sprintf("✓ Loaded artifact registry: %d artifacts", 
+    message(sprintf("[OK] Loaded artifact registry: %d artifacts", 
                     length(registry$artifacts)))
   } else {
     registry <- list(
@@ -159,7 +166,7 @@ init_artifact_registry <- function(registry_path = REGISTRY_PATH) {
       artifacts = list()
     )
     yaml::write_yaml(registry, registry_path)
-    message("✓ Created new artifact registry")
+    message("[OK] Created new artifact registry")
   }
   
   # Attach path for later saves
@@ -248,7 +255,7 @@ register_artifact <- function(registry,
   yaml::write_yaml(registry, registry_path)
   
   if (!quiet) {
-    message(sprintf("✓ Registered artifact: %s (%s)", artifact_name, artifact_type))
+    message(sprintf("[OK] Registered artifact: %s (%s)", artifact_name, artifact_type))
   }
   
   invisible(registry)
@@ -375,7 +382,7 @@ get_latest_artifact <- function(registry, type) {
 #'
 #' @section CONTRACT:
 #' - Returns 64-character hexadecimal hash
-#' - Hash is deterministic (same file → same hash)
+#' - Hash is deterministic (same file -> same hash)
 #' - Errors if file doesn't exist
 #'
 #' @export
@@ -524,9 +531,9 @@ create_validation_context <- function(workflow, study_name = NULL) {
 #' Log Validation Event
 #'
 #' @description
-#' Records a validation event (row removal, duplicate detection, etc.)
-#' to the validation context. Automatically updates summary counters
-#' based on event_type.
+#' Records a validation event (row removal, duplicate detection, filter
+#' application, etc.) to the validation context. Automatically updates 
+#' summary counters based on event_type.
 #'
 #' @param context List. Validation context from create_validation_context()
 #' @param event_type Character. Type of event (see module header for types)
@@ -541,6 +548,7 @@ create_validation_context <- function(workflow, study_name = NULL) {
 #' - Auto-updates relevant summary counters
 #' - Records timestamp for each event
 #' - Preserves all previous events
+#' - Tracks user-configured data filters (filter_noid, filter_zero_pulses)
 #'
 #' @section DOES NOT:
 #' - Validate event_type against known types
@@ -572,6 +580,17 @@ log_validation_event <- function(context,
   if (event_type == "duplicate" && !is.null(count)) {
     context$summary$duplicates_detected <- context$summary$duplicates_detected + count
     # ALSO add to rows_removed since duplicates ARE removed rows
+    context$summary$rows_removed <- context$summary$rows_removed + count
+  }
+  
+  # NEW: Track user-configured data filters
+  if (event_type == "filter_noid" && !is.null(count)) {
+    # Track NoID filter removals in rows_removed total
+    context$summary$rows_removed <- context$summary$rows_removed + count
+  }
+  
+  if (event_type == "filter_zero_pulses" && !is.null(count)) {
+    # Track zero-pulse filter removals in rows_removed total
     context$summary$rows_removed <- context$summary$rows_removed + count
   }
   
@@ -662,7 +681,7 @@ finalize_validation_report <- function(context,
   
   generate_validation_html(context, html_path)
   
-  message(sprintf("✓ Validation report saved: %s", basename(html_path)))
+  message(sprintf("[OK] Validation report saved: %s", basename(html_path)))
   
   html_path
 }
@@ -672,7 +691,8 @@ finalize_validation_report <- function(context,
 #'
 #' @description
 #' Internal function to generate HTML validation report with enhanced
-#' formatting, collapsible details, and workflow-specific sections.
+#' formatting, collapsible details, workflow-specific sections, and
+#' breakdown of rows removed by filter type.
 #'
 #' @param context List. Finalized validation context
 #' @param output_path Character. Path for HTML output
@@ -682,6 +702,7 @@ finalize_validation_report <- function(context,
 #' - Includes inline CSS (no external dependencies)
 #' - Formats event details as collapsible sections
 #' - Creates workflow-specific metric cards
+#' - Shows breakdown of rows removed by filter type
 #'
 #' @keywords internal
 generate_validation_html <- function(context, output_path) {
@@ -691,13 +712,67 @@ generate_validation_html <- function(context, output_path) {
   # ============================================================================
   
   # Customize labels based on which workflow is running
-  # Workflow 01: Ingestion (files → rows)
-  # Workflow 02: Transformation (input rows → output rows)
+  # Workflow 01: Ingestion (files -> rows)
+  # Workflow 02: Transformation (input rows -> output rows)
   
   if (context$workflow == "02") {
     rows_label <- "Output Rows"
   } else {
     rows_label <- "Rows Processed"
+  }
+  
+  # ============================================================================
+  # CALCULATE ROWS REMOVED BREAKDOWN
+  # ============================================================================
+  
+  # Helper function to sum counts by event type
+  sum_event_counts <- function(events, event_type) {
+    matching_events <- Filter(function(e) e$type == event_type, events)
+    if (length(matching_events) == 0) return(0)
+    
+    counts <- sapply(matching_events, function(e) {
+      if (is.null(e$count)) return(0)
+      as.numeric(e$count)
+    })
+    
+    sum(counts, na.rm = TRUE)
+  }
+  
+  # Count rows removed by each type from events
+  rows_removed_invalid <- sum_event_counts(context$events, "rows_removed")
+  rows_removed_duplicates <- sum_event_counts(context$events, "duplicate")
+  rows_removed_noid <- sum_event_counts(context$events, "filter_noid")
+  rows_removed_zero_pulse <- sum_event_counts(context$events, "filter_zero_pulses")
+  
+  # Build breakdown HTML (only show non-zero items)
+  rows_removed_breakdown <- ""
+  breakdown_items <- character()
+  
+  if (rows_removed_invalid > 0) {
+    breakdown_items <- c(breakdown_items, 
+                         sprintf("<li>Invalid rows: %s</li>", format(rows_removed_invalid, big.mark = ",")))
+  }
+  if (rows_removed_duplicates > 0) {
+    breakdown_items <- c(breakdown_items,
+                         sprintf("<li>Duplicates: %s</li>", format(rows_removed_duplicates, big.mark = ",")))
+  }
+  if (rows_removed_noid > 0) {
+    breakdown_items <- c(breakdown_items,
+                         sprintf("<li>NoID filtered: %s</li>", format(rows_removed_noid, big.mark = ",")))
+  }
+  if (rows_removed_zero_pulse > 0) {
+    breakdown_items <- c(breakdown_items,
+                         sprintf("<li>Zero-pulse filtered: %s</li>", format(rows_removed_zero_pulse, big.mark = ",")))
+  }
+  
+  if (length(breakdown_items) > 0) {
+    rows_removed_breakdown <- sprintf('
+      <details class="metric-details">
+        <summary>View breakdown</summary>
+        <ul>%s</ul>
+      </details>',
+                                      paste(breakdown_items, collapse = "\n          ")
+    )
   }
   
   # ============================================================================
@@ -710,11 +785,16 @@ generate_validation_html <- function(context, output_path) {
     
     items <- sapply(names(details), function(name) {
       value <- details[[name]]
-      if (is.numeric(value)) {
+      
+      # Handle vectors (character, numeric, etc.)
+      if (is.vector(value) && length(value) > 1) {
+        value <- paste(value, collapse = ", ")
+      } else if (is.numeric(value)) {
         value <- format(value, big.mark = ",")
       } else if (is.list(value)) {
         value <- paste(names(value), value, sep = ": ", collapse = ", ")
       }
+      
       sprintf("<li><strong>%s:</strong> %s</li>", name, value)
     })
     
@@ -739,7 +819,7 @@ generate_validation_html <- function(context, output_path) {
             e$type,
             e$description,
             details_html,
-            if (is.null(e$count)) "—" else format(e$count, big.mark = ","))
+            if (is.null(e$count)) "-" else format(e$count, big.mark = ","))
   })
   
   # ============================================================================
@@ -749,7 +829,7 @@ generate_validation_html <- function(context, output_path) {
   # Build data quality section (if workflow 01)
   data_quality_section <- if (context$workflow == "01") {
     sprintf('
-  <h2>📊 Data Quality</h2>
+  <h2>Data Quality</h2>
   <div class="grid" style="grid-template-columns: repeat(3, 1fr);">
     <div class="card">
       <div class="metric">%s</div>
@@ -774,7 +854,7 @@ generate_validation_html <- function(context, output_path) {
   # Build transformation section (if workflow 02)
   transformation_section <- if (context$workflow == "02") {
     sprintf('
-  <h2>🔄 Transformations</h2>
+  <h2>Transformations</h2>
   <div class="grid" style="grid-template-columns: repeat(2, 1fr);">
     <div class="card">
       <div class="metric">%s</div>
@@ -802,7 +882,7 @@ generate_validation_html <- function(context, output_path) {
               pct)
     })
     sprintf('
-  <h2>🗂️ Schema Distribution</h2>
+  <h2>Schema Distribution</h2>
   <div class="summary-box">
     <ul style="margin: 10px 0; padding-left: 20px;">
       %s
@@ -904,6 +984,34 @@ generate_validation_html <- function(context, output_path) {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
+    .metric-details {
+      margin-top: 12px;
+      font-size: 0.85em;
+      text-align: left;
+    }
+    .metric-details summary {
+      cursor: pointer;
+      color: #3498db;
+      font-weight: 500;
+      padding: 6px 10px;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+      display: inline-block;
+    }
+    .metric-details summary:hover {
+      background-color: rgba(52, 152, 219, 0.1);
+      text-decoration: underline;
+    }
+    .metric-details ul {
+      list-style: none;
+      padding: 10px 0 0 0;
+      margin: 0;
+    }
+    .metric-details li {
+      padding: 4px 0;
+      color: #555;
+      font-size: 12px;
+    }
     details {
       margin-top: 5px;
     }
@@ -928,7 +1036,7 @@ generate_validation_html <- function(context, output_path) {
   </style>
 </head>
 <body>
-  <h1>🦇 KPro Pipeline Validation Report</h1>
+  <h1>KPro Pipeline Validation Report</h1>
   
   <div class="header-info">
     <p><strong>Workflow:</strong> %s | <strong>Study:</strong> %s</p>
@@ -936,7 +1044,7 @@ generate_validation_html <- function(context, output_path) {
     <p><strong>Duration:</strong> %.1f seconds</p>
   </div>
   
-  <h2>📈 Summary Metrics</h2>
+  <h2>Summary Metrics</h2>
   <div class="grid">
     <div class="card">
       <div class="metric">%s</div>
@@ -945,6 +1053,7 @@ generate_validation_html <- function(context, output_path) {
     <div class="card">
       <div class="metric">%s</div>
       <div class="label">Rows Removed</div>
+      %s
     </div>
     <div class="card">
       <div class="metric">%s</div>
@@ -960,7 +1069,7 @@ generate_validation_html <- function(context, output_path) {
   %s
   %s
   
-  <h2>📋 Validation Events</h2>
+  <h2>Validation Events</h2>
   <table>
     <tr>
       <th>Time</th>
@@ -989,10 +1098,11 @@ generate_validation_html <- function(context, output_path) {
                   context$completed_utc,
                   context$pipeline_version,
                   context$duration_seconds,
-                  # Summary metrics (Note: rows_label is used here!)
+                  # Summary metrics
                   format(context$summary$rows_processed, big.mark = ","),
-                  rows_label,  # ← Workflow-specific label inserted here
+                  rows_label,
                   format(context$summary$rows_removed, big.mark = ","),
+                  rows_removed_breakdown,
                   format(context$summary$duplicates_detected, big.mark = ","),
                   context$summary$warnings,
                   # Optional sections
@@ -1005,9 +1115,9 @@ generate_validation_html <- function(context, output_path) {
                   if (context$summary$errors > 0) "error" 
                   else if (context$summary$warnings > 0) "warning" 
                   else "success",
-                  if (context$summary$errors > 0) "❌ Completed with errors" 
-                  else if (context$summary$warnings > 0) "⚠️ Completed with warnings" 
-                  else "✅ All validations passed",
+                  if (context$summary$errors > 0) "Completed with errors" 
+                  else if (context$summary$warnings > 0) "Completed with warnings" 
+                  else "All validations passed",
                   # Footer
                   context$pipeline_version
   )
@@ -1016,16 +1126,8 @@ generate_validation_html <- function(context, output_path) {
 }
 
 # ==============================================================================
-# NEW FUNCTIONS TO ADD TO output/artifacts.R
-# ==============================================================================
-# These functions provide RDS discovery and validation for Workflow 07.
-# Add before the VALIDATION TRACKING section in artifacts.R.
-# ==============================================================================
-
-
-# =============================================================================
 # RDS DISCOVERY & VALIDATION
-# =============================================================================
+# ==============================================================================
 
 
 #' Discover Pipeline RDS Files
@@ -1244,3 +1346,7 @@ validate_rds_structure <- function(all_summaries, all_plots) {
     total_plots = total_plots
   )
 }
+
+# ==============================================================================
+# END OF FILE
+# ==============================================================================

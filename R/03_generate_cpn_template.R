@@ -1,5 +1,5 @@
 # ==============================================================================
-# MAINLINE WORKFLOW: 03_generate_cpn_template.R
+# WORKFLOW 03: 03_generate_cpn_template.R
 # ==============================================================================
 # PURPOSE
 # -------
@@ -10,13 +10,13 @@
 # WORKFLOW POSITION
 # -----------------
 # This is Workflow 03 in the processing pipeline:
-#   01_ingest_raw_data.R  ✓ Load & intro-standardize raw CSVs
-#   02_standardize.R      ✓ Transform to master schema
+#   01_ingest_raw_data.R  -> Load & intro-standardize raw CSVs
+#   02_standardize.R      -> Transform to master schema
 #   [OPTIONAL: Manual ID in Kaleidoscope]
-#   03_generate_cpn_template.R ✓ [THIS SCRIPT] Generate template for editing
+#   03_generate_cpn_template.R -> [THIS SCRIPT] Generate template for editing
 #   [USER: Edit template in Excel]
-#   04_finalize_cpn.R     ✓ Process edited template & calculate metrics
-#   05_summary_stats.R    ✓ Generate summary statistics and tables
+#   04_finalize_cpn.R     -> Process edited template & calculate metrics
+#   05_summary_stats.R    -> Generate summary statistics and tables
 #
 # INPUTS
 # ------
@@ -28,7 +28,7 @@
 #   - Selected via file.choose() dialog
 #
 # OR Checkpoint (fallback):
-#   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv
+#   - outputs/checkpoints/02_kpro_master_YYYYMMDD_HHMMSS.csv
 #
 # Configuration Files:
 #   - inst/config/study_parameters.yaml (recording period, schedule)
@@ -37,11 +37,11 @@
 # ------------------------------
 # Users may manually review calls in Kaleidoscope Pro before running this workflow:
 #
-# 1. Run Workflow 02 ✓ produces kpro_master.csv
+# 1. Run Workflow 02 -> produces kpro_master.csv
 # 2. Load kpro_master.csv into Kaleidoscope Pro
 # 3. Manually review calls, populate manual_id column
 # 4. Save updated file
-# 5. Run Workflow 03 ✓ import manually-ID'd file when prompted
+# 5. Run Workflow 03 -> import manually-ID'd file when prompted
 #
 # NoID Filtering Logic:
 #   - Row is REMOVED only if BOTH auto_id AND manual_id are unidentifiable
@@ -49,11 +49,11 @@
 #   - Row is KEPT if at least ONE ID is valid (identified species)
 #
 # Examples:
-#   auto_id="NoID", manual_id="EPFU"        ✓ KEEP (manual ID is valid)
-#   auto_id="EPFU",  manual_id="NoID"        ✓ KEEP (auto ID is valid)
-#   auto_id="NoID",  manual_id="NoID"        ✓ REMOVE (both unidentifiable)
-#   auto_id="NoID",  manual_id=NA            ✓ REMOVE (both unidentifiable)
-#   auto_id="EPFU",  manual_id="MYLU"        ✓ KEEP (both valid, prioritize manual_id)
+#   auto_id="NoID", manual_id="EPFU"        -> KEEP (manual ID is valid)
+#   auto_id="EPFU",  manual_id="NoID"       -> KEEP (auto ID is valid)
+#   auto_id="NoID",  manual_id="NoID"       -> REMOVE (both unidentifiable)
+#   auto_id="NoID",  manual_id=NA           -> REMOVE (both unidentifiable)
+#   auto_id="EPFU",  manual_id="MYLU"       -> KEEP (both valid, prioritize manual_id)
 #
 # This ensures we only remove calls that are truly unidentifiable,
 # while preserving calls where the user or algorithm provided a valid ID.
@@ -79,7 +79,7 @@
 #
 # Stage 3.3: Calculate Study Nights
 #   - Applies study night logic using recording_start cutoff
-#   - Aggregates CallsPerNight by Detector × Night
+#   - Aggregates CallsPerNight by Detector x Night
 #
 # Stage 3.4: Generate Template
 #   - Filters unidentifiable calls (removes only if BOTH auto_id AND manual_id are unidentifiable)
@@ -118,10 +118,10 @@
 # Rule: Calls before recording_start time belong to PREVIOUS calendar day
 #
 # Examples (with recording_start = "18:00:00"):
-#   DateTime_local: 2024-10-25 22:30:00 ✓ hour=22 (≥18) ✓ Night: 2024-10-25 (same day)
-#   DateTime_local: 2024-10-26 03:15:00 ✓ hour=3 (<18) ✓ Night: 2024-10-25 (previous day)
-#   DateTime_local: 2024-10-26 07:45:00 ✓ hour=7 (<18) ✓ Night: 2024-10-25 (previous day)
-#   DateTime_local: 2024-10-26 18:00:00 ✓ hour=18 (≥18) ✓ Night: 2024-10-26 (same day)
+#   DateTime_local: 2024-10-25 22:30:00 -> hour=22 (>=18) -> Night: 2024-10-25 (same day)
+#   DateTime_local: 2024-10-26 03:15:00 -> hour=3 (<18) -> Night: 2024-10-25 (previous day)
+#   DateTime_local: 2024-10-26 07:45:00 -> hour=7 (<18) -> Night: 2024-10-25 (previous day)
+#   DateTime_local: 2024-10-26 18:00:00 -> hour=18 (>=18) -> Night: 2024-10-26 (same day)
 #
 # This ensures perfect alignment: Night date = calendar day when recording started.
 # For typical recording schedule (18:00 to 07:00):
@@ -217,7 +217,7 @@
 #
 # MAINTAINER NOTES
 # ----------------
-# - ASCII boxes: Single-line (┌─┐) for all stages
+# - Uses print_stage_header() for all stage headers
 # - Stage numbering: 3.0 - 3.5
 # - No interactive pause - user edits template offline
 # - Template timestamp used for tracking in script 04
@@ -227,6 +227,7 @@
 #
 # CHANGELOG
 # ---------
+# 2026-01-21: Standards compliance refactor (here::here paths, print_stage_header)
 # 2026-01-12: Added unified species column creation (manual_id > auto_id priority)
 # 2026-01-12: Enhanced validation tracking with manual ID, recording period, aggregation details
 # 2026-01-12: Added artifact registration for both template files (v2.1)
@@ -243,7 +244,7 @@
 # Load all functions
 # ------------------------------------------------------------------------------
 
-source("R/functions/load_all.R")
+source(here::here("R", "functions", "load_all.R"))
 
 # ------------------------------------------------------------------------------
 # Load required libraries
@@ -272,19 +273,17 @@ validation_context <- create_validation_context(
 # STAGE 3.0: MANUAL ID CHECK & IMPORT
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 3.0: Manual ID Check & Import                   │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.0", "Manual ID Check & Import")
 
 message("MANUAL SPECIES IDENTIFICATION")
-message(strrep("─", 66))
+message(strrep("-", 66))
 message("\nHave you manually reviewed and identified calls in Kaleidoscope Pro?")
 message("(This step is optional but improves species identification accuracy)\n")
 
 manual_id_response <- tolower(trimws(readline("Manually ID'd calls? (y/n): ")))
 
 if (manual_id_response == "y") {
-  message("\n✓ Manual ID workflow detected")
+  message("\n[OK] Manual ID workflow detected")
   message("\nPlease select your manually-ID'd master file...")
   message("(A file chooser dialog will open)\n")
   
@@ -331,7 +330,7 @@ if (manual_id_response == "y") {
       )
   }
   
-  message(sprintf("✓ Loaded manually-ID'd data: %s rows", 
+  message(sprintf("[OK] Loaded manually-ID'd data: %s rows", 
                   format(nrow(kpro_master), big.mark = ",")))
   
   # Count manual IDs
@@ -365,7 +364,7 @@ if (manual_id_response == "y") {
   )
   
 } else {
-  message("\n✓ No manual ID - will use auto_id only")
+  message("\n[OK] No manual ID - will use auto_id only")
   message("  (NoID calls will be removed during template generation)")
   
   log_message("[Stage 3.0] No manual ID workflow - using auto_id only")
@@ -375,9 +374,7 @@ if (manual_id_response == "y") {
 # STAGE 3.1: LOAD & VALIDATE DATA
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 3.1: Load & Validate Data                       │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.1", "Load & Validate Data")
 
 # Load master data (from memory or checkpoint) - only if not already loaded in Stage 3.0
 if (!exists("kpro_master")) {
@@ -406,7 +403,7 @@ if (!"manual_id" %in% names(kpro_master)) {
     mutate(manual_id = NA_character_)
 }
 
-message("✓ All required columns present")
+message("[OK] All required columns present")
 
 log_message(sprintf("[Stage 3.1] Loaded kpro_master: %s rows", nrow(kpro_master)))
 
@@ -414,9 +411,7 @@ log_message(sprintf("[Stage 3.1] Loaded kpro_master: %s rows", nrow(kpro_master)
 # STAGE 3.2: LOAD RECORDING PERIOD FROM YAML
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 3.2: Load Recording Period from Config          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.2", "Load Recording Period from Config")
 
 # Load study parameters (validates file exists)
 params <- require_study_parameters()
@@ -433,7 +428,7 @@ assert_date_range(start_date, end_date)
 
 total_nights <- as.numeric(end_date - start_date) + 1
 
-message(sprintf("✓ Recording period (from YAML): %s to %s (%d nights)", 
+message(sprintf("[OK] Recording period (from YAML): %s to %s (%d nights)", 
                 start_date, end_date, total_nights))
 
 # Extract recording schedule
@@ -453,7 +448,7 @@ if (!advanced_scheduling) {
   assert_time_format(uniform_start, "recording_start")
   assert_time_format(uniform_end, "recording_end")
   
-  message(sprintf("✓ Uniform schedule (from YAML): %s to %s", uniform_start, uniform_end))
+  message(sprintf("[OK] Uniform schedule (from YAML): %s to %s", uniform_start, uniform_end))
   
   # Calculate expected recording hours
   expected_hours <- calculate_recording_hours(uniform_start, uniform_end)
@@ -461,7 +456,7 @@ if (!advanced_scheduling) {
   
 } else {
   # Advanced scheduling - detector-specific times
-  message("✓ Advanced scheduling enabled (detector-specific times)")
+  message("[OK] Advanced scheduling enabled (detector-specific times)")
   message("  Note: Template will need custom schedule file")
   uniform_start <- NA
   uniform_end <- NA
@@ -491,9 +486,7 @@ validation_context <- log_validation_event(
 # STAGE 3.3: CALCULATE STUDY NIGHTS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 3.3: Calculate Study Nights                     │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.3", "Calculate Study Nights")
 
 # Calculate Night column using cutoff that matches recording schedule
 # Note: This (re)calculates Night regardless of whether it exists from Stage 3.0
@@ -506,13 +499,13 @@ if (is.na(uniform_start)) {
   recording_start_hour <- 12
   message("Applying study night logic...")
   message("  Advanced scheduling enabled - using 12:00 (noon) cutoff as default")
-  message("  Rule: Calls before 12:00:00 → previous calendar day")
+  message("  Rule: Calls before 12:00:00 -> previous calendar day")
 } else {
   # Extract hour from uniform recording start time
   recording_start_hour <- as.integer(substr(uniform_start, 1, 2))
   message("Applying study night logic...")
   message(sprintf("  Cutoff matches recording start: %02d:00:00", recording_start_hour))
-  message(sprintf("  Rule: Calls before %02d:00:00 → previous calendar day", recording_start_hour))
+  message(sprintf("  Rule: Calls before %02d:00:00 -> previous calendar day", recording_start_hour))
 }
 
 # Get timezone from YAML for Night calculation
@@ -532,7 +525,7 @@ kpro_master <- kpro_master %>%
     )
   )
 
-message("✓ Study nights calculated")
+message("[OK] Study nights calculated")
 
 # Show date range
 night_range <- range(kpro_master$Night, na.rm = TRUE)
@@ -551,7 +544,7 @@ n_detector_nights <- nrow(calls_per_night)
 n_detectors <- length(unique(calls_per_night$Detector))
 n_nights_with_calls <- length(unique(calls_per_night$Night))
 
-message(sprintf("✓ Aggregated to %s Detector×Night combinations", 
+message(sprintf("[OK] Aggregated to %s Detector x Night combinations", 
                 format(n_detector_nights, big.mark = ",")))
 message(sprintf("  Detectors: %d", n_detectors))
 message(sprintf("  Nights with calls: %d", n_nights_with_calls))
@@ -563,7 +556,7 @@ log_message(sprintf("[Stage 3.3] Calculated %d detector-night combinations",
 validation_context <- log_validation_event(
   validation_context,
   event_type = "rows_processed",
-  description = sprintf("Aggregated to %s detector×night combinations", 
+  description = sprintf("Aggregated to %s detector x night combinations", 
                         format(n_detector_nights, big.mark = ",")),
   count = n_detector_nights,
   details = list(
@@ -580,9 +573,7 @@ validation_context <- log_validation_event(
 # STAGE 3.4: GENERATE TEMPLATE
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 3.4: Generate Template                          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.4", "Generate Template")
 
 # -------------------------
 # Remove NoID calls without manual identification
@@ -664,7 +655,7 @@ kpro_master <- kpro_master %>%
   )
 
 n_species <- n_distinct(kpro_master$species, na.rm = TRUE)
-message(sprintf("✓ Unified species column created: %d unique species", n_species))
+message(sprintf("[OK] Unified species column created: %d unique species", n_species))
 
 # Show breakdown if manual IDs were used
 if (any(!is.na(kpro_master$manual_id) & !is_unidentifiable(kpro_master$manual_id))) {
@@ -707,7 +698,7 @@ template <- generate_calls_per_night_template(
   uniform_end = uniform_end
 )
 
-message(sprintf("✓ Template created: %s rows", 
+message(sprintf("[OK] Template created: %s rows", 
                 format(nrow(template), big.mark = ",")))
 
 # Remove Warning column (not needed in final template)
@@ -799,16 +790,16 @@ template <- template %>%
 # 2. EDIT_THIS (user edits this one)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 
-template_original_file <- sprintf("outputs/03_CallsPerNight_Template_ORIGINAL_%s.csv", 
-                                  timestamp)
-template_editable_file <- sprintf("outputs/03_CallsPerNight_Template_EDIT_THIS_%s.csv", 
-                                  timestamp)
+template_original_file <- here::here("outputs", 
+                                     sprintf("03_CallsPerNight_Template_ORIGINAL_%s.csv", timestamp))
+template_editable_file <- here::here("outputs", 
+                                     sprintf("03_CallsPerNight_Template_EDIT_THIS_%s.csv", timestamp))
 
 # Save both files (identical content initially)
 write_csv(template, template_original_file)
 write_csv(template, template_editable_file)
 
-message(sprintf("✓ Templates saved:"))
+message(sprintf("[OK] Templates saved:"))
 message(sprintf("  Original (DO NOT EDIT): %s", basename(template_original_file)))
 message(sprintf("  Edit this file:         %s", basename(template_editable_file)))
 
@@ -838,7 +829,7 @@ if (nrow(detector_row_counts) > 5) {
   message(sprintf("  ... and %d more detectors", nrow(detector_row_counts) - 5))
 }
 
-message("\n✓ Template organized: All nights for each detector grouped together")
+message("\n[OK] Template organized: All nights for each detector grouped together")
 
 log_message(sprintf("[Stage 3.4] Generated template: %d rows (saved as ORIGINAL and EDIT_THIS)", 
                     nrow(template)))
@@ -900,51 +891,49 @@ registry <- register_artifact(
   )
 )
 
-message("✓ Artifacts registered in registry")
+message("[OK] Artifacts registered in registry")
 
 # ==============================================================================
 # STAGE 3.5: SAVE & DISPLAY INSTRUCTIONS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 3.5: Save & Display Instructions                │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.5", "Save & Display Instructions")
 
 message(strrep("=", 66))
 message("TEMPLATE GENERATED - READY FOR MANUAL EDITING")
 message(strrep("=", 66))
 
-message("\n✓ Two template files created:")
+message("\n[OK] Two template files created:")
 message(sprintf("  1. ORIGINAL (for tracking): %s", basename(template_original_file)))
 message(sprintf("  2. EDIT THIS (your copy):   %s", basename(template_editable_file)))
 message(sprintf("  Total rows: %s", format(nrow(template), big.mark = ",")))
 
-message("\n" %+% strrep("─", 66))
+message("\n" %+% strrep("-", 66))
 message("NEXT STEPS")
-message(strrep("─", 66))
+message(strrep("-", 66))
 
 message("\n1. Open the EDIT_THIS file in Excel:")
 message(sprintf("   %s", template_editable_file))
-message("   ⚠️  DO NOT edit the ORIGINAL file - it's for tracking changes!")
+message("   [!] DO NOT edit the ORIGINAL file - it's for tracking changes!")
 
 message("\n2. Template organization:")
-message("   • Rows are grouped by Detector (all nights for each detector together)")
-message("   • Nights are sorted chronologically within each detector")
+message("   - Rows are grouped by Detector (all nights for each detector together)")
+message("   - Nights are sorted chronologically within each detector")
 
 message("\n3. Edit StartDateTime and EndDateTime for nights with equipment issues:")
-message("   • Format: MM/DD/YYYY HH:MM:SS AM/PM (e.g., '10/25/2025 8:00:00 PM')")
-message("   • Equipment failure: Set both to blank (delete values)")
-message("   • SD card full: Adjust EndDateTime to when card filled")
-message("   • Late deployment: Adjust StartDateTime")
-message("   • Early retrieval: Adjust EndDateTime")
+message("   - Format: MM/DD/YYYY HH:MM:SS AM/PM (e.g., '10/25/2025 8:00:00 PM')")
+message("   - Equipment failure: Set both to blank (delete values)")
+message("   - SD card full: Adjust EndDateTime to when card filled")
+message("   - Late deployment: Adjust StartDateTime")
+message("   - Early retrieval: Adjust EndDateTime")
 
 message("\n4. RecordingHours will auto-calculate from your edits")
-message("   • Formula: =(VALUE(E2)-VALUE(D2))*24")
-message("   • Calculates hours between datetimes automatically")
+message("   - Formula: =(VALUE(E2)-VALUE(D2))*24")
+message("   - Calculates hours between datetimes automatically")
 
 message("\n5. Save your edits (overwrite the EDIT_THIS file)")
-message("   • Keep the same filename")
-message("   • Leave the ORIGINAL file untouched")
+message("   - Keep the same filename")
+message("   - Leave the ORIGINAL file untouched")
 
 message("\n6. After editing, run the next workflow:")
 message("   source(\"R/workflows/04_finalize_cpn.R\")")
@@ -954,12 +943,10 @@ message("\n" %+% strrep("=", 66))
 log_message("[Stage 3.5] Templates saved - ready for user editing")
 
 # ==============================================================================
-# FINALIZE VALIDATION REPORT
+# STAGE 3.6: FINALIZE VALIDATION REPORT
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          Generating Validation Report                          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("3.6", "Generate Validation Report")
 
 # Finalize validation context
 validation_context$summary$rows_processed <- nrow(template)
@@ -975,25 +962,25 @@ log_message(sprintf("[Workflow 03] Validation report: %s", basename(validation_r
 # WORKFLOW 03 COMPLETE
 # ==============================================================================
 
-message("\n╔═══════════════════════════════════════════════════════════════╗")
-message("║          WORKFLOW 03 COMPLETE: Template Generated              ║")
-message("╚═══════════════════════════════════════════════════════════════╝")
+message("\n========================================")
+message("  WORKFLOW 03 COMPLETE: Template Generated")
+message("========================================\n")
 
-message("\nTemplates created:")
-message(sprintf("  ✓ ORIGINAL: %s", basename(template_original_file)))
-message(sprintf("  ✓ EDIT_THIS: %s", basename(template_editable_file)))
-message(sprintf("  ✓ Detectors: %d", detectors_count))
-message(sprintf("  ✓ Nights: %d", nights_count))
-message(sprintf("  ✓ Total rows: %s", format(nrow(template), big.mark = ",")))
+message("Templates created:")
+message(sprintf("  [OK] ORIGINAL: %s", basename(template_original_file)))
+message(sprintf("  [OK] EDIT_THIS: %s", basename(template_editable_file)))
+message(sprintf("  [OK] Detectors: %d", detectors_count))
+message(sprintf("  [OK] Nights: %d", nights_count))
+message(sprintf("  [OK] Total rows: %s", format(nrow(template), big.mark = ",")))
 
 message("\n========================================")
-message("✓ Workflow 03 Complete")
+message("[OK] Workflow 03 Complete")
 message("========================================")
 
 message("\nData in environment:")
-message("  • kpro_master (filtered, with unified `species` column, ready for Workflow 04)")
-message("  • cpn_template (template data for reference)")
-message(sprintf("  • Validation report: %s", basename(validation_report_path)))
+message("  - kpro_master (filtered, with unified `species` column, ready for Workflow 04)")
+message("  - cpn_template (template data for reference)")
+message(sprintf("  - Validation report: %s", basename(validation_report_path)))
 
 message("\nTo edit template:")
 message(sprintf("  1. Open: %s", basename(template_editable_file)))

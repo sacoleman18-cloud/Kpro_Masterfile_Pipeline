@@ -968,6 +968,13 @@ validate_calls_per_night <- function(df, max_calls = 10000) {
     )
 }
 
+# ==============================================================================
+# UPDATED finalize_master_columns() for validation.R
+# ==============================================================================
+# Replace the existing finalize_master_columns() function in validation.R with
+# this version that properly gates messages with verbose parameter.
+# ==============================================================================
+
 #' Finalize Master Columns
 #'
 #' @description
@@ -975,11 +982,22 @@ validate_calls_per_night <- function(df, max_calls = 10000) {
 #' to master schema layout.
 #'
 #' @param df Data frame after datetime_local conversion
+#' @param verbose Logical. Print status messages? Default: FALSE
 #'
 #' @return Data frame with finalized column structure
 #'
+#' @section CONTRACT:
+#' - Removes unwanted metadata columns (orgid, userid, etc.)
+#' - Reorders columns to standard master layout
+#' - Preserves all data rows
+#'
+#' @section DOES NOT:
+#' - Filter rows
+#' - Modify column values
+#' - Validate data quality
+#'
 #' @export
-finalize_master_columns <- function(df) {
+finalize_master_columns <- function(df, verbose = FALSE) {
   
   # -------------------------
   # Remove unwanted columns
@@ -1002,7 +1020,7 @@ finalize_master_columns <- function(df) {
   }
   
   if (length(cols_to_drop) > 0) {
-    message(sprintf("  Removing %d unwanted columns", length(cols_to_drop)))
+    if (verbose) message(sprintf("  Removing %d unwanted columns", length(cols_to_drop)))
     df <- df %>%
       dplyr::select(-dplyr::all_of(cols_to_drop))
   }
@@ -1079,7 +1097,9 @@ finalize_master_columns <- function(df) {
   df <- df %>%
     dplyr::select(dplyr::all_of(final_order))
   
-  message(sprintf("  ✓ Finalized %d columns in master schema order", ncol(df)))
+  if (verbose) {
+    message(sprintf("  [OK] Finalized %d columns in master schema order", ncol(df)))
+  }
   
   df
 }

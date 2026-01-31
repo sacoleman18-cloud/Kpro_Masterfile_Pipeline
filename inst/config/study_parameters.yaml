@@ -15,6 +15,10 @@ study_parameters:
     24E144036484A442: LPO
   timezone: America/Chicago
   external_data_sources: F:/Schmeeckle analyzed 102725
+  data_filters:
+    remove_noid: false
+    remove_zero_pulse_calls: true
+    remove_duplicates: true
 processing_options:
   advanced_scheduling: no
   recording_start: '18:00:00'

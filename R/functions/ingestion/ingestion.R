@@ -1,6 +1,6 @@
-# =============================================================================
-# ingestion/ingestion.R — PRIMARY INGESTION (LOCKED CONTRACT)
-# =============================================================================
+# ==============================================================================
+# ingestion.R - PRIMARY INGESTION (LOCKED CONTRACT)
+# ==============================================================================
 # PURPOSE
 # -------
 # File discovery, reading, and intro-standardization. Provides two primary
@@ -17,7 +17,7 @@
 #
 # 2. Row semantics
 #    - One row = one KPro detection event
-#    - Rows with N ≤ 0 or NA are removed immediately (no bat = no data)
+#    - Rows with N <= 0 or NA are removed immediately (no bat = no data)
 #    - Removal is logged with counts
 #    - Removal count stored as attribute for validation tracking
 #
@@ -58,22 +58,30 @@
 # ------------
 #   - core/utilities.R: safe_read_csv, log_message
 #   - core/schema_detection.R: detect_row_schema
+#   - validation/validation.R: assert_data_frame, assert_not_empty
 #   - janitor: clean_names
 #   - dplyr: filter, bind_rows, mutate
 #
 # CONTENTS
 # --------
-#   - load_local_raw_data()
-#   - load_external_raw_data()
-#   - apply_intro_standardization()
+#   - apply_intro_standardization()  [internal helper]
+#   - load_local_raw_data()          [returns combined tibble or assigns to envir]
+#   - load_external_raw_data()       [returns combined tibble]
 #
 # CHANGELOG
 # ---------
+# 2026-01-30: Refactored to use centralized assert_* functions from validation.R
+# 2026-01-27: Refactored load_local_raw_data() to return combined tibble by default
+#             Added return_combined parameter (TRUE = tibble, FALSE = legacy global objects)
+#             Added files_processed attribute to returned tibble
+# 2026-01-26: Added verbose parameter to all functions (default: FALSE)
+# 2026-01-26: Gated all console messages with if (verbose)
+# 2026-01-26: Fixed emoji encoding (ASCII replacements)
 # 2026-01-12: Added files_processed attribute tracking for validation system
 # 2026-01-12: Added rows_removed attribute tracking for validation system
 # 2025-12-XX: Initial CODING_STANDARDS compliant version
 #
-# =============================================================================
+# ==============================================================================
 
 
 # ------------------------------------------------------------------------------
@@ -88,12 +96,13 @@
 #'
 #' @param df Raw data frame from single CSV file
 #' @param file_path Original file path (for tracking)
+#' @param verbose Logical. Print status messages? Default: FALSE
 #'
 #' @return Data frame with intro-standardization applied, or NULL if no valid rows
 #'
 #' @details
 #' Intro-standardization steps:
-#' 1. Remove N ≤ 0 or NA rows (no bat detections)
+#' 1. Remove N <= 0 or NA rows (no bat detections)
 #' 2. Derive DetectorID from "In File" column
 #' 3. Detect schema version (v1/v2/v3)
 #' 4. Clean column names with janitor
@@ -114,34 +123,32 @@
 #' - Deduplicate
 #'
 #' @keywords internal
-apply_intro_standardization <- function(df, file_path) {
+apply_intro_standardization <- function(df, file_path, verbose = FALSE) {
   
-  # -----------------
-  # Input validation
-  # -----------------
+  # ----------------------------------------------------------------------------
+  # Input validation (using centralized assertions)
+  # ----------------------------------------------------------------------------
   
-  if (!is.data.frame(df)) {
-    stop("df must be a data frame")
-  }
+  assert_data_frame(df, "df")
   
   if (nrow(df) == 0) {
     warning(sprintf("Empty data frame from file: %s", basename(file_path)))
     return(NULL)
   }
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Step 1: Clean column names FIRST (before any other operations)
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   # Standardize to lowercase with underscores (prevents duplicate column issues)
   # This MUST happen first so all subsequent operations work with consistent names
   df <- janitor::clean_names(df)
   
-  message("  Column names cleaned")
+  if (verbose) message("  Column names cleaned")
   
-  # ------------------------------------------------------------------------------
-  # Step 2: Remove rows where n ≤ 0 or NA
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # Step 2: Remove rows where n <= 0 or NA
+  # ----------------------------------------------------------------------------
   
   # Initialize row removal tracking
   n_removed <- 0
@@ -157,13 +164,13 @@ apply_intro_standardization <- function(df, file_path) {
     n_removed <- n_before - nrow(df)
     
     # Report removal if any rows filtered
-    if (n_removed > 0) {
-      message(sprintf("  Removed %d rows with n ≤ 0 or NA", n_removed))
+    if (verbose && n_removed > 0) {
+      message(sprintf("  Removed %d rows with n <= 0 or NA", n_removed))
     }
     
     # Check if any valid rows remain
     if (nrow(df) == 0) {
-      message(sprintf("  ⚠️  No valid rows remaining after n filter"))
+      if (verbose) message("  [!] No valid rows remaining after n filter")
       return(NULL)
     }
   } else {
@@ -171,36 +178,36 @@ apply_intro_standardization <- function(df, file_path) {
     warning(sprintf("Column 'n' not found in %s - cannot filter invalid rows", basename(file_path)))
   }
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Step 3: Derive detector_id from "in_file" column
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   # Check for 'in_file' column (lowercase after janitor cleaning)
   if ("in_file" %in% names(df)) {
     # Extract first 16 characters as detector_id
     df$detector_id <- substr(df$in_file, 1, 16)
-    message(sprintf("  Derived detector_id from 'in_file' column"))
+    if (verbose) message("  Derived detector_id from 'in_file' column")
   } else {
     # Set to NA if source column missing
     df$detector_id <- NA_character_
-    warning(sprintf("Column 'in_file' not found - detector_id set to NA"))
+    warning("Column 'in_file' not found - detector_id set to NA")
   }
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Step 4: Detect KPro schema version (after cleaning!)
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   # Add schema_version column to each row
-  df <- detect_row_schema(df)
+  df <- detect_row_schema(df, verbose = verbose)
   
   # Log the dominant schema for this file
   dominant <- get_dominant_schema(df)
-  message(sprintf("  Detected schema: %s", dominant))
+  if (verbose) message(sprintf("  Detected schema: %s", dominant))
   
   # Optional: Show full distribution if mixed schemas
   schema_summary <- get_schema_summary(df)
-  if (nrow(schema_summary) > 1) {
-    message("  ⚠️  Mixed schemas detected:")
+  if (verbose && nrow(schema_summary) > 1) {
+    message("  [!] Mixed schemas detected:")
     for (i in seq_len(nrow(schema_summary))) {
       message(sprintf("    - %s: %d rows (%.1f%%)",
                       schema_summary$schema_version[i],
@@ -209,21 +216,21 @@ apply_intro_standardization <- function(df, file_path) {
     }
   }
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Step 5: Track source file
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   # Add column to track which file each row came from
   df$source_file <- basename(file_path)
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Step 6: Store row removal count as attribute
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   # Attach rows_removed as attribute so workflow can access it
   attr(df, "rows_removed") <- n_removed
   
-  message(sprintf("  ✓ Intro-standardization complete: %d rows", nrow(df)))
+  if (verbose) message(sprintf("  [OK] Intro-standardization complete: %d rows", nrow(df)))
   
   df
 }
@@ -233,145 +240,203 @@ apply_intro_standardization <- function(df, file_path) {
 # Command 1: Load Local Raw Data
 # ------------------------------------------------------------------------------
 
-#' Load Local Raw Data from data/raw/
+#' Load Local Raw Data from Directory
 #'
 #' @description
-#' Loads ALL CSV files from data/raw/ directory (regardless of filename),
-#' applies intro-standardization to each, and stores each as a separate
-#' dataframe in the global R environment.
+#' Loads all CSV files from a local directory, applies intro-standardization
+#' to each, and either returns a combined tibble (default) or assigns
+#' separate dataframes to the global environment (legacy behavior).
 #'
-#' @param local_dir Path to local raw data directory (default: "data/raw/")
-#' @param pattern File pattern to match (default: "\\.csv$" - all CSVs)
-#' @param envir Environment to assign dataframes to (default: .GlobalEnv)
+#' @param local_dir Character. Path to local raw data directory.
+#'   Default: "data/raw/"
+#' @param pattern Character. File pattern to match.
+#'   Default: "\\.csv$" (all CSVs)
+#' @param return_combined Logical. If TRUE (default), returns combined tibble.
+#'   If FALSE, assigns separate dataframes to envir (legacy behavior).
+#' @param envir Environment. Only used when return_combined = FALSE.
+#'   Default: .GlobalEnv
+#' @param verbose Logical. Print progress messages to console.
+#'   Default: FALSE.
 #'
-#' @return Invisible integer - number of files successfully loaded
+#' @return
+#'   If return_combined = TRUE: Tibble with combined data (or NULL if no files).
+#'     Attributes: files_processed, rows_removed
+#'   If return_combined = FALSE: Invisible integer (number of files loaded).
+#'     Creates raw_file_001, raw_file_002, ... in envir.
 #'
 #' @details
-#' Each file is stored as: raw_file_001, raw_file_002, etc.
-#'
 #' All files go through intro-standardization:
-#' - N ≤ 0 or NA rows removed
+#' - N <= 0 or NA rows removed
 #' - DetectorID derived
 #' - Schema version detected
 #' - Column names cleaned
 #'
-#' Row removal counts are tracked via 'rows_removed' attribute on each dataframe.
-#'
 #' @section CONTRACT:
-#' - Loads ALL CSV files from directory (not just "id.csv")
-#' - Each file becomes separate dataframe in R environment
-#' - Applies same intro-standardization to each
-#' - Skips unreadable files with warning
-#' - Each dataframe has 'rows_removed' attribute for validation tracking
+#' - Loads ALL CSV files matching pattern from directory
+#' - Applies intro-standardization to each file
+#' - Tracks files_processed and rows_removed as attributes
+#' - Skips unreadable files (does not stop)
+#' - Returns NULL if directory missing or no files found
 #'
 #' @section DOES NOT:
-#' - Combine files into one dataframe (use load_external_raw_data for that)
-#' - Apply full standardization (Stage 2)
+#' - Apply full schema transformation (use standardize_kpro_schema)
 #' - Map detectors or transform species codes
+#' - Search subdirectories (recursive = FALSE)
+#' - Stop execution on empty directory
 #'
 #' @examples
 #' \dontrun{
-#' # Load all CSVs from data/raw/
-#' n_files <- load_local_raw_data()
+#' # Default: return combined tibble (pipeline usage)
+#' local_data <- load_local_raw_data(verbose = TRUE)
+#' nrow(local_data)
+#' attr(local_data, "files_processed")
 #'
-#' # Result: raw_file_001, raw_file_002, ... in environment
+#' # Legacy: create separate global objects
+#' n_files <- load_local_raw_data(return_combined = FALSE, verbose = TRUE)
 #' ls(pattern = "^raw_file")
-#'
-#' # Check row removal for first file
-#' attr(raw_file_001, "rows_removed")
 #' }
 #'
 #' @export
-load_local_raw_data <- function(local_dir = "data/raw/",
-                                pattern = "\\.csv$",
-                                envir = .GlobalEnv) {
+load_local_raw_data <- function(
+    local_dir = "data/raw/",
+    pattern = "\\.csv$",
+    return_combined = TRUE,
+    envir = .GlobalEnv,
+    verbose = FALSE
+) {
   
-  # ------------------------------------------------------------------------------
+  # -------------------------
   # Input validation
-  # ------------------------------------------------------------------------------
+  # -------------------------
   
   if (!dir.exists(local_dir)) {
-    stop(sprintf("Directory does not exist: %s", local_dir))
+    if (verbose) message(sprintf("[!] Directory does not exist: %s", local_dir))
+    
+    if (return_combined) {
+      return(NULL)
+    } else {
+      return(invisible(0))
+    }
   }
   
-  # ------------------------------------------------------------------------------
-  # Discovery: Find all CSV files in local directory
-  # ------------------------------------------------------------------------------
+  # -------------------------
+  # Discovery: Find CSV files
+  # -------------------------
   
-  message("\n=== Loading Local Raw Data ===")
-  message(sprintf("Directory: %s", local_dir))
+  if (verbose) {
+    message("\n=== Loading Local Raw Data ===")
+    message(sprintf("  Directory: %s", local_dir))
+  }
   
-  # List all CSV files (any filename, not just "id.csv")
   file_paths <- list.files(
     path = local_dir,
     pattern = pattern,
     full.names = TRUE,
-    recursive = FALSE  # Only immediate directory (not subdirectories)
+    recursive = FALSE
   )
   
-  # Check if any files found
   if (length(file_paths) == 0) {
-    message(sprintf("⚠️  No CSV files found in %s\n", local_dir))
-    return(invisible(0))  # Return 0 (no files loaded) instead of stopping
+    if (verbose) message(sprintf("  [!] No CSV files found in %s", local_dir))
+    
+    if (return_combined) {
+      return(NULL)
+    } else {
+      return(invisible(0))
+    }
   }
   
-  message(sprintf("Found %d CSV files\n", length(file_paths)))
+  if (verbose) message(sprintf("  Found %d CSV file(s)", length(file_paths)))
   
-  # ------------------------------------------------------------------------------
-  # Process each file individually
-  # ------------------------------------------------------------------------------
+  # -------------------------
+  # Process each file
+  # -------------------------
   
-  files_loaded <- 0  # Counter for successfully loaded files
+  datasets <- list()
+  total_rows_removed <- 0
+  files_processed <- 0
   
   for (i in seq_along(file_paths)) {
     fp <- file_paths[i]
     
-    message(sprintf("[%d/%d] Processing: %s", i, length(file_paths), basename(fp)))
+    if (verbose) message(sprintf("  [%d/%d] Processing: %s", i, length(file_paths), basename(fp)))
     
-    # Read file safely (returns NULL if fails)
+    # Read file safely
     df <- safe_read_csv(fp)
     
     if (is.null(df)) {
-      message("  ✗ Failed to read file - skipping\n")
-      next  # Skip to next file
+      if (verbose) message("    [X] Failed to read file - skipping")
+      next
     }
     
     # Apply intro-standardization
-    df_standardized <- apply_intro_standardization(df, fp)
+    df_std <- apply_intro_standardization(df, fp, verbose = verbose)
     
-    if (is.null(df_standardized)) {
-      message("  ✗ No valid data after intro-standardization - skipping\n")
-      next  # Skip to next file
+    if (is.null(df_std) || nrow(df_std) == 0) {
+      if (verbose) message("    [X] No valid rows after intro-standardization - skipping")
+      next
     }
     
-    # Create unique dataframe name
-    df_name <- sprintf("raw_file_%03d", files_loaded + 1)
+    # Track rows removed
+    rows_removed <- attr(df_std, "rows_removed") %||% 0
+    total_rows_removed <- total_rows_removed + rows_removed
     
-    # Assign to specified environment (default: global)
-    # Note: rows_removed attribute is preserved through assignment
-    assign(df_name, df_standardized, envir = envir)
+    files_processed <- files_processed + 1
     
-    message(sprintf("  ✓ Stored as: %s\n", df_name))
-    
-    files_loaded <- files_loaded + 1
+    if (return_combined) {
+      # Store in list for later combination
+      datasets[[basename(fp)]] <- df_std
+      if (verbose) message(sprintf("    [OK] %s rows", format(nrow(df_std), big.mark = ",")))
+      
+    } else {
+      # Legacy behavior: assign to global environment
+      df_name <- sprintf("raw_file_%03d", files_processed)
+      assign(df_name, df_std, envir = envir)
+      if (verbose) message(sprintf("    [OK] Stored as: %s", df_name))
+    }
   }
   
-  # ------------------------------------------------------------------------------
-  # Report summary
-  # ------------------------------------------------------------------------------
+  # -------------------------
+  # Return based on mode
+  # -------------------------
   
-  message("========================================")
-  message(sprintf("✓ Loaded %d files into R environment", files_loaded))
-  
-  if (files_loaded > 0) {
-    message(sprintf("  Dataframes: raw_file_001 through raw_file_%03d", files_loaded))
-    message("\n  Access with: raw_file_001, raw_file_002, etc.")
-    message("  Row removal counts: attr(raw_file_001, 'rows_removed')")
+  if (return_combined) {
+    # Combined tibble mode
+    if (length(datasets) == 0) {
+      if (verbose) message("  [!] No files successfully processed")
+      return(NULL)
+    }
+    
+    combined <- dplyr::bind_rows(datasets)
+    attr(combined, "files_processed") <- files_processed
+    attr(combined, "rows_removed") <- total_rows_removed
+    
+    if (verbose) {
+      message("========================================")
+      message(sprintf("  [OK] Combined %d file(s): %s rows",
+                      files_processed,
+                      format(nrow(combined), big.mark = ",")))
+      if (total_rows_removed > 0) {
+        message(sprintf("  [*] Rows removed (invalid): %s",
+                        format(total_rows_removed, big.mark = ",")))
+      }
+      message("========================================")
+    }
+    
+    return(combined)
+    
+  } else {
+    # Legacy mode: objects in global environment
+    if (verbose) {
+      message("========================================")
+      message(sprintf("  [OK] Loaded %d file(s) into environment", files_processed))
+      if (files_processed > 0) {
+        message(sprintf("  Dataframes: raw_file_001 through raw_file_%03d", files_processed))
+      }
+      message("========================================")
+    }
+    
+    return(invisible(files_processed))
   }
-  
-  message("========================================\n")
-  
-  invisible(files_loaded)
 }
 
 
@@ -388,12 +453,13 @@ load_local_raw_data <- function(local_dir = "data/raw/",
 #'
 #' @param root_dir Root directory to search recursively
 #' @param pattern File pattern (default: "id\\.csv$")
+#' @param verbose Logical. Print status messages? Default: FALSE
 #'
 #' @return Single combined dataframe with all external data
 #'
 #' @details
 #' All files go through intro-standardization:
-#' - N ≤ 0 or NA rows removed
+#' - N <= 0 or NA rows removed
 #' - DetectorID derived
 #' - Schema version detected
 #' - Column names cleaned
@@ -428,24 +494,24 @@ load_local_raw_data <- function(local_dir = "data/raw/",
 #' }
 #'
 #' @export
-load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
+load_external_raw_data <- function(root_dir, pattern = "id\\.csv$", verbose = FALSE) {
   
-  # ------------------------------------------------------------------------------
-  # Input validation
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
+  # Input validation (using centralized assertion)
+  # ----------------------------------------------------------------------------
   
-  if (!dir.exists(root_dir)) {
-    stop(sprintf("Directory does not exist: %s", root_dir))
-  }
+  assert_directory_exists(root_dir, create = FALSE)
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Discovery: Recursively find all matching files
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
-  message("\n=== Loading External Raw Data ===")
-  message(sprintf("Directory: %s", root_dir))
-  message(sprintf("Pattern: %s", pattern))
-  message("Searching recursively...\n")
+  if (verbose) {
+    message("\n=== Loading External Raw Data ===")
+    message(sprintf("Directory: %s", root_dir))
+    message(sprintf("Pattern: %s", pattern))
+    message("Searching recursively...\n")
+  }
   
   # Recursive search for files matching pattern (e.g., "id.csv")
   file_paths <- list.files(
@@ -460,11 +526,11 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
     stop(sprintf("No files matching '%s' found in %s", pattern, root_dir))
   }
   
-  message(sprintf("Found %d files matching pattern\n", length(file_paths)))
+  if (verbose) message(sprintf("Found %d files matching pattern\n", length(file_paths)))
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Process each file and collect results
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   processed_files <- list()  # Store processed dataframes
   total_rows_removed <- 0    # Track total rows removed across all files
@@ -474,21 +540,21 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
     
     # Show relative path for long external paths
     rel_path <- sub(paste0("^", root_dir, "/?"), "", fp)
-    message(sprintf("[%d/%d] Processing: %s", i, length(file_paths), rel_path))
+    if (verbose) message(sprintf("[%d/%d] Processing: %s", i, length(file_paths), rel_path))
     
     # Read file safely (returns NULL if fails)
     df <- safe_read_csv(fp)
     
     if (is.null(df)) {
-      message("  ✗ Failed to read file - skipping\n")
+      if (verbose) message("  [X] Failed to read file - skipping\n")
       next  # Skip to next file
     }
     
     # Apply intro-standardization
-    df_standardized <- apply_intro_standardization(df, fp)
+    df_standardized <- apply_intro_standardization(df, fp, verbose = verbose)
     
     if (is.null(df_standardized)) {
-      message("  ✗ No valid data after intro-standardization - skipping\n")
+      if (verbose) message("  [X] No valid data after intro-standardization - skipping\n")
       next  # Skip to next file
     }
     
@@ -501,12 +567,12 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
     # Add to list of processed files
     processed_files[[length(processed_files) + 1]] <- df_standardized
     
-    message("")  # Blank line for readability
+    if (verbose) message("")  # Blank line for readability
   }
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Combine all processed files
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
   # Check if any files were successfully processed
   if (length(processed_files) == 0) {
@@ -514,7 +580,7 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
     return(dplyr::tibble())
   }
   
-  message("=== Combining Files ===")
+  if (verbose) message("=== Combining Files ===")
   
   # Bind all dataframes together
   combined_data <- dplyr::bind_rows(processed_files)
@@ -525,24 +591,26 @@ load_external_raw_data <- function(root_dir, pattern = "id\\.csv$") {
   # Store number of files processed as attribute
   attr(combined_data, "files_processed") <- length(processed_files)
   
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Report summary
-  # ------------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   
-  message("========================================")
-  message(sprintf("✓ Combined %d files", length(processed_files)))
-  message(sprintf("  Total rows: %s", format(nrow(combined_data), big.mark = ",")))
-  message(sprintf("  Rows removed: %s", format(total_rows_removed, big.mark = ",")))
-  message(sprintf("  Unique DetectorIDs: %d", length(unique(combined_data$detector_id))))
-  
-  # Show schema version distribution
-  schema_dist <- table(combined_data$schema_version)
-  message("\n  Schema distribution:")
-  for (version in names(schema_dist)) {
-    message(sprintf("    - %s: %d rows", version, schema_dist[version]))
+  if (verbose) {
+    message("========================================")
+    message(sprintf("[OK] Combined %d files", length(processed_files)))
+    message(sprintf("  Total rows: %s", format(nrow(combined_data), big.mark = ",")))
+    message(sprintf("  Rows removed: %s", format(total_rows_removed, big.mark = ",")))
+    message(sprintf("  Unique DetectorIDs: %d", length(unique(combined_data$detector_id))))
+    
+    # Show schema version distribution
+    schema_dist <- table(combined_data$schema_version)
+    message("\n  Schema distribution:")
+    for (version in names(schema_dist)) {
+      message(sprintf("    - %s: %d rows", version, schema_dist[version]))
+    }
+    
+    message("========================================\n")
   }
-  
-  message("========================================\n")
   
   combined_data
 }

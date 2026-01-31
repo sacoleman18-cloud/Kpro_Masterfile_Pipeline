@@ -63,6 +63,7 @@
 # Safe I/O:
 #   - safe_read_csv()
 #   - convert_empty_to_na()
+#   - ensure_dir_exists()
 #
 # File Discovery:
 #   - find_most_recent_file()
@@ -81,6 +82,15 @@
 # Template Utilities:
 #   - fill_readme_template()
 #
+# Console Formatting:
+#   - center_text()
+#   - print_stage_header()
+#   - print_workflow_summary()
+#   - print_pipeline_complete()
+#
+# Operators:
+#   - %||%
+#
 # CHECKPOINT FILE NAMING CONVENTIONS
 # ----------------------------------
 # All workflow outputs follow this pattern:
@@ -95,12 +105,59 @@
 #
 # CHANGELOG
 # ---------
+# 2026-01-31: Refactored for standards compliance
+#             - Added ensure_dir_exists() helper
+#             - Added center_text() helper
+#             - Added verbose parameter to safe_read_csv()
+#             - Replaced Unicode checkmark with ASCII [OK]
+#             - Standardized error messages to use sprintf
 # 2024-12-29: Added find_most_recent_file()
 # 2024-12-29: Added load_or_checkpoint() and workflow-specific loaders
 # 2024-12-29: Added make_output_path() and make_versioned_path()
 # 2024-12-26: Initial CODING_STANDARDS compliant version
 #
 # =============================================================================
+
+
+# ==============================================================================
+# DIRECTORY MANAGEMENT
+# ==============================================================================
+
+
+#' Ensure Directory Exists
+#'
+#' @description
+#' Creates directory if it doesn't exist. Safe for repeated calls.
+#' Used internally by logging and I/O functions to guarantee output
+#' directories are available.
+#'
+#' @param dir_path Character. Directory path to ensure exists.
+#'
+#' @return Invisible TRUE.
+#'
+#' @section CONTRACT:
+#' - Creates directory with recursive = TRUE
+#' - Safe to call multiple times
+#' - Never errors if directory already exists
+#'
+#' @section DOES NOT:
+#' - Validate permissions
+#' - Remove existing directories
+#' - Create parent directories beyond recursive = TRUE
+#'
+#' @examples
+#' \dontrun{
+#' ensure_dir_exists("logs")
+#' ensure_dir_exists("outputs/checkpoints")
+#' }
+#'
+#' @export
+ensure_dir_exists <- function(dir_path) {
+  if (!dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE)
+  }
+  invisible(TRUE)
+}
 
 
 # ==============================================================================
@@ -140,8 +197,7 @@
 log_message <- function(msg, log_path = "logs/pipeline_log.txt") {
   
   # Ensure log directory exists
-  log_dir <- dirname(log_path)
-  if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE)
+  ensure_dir_exists(dirname(log_path))
   
   # Write timestamped message
   cat(
@@ -178,8 +234,7 @@ log_message <- function(msg, log_path = "logs/pipeline_log.txt") {
 initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
   
   # Ensure log directory exists
-  log_dir <- dirname(log_path)
-  if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE)
+  ensure_dir_exists(dirname(log_path))
   
   # Write header
   cat(
@@ -210,6 +265,7 @@ initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
 #' @param file_path Character. Path to CSV file.
 #' @param error_log_path Character. Path to error log file.
 #'   Default: "logs/error_log.txt"
+#' @param verbose Logical. Print progress messages? Default: FALSE
 #' @param ... Additional arguments passed to readr::read_csv().
 #'
 #' @return Tibble if read succeeds; NULL otherwise.
@@ -219,6 +275,7 @@ initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
 #' - Returns NULL on failure instead of stopping execution
 #' - Logs read errors with timestamps
 #' - Suppresses readr's column type messages
+#' - Optional progress messages when verbose = TRUE
 #'
 #' @section DOES NOT:
 #' - Guess column types (all columns are character)
@@ -228,13 +285,14 @@ initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
 #'
 #' @examples
 #' \dontrun{
-#' df <- safe_read_csv("data/raw.csv")
+#' df <- safe_read_csv("data/raw.csv", verbose = TRUE)
 #' if (is.null(df)) stop("Failed to load file")
 #' }
 #'
 #' @export
 safe_read_csv <- function(file_path,
                           error_log_path = "logs/error_log.txt",
+                          verbose = FALSE,
                           ...) {
   
   # Input validation
@@ -247,8 +305,12 @@ safe_read_csv <- function(file_path,
   }
   
   # Ensure log directory exists
-  log_dir <- dirname(error_log_path)
-  if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE)
+  ensure_dir_exists(dirname(error_log_path))
+  
+  # Progress message
+  if (verbose) {
+    message(sprintf("  Reading: %s", basename(file_path)))
+  }
   
   result <- NULL
   
@@ -259,6 +321,11 @@ safe_read_csv <- function(file_path,
         col_types = readr::cols(.default = readr::col_character()),
         ...
       )
+      
+      # Success message
+      if (!is.null(result) && verbose) {
+        message(sprintf("  [OK] Loaded %s rows", format(nrow(result), big.mark = ",")))
+      }
     },
     error = function(e) {
       msg <- paste(Sys.time(), "-", file_path, "-", e$message)
@@ -295,12 +362,20 @@ safe_read_csv <- function(file_path,
 convert_empty_to_na <- function(df, columns) {
   
   # Input validation
-  if (!is.data.frame(df)) stop("df must be a data frame")
-  if (!is.character(columns)) stop("columns must be a character vector")
+  if (!is.data.frame(df)) {
+    stop("df must be a data frame")
+  }
+  
+  if (!is.character(columns)) {
+    stop("columns must be a character vector")
+  }
   
   missing_cols <- setdiff(columns, names(df))
   if (length(missing_cols) > 0) {
-    stop("Columns not found: ", paste(missing_cols, collapse = ", "))
+    stop(sprintf(
+      "Columns not found: %s",
+      paste(missing_cols, collapse = ", ")
+    ))
   }
   
   # Replace empty strings with NA
@@ -345,7 +420,7 @@ convert_empty_to_na <- function(df, columns) {
 #' - Load the file
 #'
 #' @examples
-#' \dontrun
+#' \dontrun{
 #' # Find most recent master file
 #' master_file <- find_most_recent_file(
 #'   "outputs",
@@ -447,7 +522,7 @@ load_or_checkpoint <- function(var_name,
     data <- get(var_name, envir = .GlobalEnv)
     
     if (verbose) {
-      message(sprintf("\u2713 Using %s from memory", var_name))
+      message(sprintf("[OK] Using %s from memory", var_name))
       if (is.data.frame(data)) {
         message(sprintf("  Rows: %s", format(nrow(data), big.mark = ",")))
       }
@@ -480,10 +555,10 @@ load_or_checkpoint <- function(var_name,
   
   if (verbose) {
     if (is.data.frame(data)) {
-      message(sprintf("\u2713 Loaded checkpoint: %s rows",
+      message(sprintf("[OK] Loaded checkpoint: %s rows",
                       format(nrow(data), big.mark = ",")))
     } else {
-      message("\u2713 Loaded checkpoint")
+      message("[OK] Loaded checkpoint")
     }
   }
   
@@ -752,7 +827,7 @@ fill_readme_template <- function(template_path,
   
   # Input validation
   if (!file.exists(template_path)) {
-    stop("Template not found: ", template_path)
+    stop(sprintf("Template not found: %s", template_path))
   }
   
   if (!is.list(parameters)) {
@@ -770,8 +845,6 @@ fill_readme_template <- function(template_path,
   }
   
   # Perform substitutions using %||% for NULL safety
-  `%||%` <- function(x, y) if (is.null(x)) y else x
-  
   filled <- template %>%
     stringr::str_replace_all(
       "\\[Study Name\\]",
@@ -807,24 +880,55 @@ fill_readme_template <- function(template_path,
   invisible(TRUE)
 }
 
-# ==============================================================================
-# NEW FUNCTIONS TO ADD TO core/utilities.R
-# ==============================================================================
-# These functions provide consistent console output formatting for workflows.
-# Add to the end of utilities.R, before the closing comment.
-# ==============================================================================
-
 
 # ==============================================================================
 # CONSOLE FORMATTING HELPERS
 # ==============================================================================
 
 
+#' Center Text Within Fixed Width
+#'
+#' @description
+#' Centers text by adding padding on both sides to reach target width.
+#' Used internally by console formatting functions for consistent
+#' box-drawing layouts.
+#'
+#' @param text Character. Text to center.
+#' @param width Integer. Total width including padding.
+#'
+#' @return Character. Centered text string with padding.
+#'
+#' @section CONTRACT:
+#' - Returns string of exactly 'width' characters
+#' - Centers text with equal padding on both sides
+#' - Adds extra space to right if padding is odd
+#'
+#' @section DOES NOT:
+#' - Truncate text if longer than width
+#' - Validate width is positive
+#' - Add any formatting characters (boxes, colors)
+#'
+#' @examples
+#' \dontrun{
+#' center_text("Hello", 20)
+#' # Returns: "       Hello        " (7 spaces left, 8 right)
+#' }
+#'
+#' @export
+center_text <- function(text, width) {
+  pad_total <- width - nchar(text)
+  pad_left <- floor(pad_total / 2)
+  pad_right <- ceiling(pad_total / 2)
+  
+  sprintf("%s%s%s", strrep(" ", pad_left), text, strrep(" ", pad_right))
+}
+
+
 #' Print Stage Header Box
 #'
 #' @description
 #' Prints a consistently formatted single-line ASCII box for workflow stages.
-#' Uses UTF-8 box-drawing characters per CODING_STANDARDS v2.1.
+#' Uses ASCII box-drawing characters per CODING_STANDARDS v2.3.
 #'
 #' @param stage_num Character. Stage number (e.g., "7.1", "2.3")
 #' @param title Character. Stage title (e.g., "Load Configuration")
@@ -833,7 +937,7 @@ fill_readme_template <- function(template_path,
 #' @return Invisible NULL.
 #'
 #' @section CONTRACT:
-#' - Uses single-line box characters (┌─┐)
+#' - Uses single-line ASCII box characters (+-|)
 #' - Consistent width across all workflows
 #' - Auto-pads title for centering
 #'
@@ -853,22 +957,13 @@ print_stage_header <- function(stage_num, title, width = 65) {
   # Build stage text
   stage_text <- sprintf("STAGE %s: %s", stage_num, title)
   
-  
-  # Calculate padding for centering
-  pad_total <- width - nchar(stage_text)
-  pad_left <- floor(pad_total / 2)
-  pad_right <- ceiling(pad_total / 2)
-  
-  # Build centered line
-  centered <- sprintf("%s%s%s", 
-                      strrep(" ", pad_left),
-                      stage_text,
-                      strrep(" ", pad_right))
+  # Center text
+  centered <- center_text(stage_text, width)
   
   # Print box
-  message(sprintf("\n┌%s┐", strrep("─", width)))
-  message(sprintf("│%s│", centered))
-  message(sprintf("└%s┘\n", strrep("─", width)))
+  message(sprintf("\n+%s+", strrep("-", width)))
+  message(sprintf("|%s|", centered))
+  message(sprintf("+%s+\n", strrep("-", width)))
   
   invisible(NULL)
 }
@@ -888,7 +983,7 @@ print_stage_header <- function(stage_num, title, width = 65) {
 #' @return Invisible NULL.
 #'
 #' @section CONTRACT:
-#' - Uses double-line box characters (╔═╗)
+#' - Uses double-line ASCII box characters (+|=)
 #' - Displays each item on its own line
 #' - Consistent width across all workflows
 #'
@@ -914,26 +1009,19 @@ print_workflow_summary <- function(workflow, title, items, width = 65) {
   # Build header text
   header_text <- sprintf("WORKFLOW %s COMPLETE: %s", workflow, title)
   
-  # Calculate padding for centering
-  pad_total <- width - nchar(header_text)
-  pad_left <- floor(pad_total / 2)
-  pad_right <- ceiling(pad_total / 2)
-  
-  centered <- sprintf("%s%s%s",
-                      strrep(" ", pad_left),
-                      header_text,
-                      strrep(" ", pad_right))
+  # Center text
+  centered <- center_text(header_text, width)
   
   # Print header box
-  message(sprintf("\n╔%s╗", strrep("═", width)))
-  message(sprintf("║%s║", centered))
-  message(sprintf("╚%s╝", strrep("═", width)))
+  message(sprintf("\n+%s+", strrep("=", width)))
+  message(sprintf("||%s||", centered))
+  message(sprintf("+%s+", strrep("=", width)))
   
   # Print items
   if (length(items) > 0) {
     message("")
     for (name in names(items)) {
-      message(sprintf("  • %s: %s", name, items[[name]]))
+      message(sprintf("  - %s: %s", name, items[[name]]))
     }
   }
   
@@ -955,7 +1043,7 @@ print_workflow_summary <- function(workflow, title, items, width = 65) {
 #' @return Invisible NULL.
 #'
 #' @section CONTRACT:
-#' - Uses double-line box characters for main header
+#' - Uses double-line ASCII box characters for main header
 #' - Lists all pipeline outputs
 #' - Provides actionable next steps
 #' - Shows browseURL command for report
@@ -984,40 +1072,34 @@ print_pipeline_complete <- function(outputs, next_steps, report_path, width = 65
   
   # Header text
   header_text <- "PIPELINE COMPLETE"
-  pad_total <- width - nchar(header_text)
-  pad_left <- floor(pad_total / 2)
-  pad_right <- ceiling(pad_total / 2)
   
-  centered <- sprintf("%s%s%s",
-                      strrep(" ", pad_left),
-                      header_text,
-                      strrep(" ", pad_right))
+  # Center text
+  centered <- center_text(header_text, width)
   
   # Print main header
-  
-  message(sprintf("\n╔%s╗", strrep("═", width)))
-  message(sprintf("║%s║", centered))
-  message(sprintf("╚%s╝", strrep("═", width)))
+  message(sprintf("\n+%s+", strrep("=", width)))
+  message(sprintf("||%s||", centered))
+  message(sprintf("+%s+", strrep("=", width)))
   
   # Print outputs section
-  message("\n📂 PIPELINE OUTPUTS")
-  message(strrep("─", 40))
+  message("\n[*] PIPELINE OUTPUTS")
+  message(strrep("-", 40))
   for (name in names(outputs)) {
     message(sprintf("  %s:", name))
     message(sprintf("    %s", outputs[[name]]))
   }
   
   # Print next steps section
-  message("\n📋 NEXT STEPS")
-  message(strrep("─", 40))
+  message("\n[*] NEXT STEPS")
+  message(strrep("-", 40))
   for (i in seq_along(next_steps)) {
     message(sprintf("  %d. %s", i, next_steps[i]))
   }
   
   # Print browseURL hint
   if (!is.null(report_path) && nchar(report_path) > 0) {
-    message("\n🔗 VIEW REPORT")
-    message(strrep("─", 40))
+    message("\n[*] VIEW REPORT")
+    message(strrep("-", 40))
     message(sprintf("  browseURL('%s')", report_path))
   }
   
@@ -1025,6 +1107,11 @@ print_pipeline_complete <- function(outputs, next_steps, report_path, width = 65
   
   invisible(NULL)
 }
+
+
+# ==============================================================================
+# OPERATORS
+# ==============================================================================
 
 
 #' Null Coalescing Operator

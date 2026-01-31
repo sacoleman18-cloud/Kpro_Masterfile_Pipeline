@@ -1,5 +1,5 @@
 # ==============================================================================
-# MAINLINE WORKFLOW: 04_finalize_cpn.R
+# WORKFLOW 04: 04_finalize_cpn.R
 # ==============================================================================
 # PURPOSE
 # -------
@@ -13,14 +13,14 @@
 # WORKFLOW POSITION
 # -----------------
 # This is Workflow 04 in the processing pipeline:
-#   01_ingest_raw_data.R  → Load & intro-standardize raw CSVs
-#   02_standardize.R      → Transform to master schema
+#   01_ingest_raw_data.R  -> Load & intro-standardize raw CSVs
+#   02_standardize.R      -> Transform to master schema
 #   [OPTIONAL: Manual ID in Kaleidoscope]
-#   03_generate_cpn_template.R → Generate template for editing + species unification
+#   03_generate_cpn_template.R -> Generate template for editing + species unification
 #   [USER: Edit template in Excel]
-#   04_finalize_cpn.R     → [THIS SCRIPT] Process edited template
-#   05_summary_stats.R    → Generate summary statistics and tables
-#   06_generate_plots.R   → Generate exploratory visualizations
+#   04_finalize_cpn.R     -> [THIS SCRIPT] Process edited template
+#   05_summary_stats.R    -> Generate summary statistics and tables
+#   06_generate_plots.R   -> Generate exploratory visualizations
 #
 # INPUTS
 # ------
@@ -32,7 +32,7 @@
 #   - kpro_master (filtered data with unified `species` column)
 #
 # OR Checkpoint (fallback):
-#   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv
+#   - outputs/checkpoints/02_kpro_master_YYYYMMDD_HHMMSS.csv
 #
 # Configuration Files:
 #   - inst/config/study_parameters.yaml (recording schedule)
@@ -210,8 +210,8 @@
 #
 # MAINTAINER NOTES
 # ----------------
-# - ASCII boxes: Single-line (┌─┐) for all stages
-# - Stage numbering: 4.1 - 4.5
+# - Uses print_stage_header() for all stage headers
+# - Stage numbering: 4.1 - 4.6
 # - Edit log critical for reproducibility and audit trail
 # - Status classification must be deterministic
 # - Final dataset must pass validation
@@ -222,6 +222,7 @@
 #
 # CHANGELOG
 # ---------
+# 2026-01-23: Standards compliance refactor (here::here paths, print_stage_header)
 # 2026-01-12: Enhanced validation tracking with edit breakdown, status details, effort metrics
 # 2026-01-12: Added artifact registration for final CallsPerNight dataset (v2.1)
 # 2025-01-07: Added species column validation; retained dead nights for NB GAMM
@@ -237,7 +238,7 @@
 # Load all functions
 # ------------------------------------------------------------------------------
 
-source("R/functions/load_all.R")
+source(here::here("R", "functions", "load_all.R"))
 
 # ------------------------------------------------------------------------------
 # Load required libraries
@@ -301,7 +302,7 @@ kpro_master <- load_master_data()
 
 if (!"species" %in% names(kpro_master)) {
   warning("'species' column not found in kpro_master")
-  message("\n⚠️ species column missing - creating from auto_id")
+  message("\n[!] species column missing - creating from auto_id")
   message("  For proper species unification, re-run Workflow 03")
   
   # Fallback: create species from auto_id only
@@ -322,13 +323,13 @@ if (!"species" %in% names(kpro_master)) {
   message(sprintf("  Created species column from auto_id: %d unique species",
                   n_distinct(kpro_master$species, na.rm = TRUE)))
 } else {
-  message("✓ species column present in kpro_master")
+  message("[OK] species column present in kpro_master")
   message(sprintf("  Unique species: %d", n_distinct(kpro_master$species, na.rm = TRUE)))
 }
 
 # Load original template from script 03
 template_original_file <- find_most_recent_file(
-  "outputs",
+  here::here("outputs"),
   "^03_CallsPerNight_Template_ORIGINAL_.*\\.csv$",
   hint = "Run 03_generate_cpn_template.R first"
 )
@@ -345,12 +346,10 @@ timestamp <- sub(".*_ORIGINAL_(\\d{8}_\\d{6})\\.csv$", "\\1", basename(template_
 # STAGE 4.1: LOAD EDITED TEMPLATE
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 4.1: Load Edited Template                       │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("4.1", "Load Edited Template")
 
 # Look for most recent EDIT_THIS file as default
-editable_files <- list.files("outputs",
+editable_files <- list.files(here::here("outputs"),
                              pattern = "^03_CallsPerNight_Template_EDIT_THIS_.*\\.csv$",
                              full.names = TRUE)
 
@@ -411,7 +410,7 @@ if ("detector_id" %in% names(template_edited)) {
   template_edited <- template_edited %>% select(-detector_id)
 }
 
-message("✓ Template structure validated")
+message("[OK] Template structure validated")
 
 log_message(sprintf("[Stage 4.1] Loaded edited template: %d rows", 
                     nrow(template_edited)))
@@ -436,7 +435,7 @@ template_edited <- template_edited %>%
     RecordingHours = mapply(calculate_recording_hours, StartDateTime, EndDateTime)
   )
 
-message(sprintf("✓ Recalculated RecordingHours for %s rows", 
+message(sprintf("[OK] Recalculated RecordingHours for %s rows", 
                 format(nrow(template_edited), big.mark = ",")))
 
 log_message(sprintf("[Stage 4.1] Recalculated RecordingHours for %d rows", 
@@ -454,9 +453,7 @@ validation_context <- log_validation_event(
 # STAGE 4.2: TRACK EDITS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 4.2: Track Manual Edits                         │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("4.2", "Track Manual Edits")
 
 message("Comparing ORIGINAL vs EDITED templates...")
 
@@ -660,7 +657,7 @@ if (total_edits == 0) {
 # Generate edit log
 edit_log_file <- NA
 if (total_edits > 0) {
-  edit_log_file <- sprintf("outputs/04_CallsPerNight_EditLog_%s.txt", timestamp)
+  edit_log_file <- here::here("outputs", sprintf("04_CallsPerNight_EditLog_%s.txt", timestamp))
   
   edit_log <- comparison %>%
     filter(Any_change) %>%
@@ -728,7 +725,7 @@ if (total_edits > 0) {
   }
   sink()
   
-  message(sprintf("  ✓ Edit log saved: %s", basename(edit_log_file)))
+  message(sprintf("  [OK] Edit log saved: %s", basename(edit_log_file)))
 } else {
   message("  No manual edits detected")
   message("  Note: Excel auto-formatting (format changes only) does not count as an edit")
@@ -778,9 +775,7 @@ if (total_edits > 0) {
 # STAGE 4.3: SET STATUS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 4.3: Set Recording Status                       │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("4.3", "Set Recording Status")
 
 message("Classifying recording status (Fail/Success/Partial)...")
 
@@ -804,7 +799,7 @@ if (!is.na(uniform_start) && !is.na(uniform_end)) {
   # Calculate expected recording hours from uniform schedule
   expected_hours <- calculate_recording_hours(uniform_start, uniform_end)
   
-  # Define tolerance for matching (allow ±5 minutes = 0.0833 hours)
+  # Define tolerance for matching (allow +/-5 minutes = 0.0833 hours)
   hour_tolerance <- 0.0833  # 5 minutes
   
   template_edited <- template_edited %>%
@@ -828,7 +823,7 @@ if (!is.na(uniform_start) && !is.na(uniform_end)) {
   n_either_match <- sum(template_edited$matches_uniform, na.rm = TRUE)
   
   message(sprintf("    Rows with exact time match: %d", n_times_match))
-  message(sprintf("    Rows with hours match (±5 min): %d", n_hours_match))
+  message(sprintf("    Rows with hours match (+/-5 min): %d", n_hours_match))
   message(sprintf("    Total matching uniform schedule: %d", n_either_match))
   
   # Remove helper columns
@@ -897,9 +892,7 @@ validation_context <- log_validation_event(
 # STAGE 4.4: CALCULATE METRICS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 4.4: Calculate Metrics                          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("4.4", "Calculate Metrics")
 
 message("Calculating CallsPerHour...")
 
@@ -946,7 +939,7 @@ if (n_dead_nights > 0) {
   )
 }
 
-message(sprintf("✓ Final dataset: %s rows", 
+message(sprintf("[OK] Final dataset: %s rows", 
                 format(nrow(calls_per_night_final), big.mark = ",")))
 
 # Show summary statistics (excluding dead nights for calculations)
@@ -987,9 +980,7 @@ validation_context <- log_validation_event(
 # STAGE 4.5: VALIDATE & SAVE
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 4.5: Validate & Save                           │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("4.5", "Validate & Save")
 
 # Reorder columns for final dataset
 message("Finalizing column structure...")
@@ -1006,7 +997,7 @@ assert_columns_exist(
   source_hint = "04_finalize_cpn.R"
 )
 
-message("  ✓ All required columns present")
+message("  [OK] All required columns present")
 
 # Enforce column types
 calls_per_night_final <- calls_per_night_final %>%
@@ -1021,7 +1012,7 @@ calls_per_night_final <- calls_per_night_final %>%
     CallsPerHour = as.numeric(CallsPerHour)
   )
 
-message("  ✓ Column types enforced")
+message("  [OK] Column types enforced")
 
 # Log species validation
 n_unique_species <- n_distinct(kpro_master$species, na.rm = TRUE)
@@ -1050,7 +1041,7 @@ if (nrow(problematic) > 0) {
     nrow(problematic)
   ))
   
-  message("\n  ⚠️ Unusual values detected:")
+  message("\n  [!] Unusual values detected:")
   message(sprintf("    Rows with NA CallsPerNight: %d", 
                   sum(is.na(problematic$CallsPerNight))))
   message(sprintf("    Rows with negative CallsPerNight: %d", 
@@ -1072,7 +1063,7 @@ if (nrow(problematic) > 0) {
     )
   )
 } else {
-  message("  ✓ All CallsPerNight values within normal range")
+  message("  [OK] All CallsPerNight values within normal range")
   
   # Log validation passed
   validation_context <- log_validation_event(
@@ -1085,10 +1076,10 @@ if (nrow(problematic) > 0) {
   )
 }
 
-message("\n✓ Data validation passed")
+message("\n[OK] Data validation passed")
 
 # Ensure output directory exists
-assert_directory_exists("results/csv", create = TRUE)
+assert_directory_exists(here::here("results", "csv"), create = TRUE)
 
 # Save with auto-incrementing version
 message("\nSaving final CallsPerNight dataset...")
@@ -1096,10 +1087,10 @@ message("\nSaving final CallsPerNight dataset...")
 final_file <- save_callspernight_with_version(
   data = calls_per_night_final,
   base_name = "CallsPerNight_final",
-  output_dir = "results/csv"  # Final deliverable goes to results/
+  output_dir = here::here("results", "csv")  # Final deliverable goes to results/
 )
 
-message(sprintf("✓ Final file saved: %s", basename(final_file)))
+message(sprintf("[OK] Final file saved: %s", basename(final_file)))
 
 log_message(sprintf("[Stage 4.5] Saved final dataset: %s", basename(final_file)))
 
@@ -1149,15 +1140,13 @@ registry <- register_artifact(
   )
 )
 
-message("✓ Artifact registered in registry")
+message("[OK] Artifact registered in registry")
 
 # ==============================================================================
-# FINALIZE VALIDATION REPORT
+# STAGE 4.6: FINALIZE VALIDATION REPORT
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          Generating Validation Report                          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("4.6", "Generate Validation Report")
 
 # Finalize validation context
 validation_context$summary$rows_processed <- nrow(calls_per_night_final)
@@ -1173,17 +1162,17 @@ log_message(sprintf("[Workflow 04] Validation report: %s", basename(validation_r
 # WORKFLOW 04 COMPLETE
 # ==============================================================================
 
-message("\n╔═══════════════════════════════════════════════════════════════╗")
-message("║          WORKFLOW 04 COMPLETE: CallsPerNight Generated         ║")
-message("╚═══════════════════════════════════════════════════════════════╝")
+message("\n========================================")
+message("  WORKFLOW 04 COMPLETE: CallsPerNight Generated")
+message("========================================\n")
 
-message("\nFiles created:")
-message(sprintf("  ✓ Template (original): %s", basename(template_original_file)))
+message("Files created:")
+message(sprintf("  [OK] Template (original): %s", basename(template_original_file)))
 if (total_edits > 0) {
-  message(sprintf("  ✓ Edit log: %s", basename(edit_log_file)))
+  message(sprintf("  [OK] Edit log: %s", basename(edit_log_file)))
 }
-message(sprintf("  ✓ Final dataset: %s", basename(final_file)))
-message(sprintf("  ✓ Validation report: %s", basename(validation_report_path)))
+message(sprintf("  [OK] Final dataset: %s", basename(final_file)))
+message(sprintf("  [OK] Validation report: %s", basename(validation_report_path)))
 
 message("\nDataset summary:")
 message(sprintf("  Detectors: %d", length(unique(calls_per_night_final$Detector))))
@@ -1204,17 +1193,17 @@ for (status in names(status_counts)) {
 
 # Species column status
 message("\nSpecies data (from kpro_master):")
-message(sprintf("  ✓ Unique species: %d", n_distinct(kpro_master$species, na.rm = TRUE)))
-message("  ✓ Ready for Workflow 05/06 species analysis")
+message(sprintf("  [OK] Unique species: %d", n_distinct(kpro_master$species, na.rm = TRUE)))
+message("  [OK] Ready for Workflow 05/06 species analysis")
 
 message("\n========================================")
-message("✓ Workflow 04 Complete")
+message("[OK] Workflow 04 Complete")
 message("========================================")
 
 message("\nCurrent data in environment:")
-message("  • calls_per_night_final (ready for analysis)")
-message("  • kpro_master (with unified `species` column)")
-message(sprintf("  • Final file: %s", basename(final_file)))
+message("  - calls_per_night_final (ready for analysis)")
+message("  - kpro_master (with unified `species` column)")
+message(sprintf("  - Final file: %s", basename(final_file)))
 
 message("\nTo inspect data:")
 message("  head(calls_per_night_final)")

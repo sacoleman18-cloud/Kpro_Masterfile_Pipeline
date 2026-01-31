@@ -1,6 +1,6 @@
-# =============================================================================
-# core/schema_detection.R â€” KPRO SCHEMA VERSION DETECTION (LOCKED CONTRACT)
-# =============================================================================
+# ==============================================================================
+# schema_detection.R - KPRO SCHEMA VERSION DETECTION (LOCKED CONTRACT)
+# ==============================================================================
 # PURPOSE
 # -------
 # Detects Kaleidoscope Pro schema version at the ROW level. Handles files
@@ -18,11 +18,11 @@
 #    - No sampling or averaging - every row checked
 #
 # 2. Detection logic (per row)
-#    - Step 1: Does 'alternates' column exist? â†’ v1_legacy_single_column
+#    - Step 1: Does 'alternates' column exist? -> v1_legacy_single_column
 #    - Step 2: If no 'alternates', check auto_id length:
-#        - 4 characters â†’ v2_transitional_4letter
-#        - 6 characters â†’ v3_modern_6letter
-#        - Other (including "NoID") â†’ unknown
+#        - 4 characters -> v2_transitional_4letter
+#        - 6 characters -> v3_modern_6letter
+#        - Other (including "NoID") -> unknown
 #
 # 3. Output guarantee
 #    - detect_row_schema() ALWAYS adds 'schema_version' column
@@ -37,9 +37,8 @@
 #
 # 5. Helper functions
 #    - get_dominant_schema() returns single most common version
-#    - summarize_schema_distribution() prints readable summary
+#    - get_schema_summary() returns data frame of counts (with optional verbose)
 #    - validate_schema_detection() checks for "unknown" rows
-#    - get_schema_summary() returns data frame of counts
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
@@ -49,11 +48,12 @@
 #   - Split semicolon-delimited alternates
 #   - Remove or filter any rows
 #   - Modify any existing column values
-#   - Map species codes (4-letter â†” 6-letter)
+#   - Map species codes (4-letter -> 6-letter)
 #   - Perform data quality validation
 #
 # DEPENDENCIES
 # ------------
+#   - validation/validation.R: assert_data_frame, assert_columns_exist
 #   - dplyr: mutate, case_when
 #   - base R: nchar, trimws, table
 #
@@ -64,9 +64,8 @@
 #
 # Helper functions:
 #   - get_dominant_schema()       # Returns most common schema (for logging)
-#   - summarize_schema_distribution()  # Prints human-readable summary
+#   - get_schema_summary()        # Returns counts as data frame (with verbose option)
 #   - validate_schema_detection() # Checks for unknown schemas
-#   - get_schema_summary()        # Returns counts as data frame
 #
 # SCHEMA VERSIONS RECOGNIZED
 # --------------------------
@@ -83,8 +82,8 @@
 # # Quick check
 # table(df$schema_version)
 #
-# # Detailed summary
-# summarize_schema_distribution(df)
+# # Get summary (silent or verbose)
+# schema_summary <- get_schema_summary(df, verbose = TRUE)
 #
 # # Get dominant for logging
 # message(sprintf("Primary schema: %s", get_dominant_schema(df)))
@@ -94,7 +93,16 @@
 #   warning("Some rows have unknown schema")
 # }
 #
-# =============================================================================
+# CHANGELOG
+# ---------
+# 2026-01-30: Refactored to use centralized assert_* functions from validation.R
+# 2026-01-30: Consolidated summarize_schema_distribution into get_schema_summary
+# 2026-01-26: Added verbose parameter to detect_row_schema() (default: FALSE)
+# 2026-01-26: Changed summarize_schema_distribution() default verbose to FALSE
+# 2026-01-26: Gated all console messages with if (verbose)
+# 2026-01-26: Fixed emoji encoding (ASCII replacements)
+#
+# ==============================================================================
 
 # ------------------------------------------------------------------------------
 # Core Function: Detect Row Schema (UPDATED - Handles Semicolons)
@@ -108,6 +116,7 @@
 #' includes detection of semicolon-delimited alternate columns.
 #'
 #' @param df Data frame to detect schemas for
+#' @param verbose Logical. Print status messages? Default: FALSE
 #'
 #' @return Data frame with schema_version column added
 #'
@@ -115,13 +124,13 @@
 #' **Detection logic (applied per row):**
 #'
 #' **File-level check (applies to all rows):**
-#' 1. If "alternates" column exists â†’ ALL rows are v1_legacy_single_column
+#' 1. If "alternates" column exists -> ALL rows are v1_legacy_single_column
 #'
 #' **Row-level checks (when no "alternates" column):**
-#' 2. If alternate_1 OR alternate_2 contains semicolons â†’ v1_legacy_single_column
-#' 3. Else if auto_id length is 4 characters â†’ v2_transitional_4letter
-#' 4. Else if auto_id length is 6 characters â†’ v3_modern_6letter
-#' 5. Else â†’ unknown
+#' 2. If alternate_1 OR alternate_2 contains semicolons -> v1_legacy_single_column
+#' 3. Else if auto_id length is 4 characters -> v2_transitional_4letter
+#' 4. Else if auto_id length is 6 characters -> v3_modern_6letter
+#' 5. Else -> unknown
 #'
 #' **Why semicolon detection matters:**
 #' Some v1 files have already been partially processed and have alternate_1
@@ -129,11 +138,11 @@
 #' "LACI;LABO;LANO". These must be detected and split properly.
 #'
 #' **Examples of detection:**
-#' - Row with alternates column â†’ v1_legacy_single_column
-#' - Row with alternate_1 = "LACI;LABO" â†’ v1_legacy_single_column
-#' - Row with auto_id = "MYLU" (4 chars) â†’ v2_transitional_4letter
-#' - Row with auto_id = "MYOLUC" (6 chars) â†’ v3_modern_6letter
-#' - Row with auto_id = "NoID" (4 chars) â†’ v2_transitional_4letter
+#' - Row with alternates column -> v1_legacy_single_column
+#' - Row with alternate_1 = "LACI;LABO" -> v1_legacy_single_column
+#' - Row with auto_id = "MYLU" (4 chars) -> v2_transitional_4letter
+#' - Row with auto_id = "MYOLUC" (6 chars) -> v3_modern_6letter
+#' - Row with auto_id = "NoID" (4 chars) -> v2_transitional_4letter
 #'
 #' @section CONTRACT:
 #' - Adds schema_version column to input dataframe
@@ -170,15 +179,13 @@
 #' }
 #'
 #' @export
-detect_row_schema <- function(df) {
+detect_row_schema <- function(df, verbose = FALSE) {
   
-  # -------------------------
-  # Input validation
-  # -------------------------
+  # ----------------------------------------------------------------------------
+  # Input validation (using centralized assertions)
+  # ----------------------------------------------------------------------------
   
-  if (!is.data.frame(df)) {
-    stop("df must be a data frame")
-  }
+  assert_data_frame(df, "df")
   
   if (nrow(df) == 0) {
     warning("Empty data frame provided - cannot detect schemas")
@@ -186,21 +193,23 @@ detect_row_schema <- function(df) {
     return(df)
   }
   
-  # -------------------------
+  # ----------------------------------------------------------------------------
   # File-level check: "alternates" column exists?
-  # -------------------------
+  # ----------------------------------------------------------------------------
   
   alternates_col_exists <- "alternates" %in% tolower(names(df))
   
   if (alternates_col_exists) {
-    message("  Detected 'alternates' column - all rows classified as v1_legacy_single_column")
+    if (verbose) {
+      message("  Detected 'alternates' column - all rows classified as v1_legacy_single_column")
+    }
     df$schema_version <- "v1_legacy_single_column"
     return(df)
   }
   
-  # -------------------------
+  # ----------------------------------------------------------------------------
   # Row-level detection (no "alternates" column present)
-  # -------------------------
+  # ----------------------------------------------------------------------------
   
   # Find alternate columns (case-insensitive)
   alt1_col <- grep("^alternate_1$", names(df), ignore.case = TRUE, value = TRUE)[1]
@@ -215,9 +224,9 @@ detect_row_schema <- function(df) {
     return(df)
   }
   
-  # -------------------------
+  # ----------------------------------------------------------------------------
   # Classify each row
-  # -------------------------
+  # ----------------------------------------------------------------------------
   
   df <- df %>%
     dplyr::mutate(
@@ -257,16 +266,18 @@ detect_row_schema <- function(df) {
     ) %>%
     dplyr::select(-has_semicolons_alt1, -has_semicolons_alt2, -has_semicolons, -auto_id_length)
   
-  # -------------------------
+  # ----------------------------------------------------------------------------
   # Log detection summary
-  # -------------------------
+  # ----------------------------------------------------------------------------
   
-  schema_counts <- table(df$schema_version)
-  message("  Schema detection complete:")
-  for (version in names(schema_counts)) {
-    message(sprintf("    - %s: %s rows", 
-                    version, 
-                    format(schema_counts[version], big.mark = ",")))
+  if (verbose) {
+    schema_counts <- table(df$schema_version)
+    message("  Schema detection complete:")
+    for (version in names(schema_counts)) {
+      message(sprintf("    - %s: %s rows", 
+                      version, 
+                      format(schema_counts[version], big.mark = ",")))
+    }
   }
   
   df
@@ -301,9 +312,7 @@ detect_row_schema <- function(df) {
 #' @export
 get_dominant_schema <- function(df) {
   
-  if (!"schema_version" %in% names(df)) {
-    stop("Data frame must have schema_version column")
-  }
+  assert_columns_exist(df, "schema_version", source_hint = "detect_row_schema()")
   
   schema_counts <- table(df$schema_version)
   names(sort(schema_counts, decreasing = TRUE))[1]
@@ -311,24 +320,32 @@ get_dominant_schema <- function(df) {
 
 
 # ------------------------------------------------------------------------------
-# Helper: Schema Distribution Summary
+# Helper: Get Schema Summary (consolidated function)
 # ------------------------------------------------------------------------------
-#' Summarize Schema Distribution
+#' Get Schema Summary Statistics
 #'
 #' @description
-#' Prints human-readable summary of schema versions in dataframe.
+#' Returns schema distribution as a data frame. Optionally prints
+#' human-readable summary to console.
 #'
 #' @param df Data frame with schema_version column
-#' @param verbose Logical: print detailed breakdown? Default TRUE
+#' @param verbose Logical. Print detailed breakdown? Default: FALSE
 #'
-#' @return Invisible data frame with schema counts
+#' @return Data frame with columns: schema_version, count, percent
+#'
+#' @section CONTRACT:
+#' - Returns data frame with schema counts and percentages
+#' - Optionally prints summary when verbose = TRUE
+#' - Warns if multiple schemas detected (when verbose = TRUE)
+#'
+#' @section DOES NOT:
+#' - Modify input data frame
+#' - Stop execution on any schema distribution
 #'
 #' @export
-summarize_schema_distribution <- function(df, verbose = TRUE) {
+get_schema_summary <- function(df, verbose = FALSE) {
   
-  if (!"schema_version" %in% names(df)) {
-    stop("Data frame must have schema_version column")
-  }
+  assert_columns_exist(df, "schema_version", source_hint = "detect_row_schema()")
   
   # Count schemas
   schema_counts <- as.data.frame(table(df$schema_version))
@@ -346,11 +363,11 @@ summarize_schema_distribution <- function(df, verbose = TRUE) {
     
     # Warn if multiple schemas detected
     if (nrow(schema_counts) > 1) {
-      message("  âš ï¸  Multiple schema versions detected in this file")
+      message("  [!] Multiple schema versions detected in this file")
     }
   }
   
-  invisible(schema_counts)
+  schema_counts
 }
 
 
@@ -365,6 +382,15 @@ summarize_schema_distribution <- function(df, verbose = TRUE) {
 #' @param df Data frame with schema_version column
 #'
 #' @return Logical: TRUE if all schemas detected, FALSE otherwise
+#'
+#' @section CONTRACT:
+#' - Returns TRUE if no unknown schemas
+#' - Returns FALSE and warns if unknown schemas found
+#' - Returns FALSE and warns if schema_version column missing
+#'
+#' @section DOES NOT:
+#' - Stop execution
+#' - Modify input data frame
 #'
 #' @export
 validate_schema_detection <- function(df) {
@@ -386,31 +412,4 @@ validate_schema_detection <- function(df) {
   }
   
   TRUE
-}
-
-
-# ------------------------------------------------------------------------------
-# Helper: Get Schema Summary (returns data, doesn't print)
-# ------------------------------------------------------------------------------
-#' Get Schema Summary Statistics
-#'
-#' @description
-#' Returns schema distribution as a data frame (non-printing version).
-#'
-#' @param df Data frame with schema_version column
-#'
-#' @return Data frame with columns: schema_version, count, percent
-#'
-#' @export
-get_schema_summary <- function(df) {
-  
-  if (!"schema_version" %in% names(df)) {
-    stop("Data frame must have schema_version column")
-  }
-  
-  schema_counts <- as.data.frame(table(df$schema_version))
-  names(schema_counts) <- c("schema_version", "count")
-  schema_counts$percent <- round(100 * schema_counts$count / nrow(df), 1)
-  
-  schema_counts
 }

@@ -1,5 +1,5 @@
 # ==============================================================================
-# MAINLINE WORKFLOW: 02_standardize.R
+# WORKFLOW 02: 02_standardize.R
 # ==============================================================================
 # PURPOSE
 # -------
@@ -16,11 +16,11 @@
 # WORKFLOW POSITION
 # -----------------
 # This is Workflow 02 in the processing pipeline:
-#   01_ingest_raw_data.R  → Load & intro-standardize raw CSVs (v1/v2/v3 detection)
-#   02_standardize.R      → [THIS SCRIPT] Transform to master schema
-#   03_generate_cpn_template.R → Generate CallsPerNight template
-#   04_finalize_cpn.R     → Process template & calculate metrics
-#   05_summary_stats.R    → Generate summary statistics and tables
+#   01_ingest_raw_data.R  -> Load & intro-standardize raw CSVs (v1/v2/v3 detection)
+#   02_standardize.R      -> [THIS SCRIPT] Transform to master schema
+#   03_generate_cpn_template.R -> Generate CallsPerNight template
+#   04_finalize_cpn.R     -> Process template & calculate metrics
+#   05_summary_stats.R    -> Generate summary statistics and tables
 #
 # INPUTS
 # ------
@@ -28,7 +28,7 @@
 #   - raw_combined (from Workflow 01, intro-standardized data)
 #
 # OR Checkpoint (fallback):
-#   - outputs/01_intro_standardized_YYYYMMDD_HHMMSS.csv
+#   - outputs/checkpoints/01_intro_standardized_YYYYMMDD_HHMMSS.csv
 #
 # Configuration Files:
 #   - inst/config/study_parameters.yaml (detector mappings, timezone)
@@ -58,37 +58,37 @@
 #   - Standardizes column names and data types
 #   - Uses standardize_kpro_schema() function
 #
-# Stage 2.3.5: Apply Detector Mapping to Data
+# Stage 2.4: Apply Detector Mapping
 #   - Joins detector_mapping to unified_data via detector_id
 #   - Adds Detector (friendly name) column to dataset
 #   - Validates all detectors were successfully mapped
 #   - Reports mapping summary with call counts per detector
 #
-# Stage 2.4: Time Conversions
+# Stage 2.5: Time Conversions
 #   - Loads user's timezone from study_parameters.yaml
 #   - Converts UTC timestamps to user's local time
 #   - Creates unified DateTime_local column (POSIXct)
 #   - Preserves original date/time columns for reference
 #   - Uses convert_datetime_to_local() with explicit timezone
 #
-# Stage 2.5: Schema Enforcement & Finalization
+# Stage 2.6: Schema Enforcement & Finalization
 #   - Validates all required master schema columns exist
 #   - Enforces correct data types (character, numeric, POSIXct)
 #   - Adds derived columns (Hour_local, Time_local from DateTime_local)
 #   - Removes unwanted columns from intro-standardization
 #   - Reorders columns to master schema layout
 #
-# Stage 2.6: Deduplication
+# Stage 2.7: Deduplication
 #   - Identifies duplicate rows (same Detector, DateTime_local, auto_id)
 #   - Removes duplicates keeping first occurrence
 #   - Logs number of duplicates removed
 #
-# Stage 2.7: Save Master File
+# Stage 2.8: Save Master File
 #   - Saves kpro_master with timestamp
 #   - Uses auto-timestamping: 02_kpro_master_YYYYMMDD_HHMMSS.csv
-#   - Writes to outputs/ directory
+#   - Writes to outputs/checkpoints/ directory
 #
-# Stage 2.8: Clean Workspace
+# Stage 2.9: Clean Workspace
 #   - Removes intermediate objects (raw_combined, unified_data, etc.)
 #   - Keeps only kpro_master in memory
 #   - Frees up memory for downstream workflows
@@ -96,7 +96,7 @@
 # OUTPUTS
 # -------
 # Files Created:
-#   - outputs/02_kpro_master_YYYYMMDD_HHMMSS.csv (timestamped checkpoint)
+#   - outputs/checkpoints/02_kpro_master_YYYYMMDD_HHMMSS.csv (timestamped checkpoint)
 #   - logs/workflow_log_YYYYMMDD.txt (processing log)
 #   - results/validation/validation_02_YYYYMMDD_HHMMSS.yaml (validation log)
 #   - results/validation/validation_02_YYYYMMDD_HHMMSS.html (validation report)
@@ -110,15 +110,15 @@
 #
 # DATA TRANSFORMATIONS APPLIED
 # -----------------------------
-# 1. Schema Unification (v1/v2/v3 → Master):
+# 1. Schema Unification (v1/v2/v3 -> Master):
 #    - v1: Basic schema (6 core columns)
 #    - v2: Extended schema (adds pulses, duration, etc.)
 #    - v3: Latest schema (adds manual_id column)
 #    - Master: Superset with all possible columns
 #
 # 2. Detector Mapping:
-#    - 16-character DetectorID → User-friendly Detector name
-#    - Example: "S4U11651_20241015" → "SMO"
+#    - 16-character DetectorID -> User-friendly Detector name
+#    - Example: "S4U11651_20241015" -> "SMO"
 #    - Preserves DetectorID in master for traceability
 #
 # 3. Timezone Conversion:
@@ -224,6 +224,7 @@
 #
 # CHANGELOG
 # ---------
+# 2026-01-20: Standards compliance refactor (here::here paths, print_stage_header, stage renumbering)
 # 2026-01-12: Enhanced validation tracking (schema_transform, timezone_conversion details)
 # 2026-01-12: Added validation context tracking and artifact registration (v2.1)
 # 2026-01-08: Updated appropriate callouts to datetime to datetime_local, along with time and hour
@@ -240,7 +241,7 @@
 # Load all functions
 # ------------------------------------------------------------------------------
 
-source("R/functions/load_all.R")
+source(here::here("R", "functions", "load_all.R"))
 
 # ------------------------------------------------------------------------------
 # Load required libraries
@@ -269,9 +270,7 @@ validation_context <- create_validation_context(
 # STAGE 2.1: LOAD DATA
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.1: Load Data                                  │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.1", "Load Data")
 
 # Load intro-standardized data (from memory or checkpoint)
 raw_combined <- load_intro_standardized()
@@ -297,9 +296,7 @@ n_rows_input <- nrow(raw_combined)
 # STAGE 2.2: DETECTOR MAPPING
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.2: Configure Detector Mapping                 │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.2", "Configure Detector Mapping")
 
 # Load study parameters (validates file exists)
 params <- require_study_parameters()
@@ -344,7 +341,7 @@ if (nrow(placeholders) > 0) {
     
     # Validate non-empty
     while (detector_name == "") {
-      message("      ⚠️  Name cannot be empty")
+      message("      [!] Name cannot be empty")
       detector_name <- trimws(readline("      Enter friendly name: "))
     }
     
@@ -352,7 +349,7 @@ if (nrow(placeholders) > 0) {
     detector_mapping$Detector[detector_mapping$detector_id == det_id] <- detector_name
   }
   
-  message("\n✓ All detectors mapped")
+  message("\n[OK] All detectors mapped")
   message(strrep("=", 80) %+% "\n")
   
   # Update YAML with new names
@@ -361,8 +358,8 @@ if (nrow(placeholders) > 0) {
     detector_mapping$detector_id
   )
   
-  save_study_parameters(params, "inst/config/study_parameters.yaml")
-  message("✓ Saved detector names to study_parameters.yaml")
+  save_study_parameters(params, here::here("inst", "config", "study_parameters.yaml"))
+  message("[OK] Saved detector names to study_parameters.yaml")
 }
 
 # ------------------------------------------------------------------------------
@@ -372,7 +369,7 @@ if (nrow(placeholders) > 0) {
 duplicate_names <- detector_mapping$Detector[duplicated(detector_mapping$Detector)]
 
 if (length(duplicate_names) > 0) {
-  message("\n❌ ERROR: Duplicate detector names found:")
+  message("\n[X] ERROR: Duplicate detector names found:")
   for (dup_name in unique(duplicate_names)) {
     dups <- detector_mapping %>% filter(Detector == dup_name)
     message(sprintf("  '%s' used for: %s", 
@@ -382,7 +379,7 @@ if (length(duplicate_names) > 0) {
   stop("Detector names must be unique. Please edit study_parameters.yaml manually.")
 }
 
-message("✓ No duplicate detector names found")
+message("[OK] No duplicate detector names found")
 
 log_message(sprintf("[Stage 2.2] Configured %d detector mappings", nrow(detector_mapping)))
 
@@ -390,9 +387,7 @@ log_message(sprintf("[Stage 2.2] Configured %d detector mappings", nrow(detector
 # STAGE 2.3: SCHEMA TRANSFORMATION
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.3: Transform to Unified Schema                │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.3", "Transform to Unified Schema")
 
 # Capture schema distribution before transformation
 schema_before <- table(raw_combined$schema_version)
@@ -403,7 +398,7 @@ message("\nTransforming all schemas to unified format...")
 # This should handle v1/v2/v3 transformation internally
 unified_data <- standardize_kpro_schema(raw_combined)
 
-message("✓ Schema transformation complete")
+message("[OK] Schema transformation complete")
 
 log_message("[Stage 2.3] Transformed schemas to unified format")
 
@@ -424,12 +419,10 @@ validation_context <- log_validation_event(
 
 
 # ==============================================================================
-# STAGE 2.3.5: APPLY DETECTOR MAPPING (NEW STAGE - CRITICAL FIX)
+# STAGE 2.4: APPLY DETECTOR MAPPING
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.3.5: Apply Detector Mapping to Data          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.4", "Apply Detector Mapping")
 
 message("Joining detector_mapping to unified_data...")
 
@@ -453,7 +446,7 @@ if (nrow(unmapped) > 0) {
   ))
 }
 
-message(sprintf("✓ Mapped %d detectors to friendly names", n_detectors_before))
+message(sprintf("[OK] Mapped %d detectors to friendly names", n_detectors_before))
 
 # Show mapping summary
 mapping_summary <- unified_data %>%
@@ -469,7 +462,7 @@ for (i in seq_len(nrow(mapping_summary))) {
                   format(mapping_summary$calls[i], big.mark = ",")))
 }
 
-log_message(sprintf("[Stage 2.3.5] Applied detector mapping: %d detectors", n_detectors_before))
+log_message(sprintf("[Stage 2.4] Applied detector mapping: %d detectors", n_detectors_before))
 
 # Log detector mapping with details
 validation_context <- log_validation_event(
@@ -487,12 +480,10 @@ validation_context <- log_validation_event(
 )
 
 # ==============================================================================
-# STAGE 2.4: TIME CONVERSIONS
+# STAGE 2.5: TIME CONVERSIONS
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.4: Time Conversions (UTC → Local Time)        │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.5", "Time Conversions (UTC -> Local)")
 
 # Load timezone from YAML configuration
 if (is.null(params$study_parameters$timezone)) {
@@ -511,10 +502,10 @@ unified_data <- convert_datetime_to_local(
   source_tz = "UTC"
 )
 
-message(sprintf("✓ Time conversion complete (UTC → %s)", user_timezone))
+message(sprintf("[OK] Time conversion complete (UTC -> %s)", user_timezone))
 message("  Created columns: DateTime_UTC, DateTime_local, Date_local, Time_local, Hour_local")
 
-log_message(sprintf("[Stage 2.4] Converted times to %s", user_timezone))
+log_message(sprintf("[Stage 2.5] Converted times to %s", user_timezone))
 
 # Log timezone conversion with date range details
 date_range_utc <- range(unified_data$DateTime_UTC, na.rm = TRUE)
@@ -537,12 +528,10 @@ validation_context <- log_validation_event(
 )
 
 # ==============================================================================
-# STAGE 2.5: SCHEMA ENFORCEMENT & FINALIZATION
+# STAGE 2.6: SCHEMA ENFORCEMENT & FINALIZATION
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.5: Enforce & Finalize Schema                  │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.6", "Enforce and Finalize Schema")
 
 # -------------------------
 # Enforce unified schema (validate required columns & types)
@@ -558,18 +547,16 @@ kpro_master <- enforce_unified_schema(unified_data)
 message("\nFinalizing master columns...")
 kpro_master <- finalize_master_columns(kpro_master)
 
-message("\n✓ Schema enforcement and finalization complete")
+message("\n[OK] Schema enforcement and finalization complete")
 
-log_message("[Stage 2.5] Enforced and finalized unified schema")
+log_message("[Stage 2.6] Enforced and finalized unified schema")
 
 
 # ==============================================================================
-# STAGE 2.6: DEDUPLICATION
+# STAGE 2.7: DEDUPLICATION
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.6: Remove Duplicates                          │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.7", "Remove Duplicates")
 
 # Check for duplicates
 dup_check <- check_duplicates(kpro_master)
@@ -585,8 +572,8 @@ n_after <- nrow(kpro_master)
 n_removed <- n_before - n_after
 
 if (n_removed > 0) {
-  message(sprintf("✓ Removed %s duplicate rows", format(n_removed, big.mark = ",")))
-  log_message(sprintf("[Stage 2.6] Removed %d duplicates", n_removed))
+  message(sprintf("[OK] Removed %s duplicate rows", format(n_removed, big.mark = ",")))
+  log_message(sprintf("[Stage 2.7] Removed %d duplicates", n_removed))
   
   # Log to validation context
   validation_context <- log_validation_event(
@@ -602,24 +589,22 @@ if (n_removed > 0) {
     )
   )
 } else {
-  message("✓ No duplicates found")
+  message("[OK] No duplicates found")
 }
 
 # ==============================================================================
-# STAGE 2.7: SAVE MASTER FILE
+# STAGE 2.8: SAVE MASTER FILE
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.7: Save Master File                           │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.8", "Save Master File")
 
 # Use existing save_master_with_timestamp() function
 master_file <- save_master_with_timestamp(kpro_master)
 
-message(sprintf("✓ Master file saved: %s", basename(master_file)))
+message(sprintf("[OK] Master file saved: %s", basename(master_file)))
 message(sprintf("  Final row count: %s", format(nrow(kpro_master), big.mark = ",")))
 
-log_message(sprintf("[Stage 2.7] Saved kpro_master: %s rows", nrow(kpro_master)))
+log_message(sprintf("[Stage 2.8] Saved kpro_master: %s rows", nrow(kpro_master)))
 
 # ------------------------------------------------------------------------------
 # Register artifact and finalize validation
@@ -648,7 +633,7 @@ registry <- register_artifact(
   )
 )
 
-message("✓ Artifact registered in registry")
+message("[OK] Artifact registered in registry")
 
 # Finalize validation context
 validation_context$summary$rows_processed <- nrow(kpro_master)
@@ -657,7 +642,7 @@ validation_context$summary$rows_processed <- nrow(kpro_master)
 validation_context <- log_validation_event(
   validation_context,
   event_type = "rows_processed",
-  description = sprintf("Pipeline complete: %d input → %d output", n_rows_input, nrow(kpro_master)),
+  description = sprintf("Pipeline complete: %d input -> %d output", n_rows_input, nrow(kpro_master)),
   count = nrow(kpro_master),
   details = list(
     rows_input = n_rows_input,
@@ -674,12 +659,10 @@ validation_report_path <- finalize_validation_report(
 log_message(sprintf("[Workflow 02] Validation report: %s", basename(validation_report_path)))
 
 # ==============================================================================
-# STAGE 2.8: CLEAN WORKSPACE
+# STAGE 2.9: CLEAN WORKSPACE
 # ==============================================================================
 
-message("\n┌─────────────────────────────────────────────────────────────────┐")
-message("│          STAGE 2.8: Clean Workspace                            │")
-message("└─────────────────────────────────────────────────────────────────┘\n")
+print_stage_header("2.9", "Clean Workspace")
 
 # Remove intermediate objects
 if (exists("raw_combined")) {
@@ -697,24 +680,24 @@ if (exists("detector_mapping")) {
   message("  Removed detector_mapping")
 }
 
-message("✓ Workspace cleaned")
+message("[OK] Workspace cleaned")
 
 # ==============================================================================
-# STAGE 2 COMPLETE
+# WORKFLOW 02 COMPLETE
 # ==============================================================================
 
-message("\n╔═══════════════════════════════════════════════════════════════╗")
-message("║          STAGE 2 COMPLETE: Master Schema Created               ║")
-message("╚═══════════════════════════════════════════════════════════════╝")
+message("\n========================================")
+message("  WORKFLOW 02 COMPLETE: Master Schema Created")
+message("========================================\n")
 
-message("\nTransformations applied:")
-message("  ✓ DetectorID → Detector mapping")
-message("  ✓ Schema unification (v1/v2/v3 → master)")
-message(sprintf("  ✓ UTC → %s time conversion", user_timezone))
-message("  ✓ DateTime_local column created")
-message("  ✓ Master schema enforced")
-message("  ✓ Duplicates removed")
-message(sprintf("  ✓ Saved: %s", basename(master_file)))
+message("Transformations applied:")
+message("  [OK] DetectorID -> Detector mapping")
+message("  [OK] Schema unification (v1/v2/v3 -> master)")
+message(sprintf("  [OK] UTC -> %s time conversion", user_timezone))
+message("  [OK] DateTime_local column created")
+message("  [OK] Master schema enforced")
+message("  [OK] Duplicates removed")
+message(sprintf("  [OK] Saved: %s", basename(master_file)))
 
 message(sprintf("\nFinal dataset: %s rows", format(nrow(kpro_master), big.mark = ",")))
 
@@ -732,13 +715,13 @@ for (i in seq_len(nrow(detector_summary))) {
 }
 
 message("\n========================================")
-message("✓ Workflow 02 Complete")
+message("[OK] Workflow 02 Complete")
 message("========================================")
 
 message("\nCurrent data in environment:")
-message("  • kpro_master (ready for analysis)")
-message(sprintf("  • Checkpoint: %s", basename(master_file)))
-message(sprintf("  • Validation report: %s", basename(validation_report_path)))
+message("  - kpro_master (ready for analysis)")
+message(sprintf("  - Checkpoint: %s", basename(master_file)))
+message(sprintf("  - Validation report: %s", basename(validation_report_path)))
 
 message("\nTo inspect data:")
 message("  head(kpro_master)")
