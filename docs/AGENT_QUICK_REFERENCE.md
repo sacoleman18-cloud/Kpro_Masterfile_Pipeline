@@ -41,6 +41,14 @@
 "Make validation error messages more user-friendly"
 ```
 
+### Standards Enforcement ⭐ NEW
+```
+"Audit R/functions/output/ against CODING_STANDARDS section 3"
+"Fix all hardcoded paths per standard 8.1"
+"Check if my changes comply with the Code Review Checklist"
+"Create a new function following all standards from Appendix B"
+```
+
 ---
 
 ## ✅ What Agent CAN Do
@@ -55,6 +63,7 @@
 - ✅ Analyze codebase
 - ✅ Update configurations
 - ✅ Generate reports
+- ✅ **Enforce coding standards and audit compliance**
 
 ---
 
@@ -90,12 +99,38 @@
 | **Improve Docs** | "Add examples to the function documentation in utilities.R" |
 | **Optimize Code** | "Speed up the masterfile loading in Workflow 02" |
 | **Add Tests** | "Create tests for the datetime conversion functions" |
+| **Audit Standards** ⭐ | "Audit R/02_standardize.R against CODING_STANDARDS section 3" |
+| **Fix Violations** ⭐ | "Fix all hardcoded paths per standard 8.1" |
 
 ---
 
 ## 🔍 Need More Detail?
 
-See the full [AGENT_CAPABILITIES.md](AGENT_CAPABILITIES.md) for comprehensive documentation.
+See the full documentation:
+- 📖 [**AGENT_CAPABILITIES.md**](AGENT_CAPABILITIES.md) - Comprehensive guide
+- 📋 [**AGENT_STANDARDS_ENFORCEMENT.md**](AGENT_STANDARDS_ENFORCEMENT.md) - Using the agent with your 10+ standards documents
+
+---
+
+## ⭐ Working with Your Standards Documents
+
+Your repository has **10+ comprehensive standards documents**:
+- CODING_STANDARDS_v2.1.md (2,491 lines, 18 sections)
+- YAML_PARAMETER_GUIDE.md (77KB)
+- DIRECTORY_STRUCTURE_GUIDE.md.pdf
+- Plus project documentation
+
+The agent can **read and enforce** these standards:
+- ✅ Audit code for compliance
+- ✅ Auto-fix violations
+- ✅ Generate standards-compliant code
+- ✅ Review changes against standards
+- ✅ Create compliance reports
+
+**Example:**
+> "Audit all functions in R/functions/output/ against CODING_STANDARDS sections 3 (Code Design), 7 (Quarto Integration), and 17.2 (Plot Functions). Generate a compliance report."
+
+See [AGENT_STANDARDS_ENFORCEMENT.md](AGENT_STANDARDS_ENFORCEMENT.md) for details!
 
 ---
 

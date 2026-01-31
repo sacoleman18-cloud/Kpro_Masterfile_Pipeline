@@ -432,6 +432,7 @@ This repository is optimized for use with the **GitHub Copilot Coding Agent**, a
 **New to the agent?** See these guides:
 - 📖 [**AGENT_CAPABILITIES.md**](docs/AGENT_CAPABILITIES.md) - Comprehensive guide to what the agent can do
 - ⚡ [**AGENT_QUICK_REFERENCE.md**](docs/AGENT_QUICK_REFERENCE.md) - Quick reference with examples
+- 📋 [**AGENT_STANDARDS_ENFORCEMENT.md**](docs/AGENT_STANDARDS_ENFORCEMENT.md) - Using the agent with your 10+ standards documents
 
 **Example requests you can make:**
 - "Add validation to check for negative recording hours"
@@ -439,6 +440,8 @@ This repository is optimized for use with the **GitHub Copilot Coding Agent**, a
 - "Optimize the CSV ingestion for large datasets"
 - "Add unit tests for schema detection functions"
 - "Update documentation with installation instructions"
+- "Audit R/functions/output/ against CODING_STANDARDS section 3"
+- "Refactor this function to follow all applicable standards"
 
 The agent can help with:
 - ✅ Code modifications and bug fixes
@@ -447,6 +450,7 @@ The agent can help with:
 - ✅ Testing and validation
 - ✅ Documentation updates
 - ✅ Code refactoring
+- ✅ **Standards enforcement and compliance auditing**
 
 Just describe what you need, and the agent will implement it autonomously!
 
