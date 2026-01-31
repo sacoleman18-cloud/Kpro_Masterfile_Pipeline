@@ -1,0 +1,35 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# R source files
+*.R text
+*.r text
+*.Rmd text
+*.rmd text
+*.qmd text
+
+# Data files (binary)
+*.RData binary
+*.rda binary
+*.rds binary
+
+# Documentation
+*.md text
+*.Rproj text
+*.yaml text
+*.yml text
+
+# Config files
+.gitignore text
+.gitattributes text
+
+# Graphics (binary)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text
+
+# Archives (binary)
+*.zip binary
+*.tar.gz binary

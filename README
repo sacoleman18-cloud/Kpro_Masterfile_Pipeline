@@ -1,94 +1,48 @@
-# KPro Master File Creation Pipeline
+# KPro Masterfile Pipeline
 
-A robust, modular R workflow for aggregating Kaleidoscope Pro `id.csv` outputs into a single, clean MASTER dataset ready for ecological analysis or manual vetting.
-
-This pipeline supports:
-
-- Recursive ingestion of raw KPro output files from directories (including subdirectories)
-- Column normalization across different KPro versions
-- Date-time parsing with UTC → CST conversion
-- Noise filtering (removes rows with `n = 0`, unwanted species, or blanks → `NA`)
-- Optional appending of previously generated MASTER files
-- Export of clean, analysis-ready CSVs
+> **⚠️ DEPRECATED QUICKSTART GUIDE**  
+> This file contains the original quickstart documentation for version 1.x of the pipeline.  
+> **For current documentation, see [README.md](README.md)**
 
 ---
 
-## Table of Contents
+**Current Version:** 2.1.0  
+**Status:** This legacy README is preserved for historical reference only.
 
-1. [Project Structure](#project-structure)  
-2. [Installation & Dependencies](#installation--dependencies)  
-3. [Usage](#usage)  
-4. [Workflow Overview](#workflow-overview)  
-5. [Optional: Appending Previous MASTER Files](#optional-appending-previous-master-files)  
-6. [Output Files](#output-files)  
-7. [Validation & Checks](#validation--checks)  
-8. [License](#license)
+The pipeline has evolved significantly since this documentation was written:
+- Now supports 7 distinct workflows (was 2)
+- Added comprehensive configuration system (YAML)
+- Full Quarto reporting with pre-computed artifacts
+- Detector mapping and timezone conversion
+- Complete test suite and standards documentation
+
+## Migration Guide
+
+If you're upgrading from version 1.x:
+
+1. Review the new architecture in [README.md](README.md)
+2. Check configuration requirements in `inst/config/YAML_PARAMETER_GUIDE.md`
+3. Review workflow documentation in `docs/01_architecture_standards.md`
+4. See `docs/QUICKSTART.md` for updated usage instructions (if available)
 
 ---
 
-## Project Structure
-```
-R/
-├─ 01_build_kpro_master.R # Main pipeline: raw files → MASTER
-├─ 02_append_previous_masters.R # Optional workflow to append old MASTER files
-data/
-├─ raw/ # Raw Kaleidoscope outputs (id.csv)
-├─ master/ # Previously built MASTER CSVs (optional)
-output/
-├─ MASTER_NoNoise_TIMESTAMP.csv
-└─ MASTER_NoNoise_NoID_TIMESTAMP.csv
-```
+## Original v1.x Documentation (ARCHIVED)
 
-**Folder Descriptions:**
+### Basic Usage (v1.x only)
 
-- `R/` : Contains all R scripts for building and cleaning the MASTER file.  
-- `data/raw/` : Store raw Kaleidoscope Pro output files here.  
-- `data/master/` : Optional folder for previously built MASTER files.  
-- `output/` : Location for all exported MASTER CSVs.
+1. Place raw Kaleidoscope Pro outputs (`id.csv`) in `data/raw/`
+2. Run: `source("R/01_build_kpro_master.R")`
+3. (Optional) Run: `source("R/02_append_previous_masters.R")`
+4. Output files saved to `output/` folder
 
-## Installation & Dependencies
-
-This pipeline requires **R 4.0+** and the following packages:
+### Dependencies (v1.x)
 
 ```r
-install.packages(c(
-  "tidyverse",   # data manipulation & CSV reading
-  "lubridate",   # date-time parsing
-  "janitor"      # clean column names
-))
-```
-- The pipeline will recursively read all `id.csv` files, clean and normalize them, and produce a `kpro` tibble.  
-
-3. **Optional:** Append previous MASTER files:
-
-```r
-source("R/02_append_previous_masters.R")
+install.packages(c("tidyverse", "lubridate", "janitor"))
 ```
 
-4. **After running**, the clean MASTER files will be saved in the `output/` folder.
-
-## Usage
-
-1. **Place your raw Kaleidoscope Pro outputs** (`id.csv`) in a directory (and subdirectories if desired).  
-
-2. **Run the main pipeline**:
-
-```r
-source("R/01_build_kpro_master.R")
-```
-
-- The pipeline will recursively read all `id.csv` files, clean and normalize them, and produce a kpro tibble.  
-
-3. **Optional:** Append previous MASTER files:
-
-```r
-source("R/02_append_previous_masters.R")
-```
-
-- You will be prompted to select one or more previous MASTER CSVs.  
-- The script will clean, normalize, and merge them with the current kpro tibble.  
-
-4. **After running**, the clean MASTER files will be saved in the output/ folder.
+**Note:** v2.x has expanded dependencies. See `DESCRIPTION` file for current requirements.
 
 ## Workflow Overview
 
