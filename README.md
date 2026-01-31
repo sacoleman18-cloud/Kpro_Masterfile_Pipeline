@@ -416,10 +416,42 @@ project_root/
 │   └── bat_activity_report.qmd  # Quarto template
 ├── logs/                    # Pipeline and error logs
 └── docs/                    # Project documentation
+    ├── AGENT_CAPABILITIES.md       # What the GitHub Copilot Agent can do
+    ├── AGENT_QUICK_REFERENCE.md    # Quick reference for agent tasks
+    └── [other documentation files]
 ```
 
 ---
 
-## 12. License & Attribution
+## 12. GitHub Copilot Agent Assistance
+
+This repository is optimized for use with the **GitHub Copilot Coding Agent**, an AI-powered development assistant that can autonomously modify, test, and improve the pipeline code.
+
+### Quick Start with the Agent
+
+**New to the agent?** See these guides:
+- 📖 [**AGENT_CAPABILITIES.md**](docs/AGENT_CAPABILITIES.md) - Comprehensive guide to what the agent can do
+- ⚡ [**AGENT_QUICK_REFERENCE.md**](docs/AGENT_QUICK_REFERENCE.md) - Quick reference with examples
+
+**Example requests you can make:**
+- "Add validation to check for negative recording hours"
+- "Create a plot showing species activity by lunar phase"
+- "Optimize the CSV ingestion for large datasets"
+- "Add unit tests for schema detection functions"
+- "Update documentation with installation instructions"
+
+The agent can help with:
+- ✅ Code modifications and bug fixes
+- ✅ Adding new features and plots
+- ✅ Performance optimization
+- ✅ Testing and validation
+- ✅ Documentation updates
+- ✅ Code refactoring
+
+Just describe what you need, and the agent will implement it autonomously!
+
+---
+
+## 13. License & Attribution
 
 See `README.md` for license information and citation guidance.
