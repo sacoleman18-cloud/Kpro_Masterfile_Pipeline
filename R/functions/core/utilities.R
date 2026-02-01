@@ -1110,6 +1110,373 @@ print_pipeline_complete <- function(outputs, next_steps, report_path, width = 65
 
 
 # ==============================================================================
+# ORCHESTRATOR UTILITIES (Added 2026-02-01)
+# ==============================================================================
+# Purpose: Consolidate common patterns in run_* orchestrating functions
+# Per CODE_EFFICIENCY_ANALYSIS.md and standards documents
+
+
+#' Setup Pipeline Context
+#'
+#' @description
+#' Consolidates the standard initialization pattern used by all orchestrating
+#' functions: load YAML config, create validation context, set up paths.
+#' Reduces ~20 lines of boilerplate per orchestrator.
+#'
+#' @param workflow_name Character. Workflow identifier (e.g., "ingest", 
+#'   "cpn_template", "finalize")
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return Named list with:
+#'   \describe{
+#'     \item{yaml_path}{Path to study_parameters.yaml}
+#'     \item{study_params}{Loaded study parameters list}
+#'     \item{validation_context}{Initialized validation tracking context}
+#'     \item{checkpoint_dir}{Path to checkpoints directory}
+#'     \item{outputs_dir}{Path to outputs directory}
+#'   }
+#'
+#' @section CONTRACT:
+#' - Asserts YAML exists before loading
+#' - Creates validation context with study_name
+#' - Returns all paths using here::here()
+#' - Silent by default (verbose = FALSE)
+#'
+#' @section DOES NOT:
+#' - Load any data files
+#' - Modify YAML configuration
+#' - Create directories (just returns paths)
+#'
+#' @examples
+#' \dontrun{
+#' ctx <- setup_pipeline_context("ingest", verbose = TRUE)
+#' study_params <- ctx$study_params
+#' validation_context <- ctx$validation_context
+#' }
+#'
+#' @export
+setup_pipeline_context <- function(workflow_name, verbose = FALSE) {
+  
+  if (verbose) message("  Setting up pipeline context...")
+  
+  # Standard paths
+  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
+  checkpoint_dir <- here::here("outputs", "checkpoints")
+  outputs_dir <- here::here("outputs")
+  
+  # Assert YAML exists
+  if (!file.exists(yaml_path)) {
+    stop(sprintf(
+      "Configuration file not found: %s\n  Configure study parameters in Shiny app first.",
+      yaml_path
+    ))
+  }
+  
+  # Load configuration (requires load_study_parameters from config.R)
+  study_params <- load_study_parameters(yaml_path)
+  
+  # Create validation context (requires create_validation_context from validation.R)
+  validation_context <- create_validation_context(workflow = workflow_name)
+  validation_context$study_name <- study_params$study_parameters$study_name
+  
+  if (verbose) message("  [OK] Context initialized")
+  
+  list(
+    yaml_path = yaml_path,
+    study_params = study_params,
+    validation_context = validation_context,
+    checkpoint_dir = checkpoint_dir,
+    outputs_dir = outputs_dir
+  )
+}
+
+
+#' Load Most Recent Checkpoint
+#'
+#' @description
+#' Discovers and loads the most recent checkpoint file matching a pattern.
+#' Consolidates the checkpoint discovery pattern used across orchestrators.
+#' Reduces ~15 lines of boilerplate per usage.
+#'
+#' @param pattern Character. Regex pattern for filename matching (e.g.,
+#'   "02_kpro_master_.*\\.csv$")
+#' @param checkpoint_dir Character. Directory to search. Default: "outputs/checkpoints"
+#' @param error_hint Character. Hint to include in error message if no files found.
+#'   Default: "Run previous chunk first"
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return Tibble loaded from most recent checkpoint file
+#'
+#' @section CONTRACT:
+#' - Searches checkpoint_dir using pattern
+#' - Selects most recent file (last in sorted list)
+#' - Loads using safe_read_csv()
+#' - Stops with helpful error if no files found
+#'
+#' @section DOES NOT:
+#' - Validate data structure
+#' - Modify loaded data
+#' - Create checkpoint directory
+#'
+#' @examples
+#' \dontrun{
+#' kpro_master <- load_most_recent_checkpoint(
+#'   pattern = "02_kpro_master_.*\\.csv$",
+#'   error_hint = "Run Chunk 1 first"
+#' )
+#' }
+#'
+#' @export
+load_most_recent_checkpoint <- function(pattern,
+                                        checkpoint_dir = NULL,
+                                        error_hint = "Run previous chunk first",
+                                        verbose = FALSE) {
+  
+  # Use default checkpoint directory if not provided
+  checkpoint_dir <- checkpoint_dir %||% here::here("outputs", "checkpoints")
+  
+  # Assert directory exists
+  if (!dir.exists(checkpoint_dir)) {
+    stop(sprintf(
+      "Checkpoint directory not found: %s\n  %s",
+      checkpoint_dir, error_hint
+    ))
+  }
+  
+  # Find matching files
+  files <- list.files(checkpoint_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(files) == 0) {
+    stop(sprintf(
+      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  %s",
+      pattern, checkpoint_dir, error_hint
+    ))
+  }
+  
+  # Get most recent (last in sorted list)
+  most_recent <- files[length(files)]
+  
+  if (verbose) {
+    message(sprintf("  [OK] Loading checkpoint: %s", basename(most_recent)))
+  }
+  
+  # Load using safe_read_csv
+  safe_read_csv(most_recent)
+}
+
+
+#' Generate Timestamped Filename
+#'
+#' @description
+#' Generates a filename with embedded timestamp. Consolidates the timestamp
+#' generation pattern used for checkpoints and artifacts. Reduces ~5 lines
+#' of boilerplate per usage.
+#'
+#' @param prefix Character. Filename prefix (e.g., "02_kpro_master")
+#' @param suffix Character. Optional suffix before extension (e.g., "ORIGINAL").
+#'   Default: ""
+#' @param extension Character. File extension including dot (e.g., ".csv").
+#'   Default: ".csv"
+#' @param format Character. strftime format string. Default: "%Y%m%d_%H%M%S"
+#' @param separator Character. Separator between parts. Default: "_"
+#'
+#' @return Character. Formatted filename string
+#'
+#' @section CONTRACT:
+#' - Generates timestamp using Sys.time()
+#' - Concatenates parts with separator
+#' - Omits empty parts (prefix, suffix)
+#' - Always includes extension
+#'
+#' @section DOES NOT:
+#' - Create any files
+#' - Validate prefix/suffix content
+#' - Check for existing files
+#'
+#' @examples
+#' \dontrun{
+#' # Basic checkpoint
+#' generate_timestamped_filename("02_kpro_master")
+#' # Returns: "02_kpro_master_20260201_143022.csv"
+#'
+#' # With suffix
+#' generate_timestamped_filename("03_CPN_Template", suffix = "ORIGINAL")
+#' # Returns: "03_CPN_Template_20260201_143022_ORIGINAL.csv"
+#'
+#' # Artifact ID (no extension)
+#' generate_timestamped_filename("artifact_id", extension = "")
+#' # Returns: "artifact_id_20260201_143022"
+#' }
+#'
+#' @export
+generate_timestamped_filename <- function(prefix,
+                                           suffix = "",
+                                           extension = ".csv",
+                                           format = "%Y%m%d_%H%M%S",
+                                           separator = "_") {
+  
+  # Generate timestamp
+  timestamp <- format(Sys.time(), format)
+  
+  # Build parts list
+  parts <- c(prefix, timestamp)
+  
+  # Add suffix if provided
+  if (!is.null(suffix) && nchar(suffix) > 0) {
+    parts <- c(parts, suffix)
+  }
+  
+  # Combine with separator
+  base_name <- paste(parts, collapse = separator)
+  
+  # Add extension
+  paste0(base_name, extension)
+}
+
+
+#' Get Schedule Configuration
+#'
+#' @description
+#' Extracts and normalizes schedule configuration from study_parameters.
+#' Consolidates the parameter extraction pattern used in multiple orchestrators.
+#' Handles both boolean and string values for advanced_scheduling.
+#' Reduces ~15 lines of boilerplate per usage.
+#'
+#' @param study_params List. Study parameters from load_study_parameters()
+#' @param defaults List. Default values if not in YAML. Default provides
+#'   standard bat study times.
+#'
+#' @return Named list with:
+#'   \describe{
+#'     \item{recording_start}{Character. Start time (e.g., "18:00:00")}
+#'     \item{recording_end}{Character. End time (e.g., "07:00:00")}
+#'     \item{advanced_scheduling}{Logical. TRUE for custom, FALSE for uniform}
+#'     \item{intended_hours}{Numeric. Expected recording duration}
+#'   }
+#'
+#' @section CONTRACT:
+#' - Normalizes advanced_scheduling to logical (handles TRUE/FALSE/"yes"/"no")
+#' - Provides sensible defaults for bat studies
+#' - Always returns complete list
+#'
+#' @section DOES NOT:
+#' - Validate time format
+#' - Modify study_params
+#' - Check if times are reasonable
+#'
+#' @examples
+#' \dontrun{
+#' study_params <- load_study_parameters()
+#' schedule <- get_schedule_config(study_params)
+#' 
+#' recording_start <- schedule$recording_start
+#' is_advanced <- schedule$advanced_scheduling
+#' }
+#'
+#' @export
+get_schedule_config <- function(study_params,
+                                 defaults = list(
+                                   recording_start = "18:00:00",
+                                   recording_end = "07:00:00",
+                                   advanced_scheduling = FALSE,
+                                   intended_hours = 13
+                                 )) {
+  
+  # Extract processing options
+  opts <- study_params$processing_options
+  
+  # Get values with defaults
+  recording_start <- opts$recording_start %||% defaults$recording_start
+  recording_end <- opts$recording_end %||% defaults$recording_end
+  intended_hours <- opts$intended_hours %||% defaults$intended_hours
+  
+  # Normalize advanced_scheduling to logical
+  advanced_raw <- opts$advanced_scheduling %||% defaults$advanced_scheduling
+  
+  advanced_scheduling <- if (is.logical(advanced_raw)) {
+    advanced_raw
+  } else if (is.character(advanced_raw)) {
+    tolower(advanced_raw) %in% c("yes", "true", "1")
+  } else {
+    FALSE
+  }
+  
+  list(
+    recording_start = recording_start,
+    recording_end = recording_end,
+    advanced_scheduling = advanced_scheduling,
+    intended_hours = intended_hours
+  )
+}
+
+
+#' Create Unified Species Column
+#'
+#' @description
+#' Creates a unified species column with priority: manual_id > auto_id > "NoID".
+#' Consolidates the species unification logic used in multiple orchestrators.
+#' Filters out unidentifiable values. Reduces ~15 lines of boilerplate per usage.
+#'
+#' @param data Data frame. Must contain auto_id column at minimum
+#' @param manual_col Character. Name of manual ID column. Default: "manual_id"
+#' @param auto_col Character. Name of auto ID column. Default: "auto_id"
+#' @param output_col Character. Name for output column. Default: "species"
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return Data frame with unified species column added
+#'
+#' @section CONTRACT:
+#' - Priority: manual_id > auto_id > "NoID"
+#' - Treats NA, "", "NoID", "UNKNOWN" as unidentifiable
+#' - Adds output_col to data frame
+#' - Does not modify input data frame (returns new one)
+#'
+#' @section DOES NOT:
+#' - Remove rows (just marks as "NoID")
+#' - Modify existing columns
+#' - Validate species names
+#'
+#' @examples
+#' \dontrun{
+#' kpro_master <- create_unified_species_column(kpro_master)
+#' 
+#' # Now has 'species' column with priority logic applied
+#' }
+#'
+#' @export
+create_unified_species_column <- function(data,
+                                           manual_col = "manual_id",
+                                           auto_col = "auto_id",
+                                           output_col = "species",
+                                           verbose = FALSE) {
+  
+  if (verbose) message("  Creating unified species column...")
+  
+  # Helper to check if value is valid
+  is_valid <- function(x) {
+    !is.na(x) & x != "" & x != "NoID" & x != "UNKNOWN"
+  }
+  
+  # Build species column with priority logic
+  data <- data %>%
+    dplyr::mutate(
+      !!output_col := dplyr::case_when(
+        # Priority 1: manual_id if column exists and valid
+        manual_col %in% names(.) & is_valid(.data[[manual_col]]) ~ .data[[manual_col]],
+        # Priority 2: auto_id if valid
+        auto_col %in% names(.) & is_valid(.data[[auto_col]]) ~ .data[[auto_col]],
+        # Fallback: NoID
+        TRUE ~ "NoID"
+      )
+    )
+  
+  if (verbose) message("  [OK] Unified species column created")
+  
+  data
+}
+
+
+# ==============================================================================
 # OPERATORS
 # ==============================================================================
 
