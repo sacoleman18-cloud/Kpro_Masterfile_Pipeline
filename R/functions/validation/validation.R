@@ -775,23 +775,6 @@ validate_master_data <- function(master_data) {
 #' }
 #'
 #' @export
-require_study_parameters <- function(yaml_path = "inst/config/study_parameters.yaml") {
-  
-  assert_file_exists(
-    yaml_path,
-    hint = "Run 01_ingest_raw_data.R to create study_parameters.yaml"
-  )
-  
-  params <- load_study_parameters(yaml_path)
-  
-  if (is.null(params)) {
-    stop("Failed to load study_parameters.yaml")
-  }
-  
-  params
-}
-
-
 # ==============================================================================
 # SCHEMA ENFORCEMENT
 # ==============================================================================

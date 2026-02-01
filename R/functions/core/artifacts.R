@@ -416,22 +416,6 @@ hash_file <- function(file_path) {
 #' - Handle NA values specially in sorting
 #'
 #' @export
-hash_dataframe <- function(df, sort_by = NULL) {
-  
-  if (!is.data.frame(df)) {
-    stop("Input must be a data frame")
-  }
-  
-  # Sort for deterministic order
-  if (!is.null(sort_by)) {
-    df <- df[do.call(order, df[sort_by]), ]
-  }
-  
-  # Hash the serialized content
-  digest::digest(df, algo = "sha256")
-}
-
-
 #' Verify Artifact Integrity
 #'
 #' @description
