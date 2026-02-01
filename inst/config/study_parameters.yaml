@@ -20,7 +20,7 @@ study_parameters:
     remove_zero_pulse_calls: true
     remove_duplicates: true
 processing_options:
-  advanced_scheduling: no
+  advanced_scheduling: TRUE
   recording_start: '18:00:00'
   recording_end: '07:00:00'
   intended_hours: 13

@@ -1,11 +1,11 @@
 # =============================================================================
-# core/config.R – STUDY CONFIGURATION MANAGEMENT (LOCKED CONTRACT)
+# core/config.R - STUDY CONFIGURATION MANAGEMENT (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
 # Manages study_parameters.yaml configuration file with automatic reconciliation
-# of detector mappings. Ensures YAML stays synchronized with actual data while
-# preserving user-entered detector names.
+# of detector mappings. YAML is generated deterministically by Shiny app, so no
+# format normalization is needed - just read/write operations.
 #
 # CONFIGURATION CONTRACT
 # ----------------------
@@ -32,14 +32,15 @@
 #    - Suggests study dates from actual data range
 #    - Provides standard processing options
 #
-# 5. External data sources (NEW)
-#    - Handles both YAML parsing formats (list and character vector)
-#    - Provides helper functions to normalize format
-#    - Validates paths are provided but not existence
+# 5. Shiny integration
+#    - Assumes YAML written by Shiny app (deterministic format)
+#    - No normalization of boolean/string/list formats needed
+#    - Direct field access without type coercion
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
+#   - Normalize YAML formats (Shiny writes deterministically)
 #   - Prompt users for detector names (handled in workflow scripts)
 #   - Check for placeholder vs real names (workflow validation)
 #   - Check for duplicate detector names (workflow validation)
@@ -55,260 +56,51 @@
 # CONTENTS
 # --------
 # Core functions:
-#   - load_study_parameters()      # Read YAML, return list or NULL
-#   - save_study_parameters()      # Write list to YAML
-#   - build_study_config()         # Construct config list with defaults
-#   - validate_study_config()      # Ensure required structure exists
+#   - load_study_parameters()        # Read YAML, return list or NULL
+#   - save_study_parameters()        # Write list to YAML
+#   - build_study_config()           # Construct config list with defaults
+#   - validate_study_config()        # Ensure required structure exists
 #
 # Reconciliation functions:
-#   - reconcile_detector_mapping() # Merge current IDs with existing names
-#   - ensure_study_parameters()    # One-call setup/reconciliation
-#
-# Helper functions:
-#   - get_external_sources()       # Normalize external data sources to character vector
+#   - reconcile_detector_mapping()   # Merge current IDs with existing names
+#   - ensure_study_parameters()      # One-call setup/reconciliation
 #
 # USAGE EXAMPLE
 # -------------
-# # In workflow script 01:
-# ensure_study_parameters(raw_combined, "inst/config/study_parameters.yaml")
+# # Shiny app creates/updates YAML:
+# cfg <- build_study_config(
+#   study_name = input$study_name,
+#   start_date = as.character(input$start_date),
+#   detector_mapping = detected_ids,
+#   processing_options = list(
+#     advanced_scheduling = input$advanced_scheduling,  # TRUE/FALSE
+#     recording_start = input$recording_start           # "HH:MM:SS"
+#   )
+# )
+# save_study_parameters(cfg)
 #
-# # Result: YAML exists, all detector IDs mapped (some with placeholders)
-#
-# # In workflow script 02:
-# params <- load_study_parameters("inst/config/study_parameters.yaml")
-# timezone <- params$study_parameters$timezone
-# external_sources <- get_external_sources(params)
-# # Prompt user for any placeholder names
-# # Validate no duplicates
-# # Apply mapping
+# # Orchestrating functions read YAML directly:
+# params <- load_study_parameters()
+# is_advanced <- params$processing_options$advanced_scheduling  # Direct access
+# rec_start <- params$processing_options$recording_start        # Direct access
 #
 # CHANGELOG
 # ---------
-# 2024-12-27: Added external_data_sources support with dual-format handling
-# 2024-12-27: Added get_external_sources() helper to normalize YAML formats
-# 2024-12-27: Updated validate_study_config() to accept both list and character vector
+# 2026-01-31: Simplified for Shiny integration
+#             - Removed get_advanced_scheduling() (not needed)
+#             - Removed get_external_sources() (not needed)
+#             - Removed internal normalization helpers
+#             - Assumes deterministic YAML format from Shiny
+#             - Direct field access without type coercion
+# 2024-12-27: Added external_data_sources support
+# 2024-12-27: Added YAML format normalization helpers
 #
 # =============================================================================
 
 
-# ------------------------------------------------------------------------------
-# Core Function: Build Study Configuration
-# ------------------------------------------------------------------------------
-
-#' Build Study Configuration List
-#'
-#' @description
-#' Constructs a complete study configuration list with all required sections
-#' and default values. This list can be written to YAML via save_study_parameters().
-#'
-#' @param study_name Character string for study name
-#' @param start_date Study start date (Date or character YYYY-MM-DD)
-#' @param end_date Study end date (Date or character YYYY-MM-DD)
-#' @param timezone Character string for study location timezone (default: "America/Chicago")
-#' @param detector_mapping Named character vector (detector_id = detector_name)
-#' @param external_data_sources Character vector or list of external data source paths (default: empty list)
-#' @param processing_options Optional list to override default processing options
-#' @param output_preferences Optional list to override default output preferences
-#'
-#' @return Named list with complete configuration structure
-#'
-#' @details
-#' **External data sources format:**
-#' Can be provided as either:
-#' - Character vector: c("F:/Data1", "E:/Data2")
-#' - List: list("F:/Data1", "E:/Data2")
-#' 
-#' Both formats will be written to YAML correctly and can be read back as either format.
-#'
-#' @section CONTRACT:
-#' - Always includes config_version = 1
-#' - Merges user options with defaults using modifyList()
-#' - Converts dates to character format (YYYY-MM-DD)
-#' - Includes timezone for datetime conversions
-#' - Includes external_data_sources (empty list if not provided)
-#' - Accepts external_data_sources as character vector or list
-#'
-#' @section DOES NOT:
-#' - Validate detector mapping completeness
-#' - Write to file (use save_study_parameters for that)
-#' - Check for placeholders or duplicates
-#' - Validate timezone names against OlsonNames()
-#' - Validate external data paths exist on disk
-#'
-#' @examples
-#' \dontrun{
-#' # Simple format (character vector)
-#' config <- build_study_config(
-#'   study_name = "BatStudy2025",
-#'   start_date = "2025-10-01",
-#'   end_date = "2025-11-30",
-#'   timezone = "America/Chicago",
-#'   detector_mapping = c("ABC123" = "Site_A", "DEF456" = "Site_B"),
-#'   external_data_sources = c("F:/FieldData2024", "E:/Backup2024")
-#' )
-#' 
-#' # List format (also supported)
-#' config <- build_study_config(
-#'   study_name = "BatStudy2025",
-#'   start_date = "2025-10-01",
-#'   end_date = "2025-11-30",
-#'   timezone = "America/Chicago",
-#'   detector_mapping = c("ABC123" = "Site_A"),
-#'   external_data_sources = list("F:/FieldData2024")
-#' )
-#' }
-#'
-#' @export
-build_study_config <- function(
-    study_name,
-    start_date,
-    end_date,
-    timezone = "America/Chicago",
-    detector_mapping,
-    external_data_sources = list(),
-    processing_options = list(),
-    output_preferences = list()
-) {
-  list(
-    config_version = 1,
-    study_parameters = list(
-      study_name = study_name,
-      timezone = timezone,
-      start_date = as.character(start_date),
-      end_date = as.character(end_date),
-      detector_mapping = detector_mapping,
-      external_data_sources = external_data_sources
-    ),
-    processing_options = modifyList(
-      list(
-        advanced_scheduling = FALSE,
-        remove_outliers = TRUE,
-        intended_hours = 13,
-        kpro_directory = ""
-      ),
-      processing_options
-    ),
-    output_preferences = modifyList(
-      list(
-        master_filename = "final_master.csv",
-        callspernight_filename = "CallsPerNight_final.csv",
-        save_directory = "results/csv"
-      ),
-      output_preferences
-    )
-  )
-}
-
-
-# ------------------------------------------------------------------------------
-# Core Function: Validate Study Configuration
-# ------------------------------------------------------------------------------
-
-#' Validate Study Configuration Structure
-#'
-#' @description
-#' Ensures configuration list has all required fields and correct types.
-#' Throws error if validation fails.
-#'
-#' @param cfg Configuration list (from build_study_config or load_study_parameters)
-#'
-#' @return TRUE if validation passes (otherwise throws error)
-#'
-#' @details
-#' **External data sources validation:**
-#' Accepts both formats that YAML parsing may produce:
-#' - List: list("F:/Data")
-#' - Character vector: c("F:/Data")
-#' 
-#' This is necessary because different yaml package versions or YAML structures
-#' may parse the same YAML differently. For example:
-#' ```yaml
-#' external_data_sources:
-#'   - 'F:/Data'
-#' ```
-#' 
-#' Can be read as either a list or character vector depending on yaml package version.
-#'
-#' @section CONTRACT:
-#' - Checks for config_version = 1
-#' - Validates all required study_parameters fields exist
-#' - Ensures detector_mapping is named character vector
-#' - Throws descriptive errors for missing/invalid fields
-#' - Validates timezone is character (but not if valid tz database name)
-#' - Accepts external_data_sources as list OR character vector
-#'
-#' @section DOES NOT:
-#' - Check detector names for placeholders
-#' - Validate detector names are unique
-#' - Check date validity or format
-#' - Validate timezone against OlsonNames()
-#' - Validate external data paths exist on disk
-#' - Modify cfg in any way
-#'
-#' @examples
-#' \dontrun{
-#' config <- load_study_parameters("study_parameters.yaml")
-#' validate_study_config(config)  # Throws error if invalid
-#' }
-#'
-#' @export
-validate_study_config <- function(cfg) {
-  
-  # -------------------------
-  # Input validation
-  # -------------------------
-  stopifnot(is.list(cfg))
-  
-  # -------------------------
-  # Check config_version
-  # -------------------------
-  if (is.null(cfg$config_version))
-    stop("Missing config_version")
-  
-  if (cfg$config_version != 1)
-    stop("Unsupported config_version: ", cfg$config_version, " (expected 1)")
-  
-  # -------------------------
-  # Check study_parameters block
-  # -------------------------
-  sp <- cfg$study_parameters
-  if (is.null(sp))
-    stop("Missing study_parameters block")
-  
-  required <- c("study_name", "start_date", "end_date", "detector_mapping")
-  missing <- setdiff(required, names(sp))
-  if (length(missing) > 0)
-    stop("Missing study_parameters fields: ",
-         paste(missing, collapse = ", "))
-  
-  # -------------------------
-  # Validate detector_mapping type
-  # -------------------------
-  if (!is.character(sp$detector_mapping))
-    stop("detector_mapping must be a named character vector")
-  
-  # -------------------------
-  # Validate timezone if present
-  # -------------------------
-  if (!is.null(sp$timezone) && !is.character(sp$timezone))
-    stop("timezone must be a character string")
-  
-  # -------------------------
-  # Validate external_data_sources if present (UPDATED - dual format support)
-  # -------------------------
-  if (!is.null(sp$external_data_sources)) {
-    # Accept BOTH list and character vector formats
-    # YAML can parse simple arrays as either depending on version/content
-    # Example YAML that could parse as either:
-    #   external_data_sources:
-    #     - 'F:/Data'
-    if (!is.list(sp$external_data_sources) && !is.character(sp$external_data_sources)) {
-      stop("external_data_sources must be a list or character vector")
-    }
-  }
-  
-  TRUE
-}
+# ==============================================================================
+# CORE FUNCTIONS
+# ==============================================================================
 
 
 # ------------------------------------------------------------------------------
@@ -319,23 +111,44 @@ validate_study_config <- function(cfg) {
 #'
 #' @description
 #' Reads study_parameters.yaml and returns configuration as nested list.
+#' Assumes YAML was written by Shiny app with deterministic format.
 #'
-#' @param yaml_path Path to YAML file (default: "inst/config/study_parameters.yaml")
+#' @param yaml_path Character. Path to YAML file.
+#'   Default: "inst/config/study_parameters.yaml"
 #'
 #' @return Named list of study parameters, or NULL if file doesn't exist
+#'
+#' @details
+#' **Shiny integration:**
+#' This function assumes the YAML was written by the Shiny app using
+#' `save_study_parameters()` or `build_study_config()`, which means:
+#' - All boolean values are TRUE/FALSE (not "yes"/"no" strings)
+#' - All paths are character vectors (not lists)
+#' - All structure is deterministic and validated
+#'
+#' **Field access:**
+#' ```r
+#' params <- load_study_parameters()
+#' 
+#' # Direct access - no normalization needed
+#' is_advanced <- params$processing_options$advanced_scheduling  # TRUE/FALSE
+#' rec_start <- params$processing_options$recording_start        # "HH:MM:SS"
+#' sources <- params$study_parameters$external_data_sources      # character()
+#' ```
 #'
 #' @section CONTRACT:
 #' - Returns NULL if file not found (does not error)
 #' - Returns nested list structure as-is from YAML
 #' - Does not validate structure (use validate_study_config for that)
 #' - Does not modify or normalize any values
+#' - Assumes deterministic YAML format
 #'
 #' @section DOES NOT:
 #' - Create file if missing
 #' - Apply default values
 #' - Stop execution if file not found
 #' - Validate structure
-#' - Normalize external_data_sources format
+#' - Normalize boolean/string/list formats (not needed)
 #'
 #' @examples
 #' \dontrun{
@@ -343,6 +156,10 @@ validate_study_config <- function(cfg) {
 #' if (is.null(params)) {
 #'   message("YAML not found - will create template")
 #' }
+#' 
+#' # Direct field access
+#' study_name <- params$study_parameters$study_name
+#' is_advanced <- params$processing_options$advanced_scheduling
 #' }
 #'
 #' @export
@@ -364,218 +181,476 @@ load_study_parameters <- function(yaml_path = "inst/config/study_parameters.yaml
 #'
 #' @description
 #' Writes configuration list to YAML file. Overwrites existing file.
+#' Used by Shiny app to persist user configuration.
 #'
-#' @param params List of study parameters (from build_study_config)
-#' @param yaml_path Path to save YAML file
+#' @param cfg Named list. Configuration structure (from build_study_config())
+#' @param yaml_path Character. Path to YAML file.
+#'   Default: "inst/config/study_parameters.yaml"
 #'
 #' @return Invisible TRUE
 #'
+#' @details
+#' **Shiny integration:**
+#' This function is called by the Shiny app when users save configuration.
+#' All values are written deterministically:
+#' - Booleans as TRUE/FALSE (not "yes"/"no")
+#' - Numbers as numeric (not strings)
+#' - Paths as character vectors
+#'
+#' **Example Shiny usage:**
+#' ```r
+#' observeEvent(input$save_config, {
+#'   cfg <- build_study_config(
+#'     study_name = input$study_name,
+#'     start_date = as.character(input$start_date),
+#'     detector_mapping = detector_ids,
+#'     processing_options = list(
+#'       advanced_scheduling = input$use_advanced_scheduling,  # TRUE/FALSE
+#'       recording_start = input$recording_start_time         # "HH:MM:SS"
+#'     )
+#'   )
+#'   
+#'   save_study_parameters(cfg)
+#'   showNotification("Configuration saved!")
+#' })
+#' ```
+#'
 #' @section CONTRACT:
-#' - Writes parameters exactly as provided
-#' - Creates file if it doesn't exist
-#' - Overwrites existing file completely
-#' - Creates parent directories if needed
+#' - Overwrites existing file (does not append)
+#' - Creates parent directory if missing
+#' - Validates cfg is a list before writing
+#' - Uses yaml::write_yaml() with default options
+#' - Writes deterministic format for orchestrating functions
 #'
 #' @section DOES NOT:
-#' - Validate parameter structure
-#' - Apply defaults
-#' - Merge with existing parameters
+#' - Validate cfg structure (use validate_study_config first)
+#' - Prompt for confirmation before overwriting
+#' - Create backup of existing file
+#' - Log the save operation
 #'
 #' @examples
 #' \dontrun{
-#' config <- build_study_config(...)
-#' save_study_parameters(config, "inst/config/study_parameters.yaml")
+#' cfg <- build_study_config(
+#'   study_name = "My Study",
+#'   start_date = "2025-01-01",
+#'   end_date = "2025-12-31",
+#'   detector_mapping = c("ABC123" = "Detector 1")
+#' )
+#'
+#' save_study_parameters(cfg, "inst/config/study_parameters.yaml")
 #' }
 #'
 #' @export
-save_study_parameters <- function(params, yaml_path = "inst/config/study_parameters.yaml") {
+save_study_parameters <- function(cfg,
+                                  yaml_path = "inst/config/study_parameters.yaml") {
   
-  # -------------------------
   # Input validation
-  # -------------------------
-  if (!is.list(params)) {
-    stop("params must be a list")
+  if (!is.list(cfg)) {
+    stop(sprintf(
+      "cfg must be a list.\n  Received: %s\n  Use build_study_config() to create valid configuration.",
+      paste(class(cfg), collapse = ", ")
+    ))
   }
   
-  # -------------------------
-  # Create parent directory if needed
-  # -------------------------
+  # Ensure directory exists
   yaml_dir <- dirname(yaml_path)
   if (!dir.exists(yaml_dir)) {
     dir.create(yaml_dir, recursive = TRUE)
   }
   
-  # -------------------------
   # Write YAML
-  # -------------------------
-  yaml::write_yaml(params, yaml_path)
+  yaml::write_yaml(cfg, yaml_path)
+  
   invisible(TRUE)
 }
 
 
 # ------------------------------------------------------------------------------
-# Reconciliation Function: Reconcile Detector Mapping
+# Core Function: Build Study Configuration
 # ------------------------------------------------------------------------------
 
-#' Reconcile Detector Mapping with Current Data
+#' Build Study Configuration List
 #'
 #' @description
-#' Deterministically rebuilds detector_mapping from current detector IDs
-#' while preserving user-entered names. Adds new detectors, removes old ones.
+#' Constructs a complete study_parameters.yaml structure with required sections
+#' and sensible defaults. Called by Shiny app to create configuration from UI inputs.
 #'
-#' @param detector_ids Character vector of detector IDs from current data
-#' @param existing_mapping Named character vector or list of existing mappings
+#' @param study_name Character. Study name
+#' @param start_date Study start date (Date or character YYYY-MM-DD)
+#' @param end_date Study end date (Date or character YYYY-MM-DD)
+#' @param timezone Character. Study location timezone. Default: "America/Chicago"
+#' @param detector_mapping Named character vector (detector_id = detector_name)
+#' @param external_data_sources Character vector of external data source paths.
+#'   Default: character(0)
+#' @param processing_options Optional list to override default processing options
+#' @param output_preferences Optional list to override default output preferences
 #'
-#' @return Named character vector with reconciled mapping
-#'
-#' @section CONTRACT:
-#' - New detector IDs added with "ENTER_NAME_HERE" placeholder
-#' - Existing user-entered names preserved for overlapping IDs
-#' - Detector IDs no longer in data are removed
-#' - Results sorted alphabetically by detector ID
-#' - Always returns named character vector (never NULL)
-#'
-#' @section DOES NOT:
-#' - Validate detector names
-#' - Check for duplicates
-#' - Prompt user for names
-#'
-#' @examples
-#' \dontrun{
-#' current_ids <- c("ABC123", "DEF456", "GHI789")
-#' existing <- c("ABC123" = "Site_A", "DEF456" = "Site_B")
-#'
-#' reconciled <- reconcile_detector_mapping(current_ids, existing)
-#' # Returns: c("ABC123" = "Site_A", "DEF456" = "Site_B", "GHI789" = "ENTER_NAME_HERE")
-#' }
-#'
-#' @export
-reconcile_detector_mapping <- function(detector_ids, existing_mapping = NULL) {
-  
-  # -------------------------
-  # Normalize detector IDs
-  # -------------------------
-  detector_ids <- sort(unique(detector_ids))
-  
-  # -------------------------
-  # Normalize existing mapping
-  # -------------------------
-  if (is.null(existing_mapping)) {
-    existing_mapping <- character(0)
-  } else if (is.list(existing_mapping)) {
-    existing_mapping <- unlist(existing_mapping)
-  }
-  
-  if (is.null(names(existing_mapping))) {
-    existing_mapping <- character(0)
-  }
-  
-  # -------------------------
-  # Build clean mapping (all current IDs with placeholders)
-  # -------------------------
-  mapping <- setNames(
-    rep("ENTER_NAME_HERE", length(detector_ids)),
-    detector_ids
-  )
-  
-  # -------------------------
-  # Preserve user-entered values for overlapping IDs
-  # -------------------------
-  overlap <- intersect(names(existing_mapping), detector_ids)
-  mapping[overlap] <- existing_mapping[overlap]
-  
-  mapping
-}
-
-
-# ------------------------------------------------------------------------------
-# Helper Function: Get External Data Sources (NEW - Dual Format Support)
-# ------------------------------------------------------------------------------
-
-#' Get External Data Sources as Character Vector
-#'
-#' @description
-#' Extracts external data source paths from config, handling both
-#' list and character vector formats that YAML parsing may produce.
-#' Always returns a normalized character vector.
-#'
-#' @param params Study parameters list from load_study_parameters()
-#'
-#' @return Character vector of paths (may be empty character(0))
+#' @return Named list with complete configuration structure
 #'
 #' @details
-#' **Why this function exists:**
-#' 
-#' YAML parsing is inconsistent across versions and formats. The same YAML:
-#' ```yaml
-#' external_data_sources:
-#'   - 'F:/Data'
+#' **Default processing options:**
+#' - advanced_scheduling: FALSE (boolean)
+#' - recording_start: "18:00:00" (character)
+#' - recording_end: "07:00:00" (character)
+#' - intended_hours: 13 (numeric)
+#'
+#' **Default output preferences:**
+#' - master_filename: "final_master.csv"
+#' - callspernight_filename: "CallsPerNight_final.csv"
+#' - save_directory: "results/csv"
+#'
+#' **Shiny integration example:**
+#' ```r
+#' observeEvent(input$save_config, {
+#'   cfg <- build_study_config(
+#'     study_name = input$study_name,
+#'     start_date = as.character(input$start_date),
+#'     end_date = as.character(input$end_date),
+#'     detector_mapping = detector_ids,
+#'     processing_options = list(
+#'       advanced_scheduling = input$use_custom_schedule,  # TRUE/FALSE
+#'       recording_start = input$rec_start,                # "HH:MM:SS"
+#'       recording_end = input$rec_end                     # "HH:MM:SS"
+#'     )
+#'   )
+#'   save_study_parameters(cfg)
+#' })
 #' ```
-#' 
-#' Can be parsed as either:
-#' - A list: list("F:/Data")
-#' - A character vector: c("F:/Data")
-#' 
-#' This function normalizes both formats to a character vector, so workflow
-#' scripts don't have to worry about the format.
 #'
 #' @section CONTRACT:
-#' - Returns character vector of paths
-#' - Returns empty character(0) if no sources defined
-#' - Handles both list and character vector inputs
-#' - Preserves path order
-#' - Always returns character vector (never list)
+#' - Returns complete YAML-ready structure
+#' - All required fields populated
+#' - Uses modifyList() to merge custom options with defaults
+#' - Converts Date objects to character strings
+#' - Validates detector_mapping is named vector
+#' - All booleans are TRUE/FALSE (not strings)
+#' - All paths are character vectors (not lists)
 #'
 #' @section DOES NOT:
-#' - Validate paths exist on disk
-#' - Modify params input
-#' - Load any data
-#' - Stop execution if no sources found
-#' - Filter or transform paths
+#' - Write to disk (use save_study_parameters)
+#' - Validate dates are reasonable
+#' - Check detector names for placeholders
+#' - Validate external data paths exist
 #'
 #' @examples
 #' \dontrun{
-#' params <- load_study_parameters("inst/config/study_parameters.yaml")
-#' sources <- get_external_sources(params)
-#' 
-#' # Use in workflow
-#' for (source_path in sources) {
-#'   message(sprintf("Loading from: %s", source_path))
-#'   data <- load_external_raw_data(source_path)
-#' }
+#' cfg <- build_study_config(
+#'   study_name = "Summer Bat Survey 2025",
+#'   start_date = "2025-06-01",
+#'   end_date = "2025-08-31",
+#'   detector_mapping = c(
+#'     "ABC123" = "North Ridge",
+#'     "ABC124" = "South Creek"
+#'   ),
+#'   external_data_sources = c("F:/Backup/AdditionalData")
+#' )
+#'
+#' save_study_parameters(cfg)
 #' }
 #'
 #' @export
-get_external_sources <- function(params) {
+build_study_config <- function(study_name,
+                               start_date,
+                               end_date,
+                               timezone = "America/Chicago",
+                               detector_mapping,
+                               external_data_sources = character(0),
+                               processing_options = list(),
+                               output_preferences = list()) {
   
   # -------------------------
   # Input validation
   # -------------------------
-  if (!is.list(params)) {
-    stop("params must be a list from load_study_parameters()")
+  
+  if (!is.character(detector_mapping) || is.null(names(detector_mapping))) {
+    stop(sprintf(
+      "detector_mapping must be a named character vector.\n  Example: c('ABC123' = 'North Ridge')\n  Received: %s",
+      paste(class(detector_mapping), collapse = ", ")
+    ))
   }
   
   # -------------------------
-  # Extract external sources
+  # Convert dates to character if needed
   # -------------------------
-  sources <- params$study_parameters$external_data_sources
   
-  # Return empty character vector if no sources defined
-  if (is.null(sources) || length(sources) == 0) {
-    return(character(0))
+  if (inherits(start_date, "Date")) {
+    start_date <- as.character(start_date)
+  }
+  
+  if (inherits(end_date, "Date")) {
+    end_date <- as.character(end_date)
   }
   
   # -------------------------
-  # Normalize to character vector
+  # Default processing options (Shiny-friendly types)
   # -------------------------
-  # Handle both list and character vector formats from YAML parsing
-  if (is.list(sources)) {
-    # Convert list to character vector
-    sources <- unlist(sources, use.names = FALSE)
+  
+  default_processing <- list(
+    advanced_scheduling = FALSE,        # Boolean (not string)
+    recording_start = "18:00:00",       # Character
+    recording_end = "07:00:00",         # Character
+    intended_hours = 13                 # Numeric
+  )
+  
+  processing_options <- modifyList(default_processing, processing_options)
+  
+  # -------------------------
+  # Default output preferences
+  # -------------------------
+  
+  default_output <- list(
+    master_filename = "final_master.csv",
+    callspernight_filename = "CallsPerNight_final.csv",
+    save_directory = "results/csv"
+  )
+  
+  output_preferences <- modifyList(default_output, output_preferences)
+  
+  # -------------------------
+  # Build configuration structure
+  # -------------------------
+  
+  list(
+    config_version = 1,
+    
+    study_parameters = list(
+      study_name = study_name,
+      start_date = start_date,
+      end_date = end_date,
+      timezone = timezone,
+      detector_mapping = as.list(detector_mapping),
+      external_data_sources = as.list(external_data_sources)
+    ),
+    
+    processing_options = processing_options,
+    output_preferences = output_preferences
+  )
+}
+
+
+# ------------------------------------------------------------------------------
+# Core Function: Validate Study Configuration
+# ------------------------------------------------------------------------------
+
+#' Validate Study Configuration Structure
+#'
+#' @description
+#' Validates that a configuration list contains all required fields and correct types.
+#' Used before saving to YAML to catch structural errors early.
+#'
+#' @param cfg Named list. Configuration structure to validate
+#'
+#' @return Logical TRUE if valid (stops with error if invalid)
+#'
+#' @details
+#' **Validation checks:**
+#' - config_version = 1
+#' - study_parameters block exists
+#' - Required fields: study_name, start_date, end_date, detector_mapping
+#' - detector_mapping is named character vector
+#' - timezone is character (if present)
+#'
+#' **Does NOT validate:**
+#' - Date validity or format
+#' - Timezone against OlsonNames()
+#' - Detector names for placeholders
+#' - External data paths exist on disk
+#' - Field types (assumes Shiny provides correct types)
+#'
+#' @section CONTRACT:
+#' - Checks for config_version = 1
+#' - Validates all required study_parameters fields exist
+#' - Ensures detector_mapping is named character vector
+#' - Throws descriptive errors for missing/invalid fields
+#' - Validates timezone is character (if present)
+#'
+#' @section DOES NOT:
+#' - Check detector names for placeholders
+#' - Validate detector names are unique
+#' - Check date validity or format
+#' - Validate timezone against OlsonNames()
+#' - Validate external data paths exist on disk
+#' - Modify cfg in any way
+#' - Validate field types (trusts Shiny)
+#'
+#' @examples
+#' \dontrun{
+#' config <- load_study_parameters("study_parameters.yaml")
+#' validate_study_config(config)  # Throws error if invalid
+#' }
+#'
+#' @export
+validate_study_config <- function(cfg) {
+  
+  # -------------------------
+  # Input validation
+  # -------------------------
+  
+  if (!is.list(cfg)) {
+    stop(sprintf(
+      "cfg must be a list.\n  Received: %s",
+      paste(class(cfg), collapse = ", ")
+    ))
   }
   
-  # Ensure character type and return
-  as.character(sources)
+  # -------------------------
+  # Check config_version
+  # -------------------------
+  
+  if (is.null(cfg$config_version)) {
+    stop("Missing config_version in configuration")
+  }
+  
+  if (cfg$config_version != 1) {
+    stop(sprintf(
+      "Unsupported config_version: %s (expected 1)",
+      cfg$config_version
+    ))
+  }
+  
+  # -------------------------
+  # Check study_parameters block
+  # -------------------------
+  
+  sp <- cfg$study_parameters
+  
+  if (is.null(sp)) {
+    stop("Missing study_parameters block in configuration")
+  }
+  
+  # Check required fields
+  required <- c("study_name", "start_date", "end_date", "detector_mapping")
+  missing <- setdiff(required, names(sp))
+  
+  if (length(missing) > 0) {
+    stop(sprintf(
+      "Missing required study_parameters fields: %s",
+      paste(missing, collapse = ", ")
+    ))
+  }
+  
+  # -------------------------
+  # Validate detector_mapping type
+  # -------------------------
+  
+  if (!is.character(sp$detector_mapping)) {
+    stop("detector_mapping must be a named character vector")
+  }
+  
+  # -------------------------
+  # Validate timezone if present
+  # -------------------------
+  
+  if (!is.null(sp$timezone) && !is.character(sp$timezone)) {
+    stop("timezone must be a character string")
+  }
+  
+  TRUE
+}
+
+
+# ==============================================================================
+# RECONCILIATION FUNCTIONS
+# ==============================================================================
+
+
+# ------------------------------------------------------------------------------
+# Reconciliation Function: Detector Mapping
+# ------------------------------------------------------------------------------
+
+#' Reconcile Detector Mapping
+#'
+#' @description
+#' Merges current detector IDs from data with existing user-entered names from
+#' YAML. Adds new IDs with placeholders, preserves existing names, removes
+#' obsolete IDs.
+#'
+#' @param current_ids Character vector. Detector IDs from current data
+#' @param existing_mapping Named character vector. Current detector mapping from YAML
+#'
+#' @return Named character vector with reconciled mapping
+#'
+#' @details
+#' **Reconciliation logic:**
+#' 1. New detector IDs -> Add with placeholder "ENTER_NAME_HERE"
+#' 2. Existing detector IDs -> Keep user-entered name
+#' 3. Removed detector IDs -> Remove from mapping
+#' 4. Sort alphabetically by detector ID (deterministic)
+#'
+#' **Example:**
+#' ```
+#' Current: c("ABC123", "ABC124", "ABC125")
+#' Existing: c(ABC123 = "North", ABC124 = "South")
+#' Result: c(ABC123 = "North", ABC124 = "South", ABC125 = "ENTER_NAME_HERE")
+#' ```
+#'
+#' @section CONTRACT:
+#' - Preserves all user-entered names for IDs still in data
+#' - Adds placeholders for new IDs
+#' - Removes mappings for IDs no longer in data
+#' - Returns alphabetically sorted mapping
+#' - Deterministic output (same inputs -> same output)
+#'
+#' @section DOES NOT:
+#' - Validate detector names are not placeholders
+#' - Check for duplicate detector names
+#' - Modify input parameters
+#' - Log changes to console
+#' - Write to YAML file
+#'
+#' @examples
+#' \dontrun{
+#' current <- c("ABC123", "ABC124", "ABC125")
+#' existing <- c(ABC123 = "North Ridge", ABC124 = "South Creek")
+#'
+#' reconciled <- reconcile_detector_mapping(current, existing)
+#' # Returns: c(ABC123 = "North Ridge",
+#' #            ABC124 = "South Creek",
+#' #            ABC125 = "ENTER_NAME_HERE")
+#' }
+#'
+#' @export
+reconcile_detector_mapping <- function(current_ids, existing_mapping) {
+  
+  # -------------------------
+  # Input validation
+  # -------------------------
+  
+  if (!is.character(current_ids)) {
+    stop(sprintf(
+      "current_ids must be a character vector.\n  Received: %s",
+      paste(class(current_ids), collapse = ", ")
+    ))
+  }
+  
+  # existing_mapping can be NULL for initial setup
+  if (is.null(existing_mapping)) {
+    existing_mapping <- character(0)
+  }
+  
+  if (!is.character(existing_mapping)) {
+    stop(sprintf(
+      "existing_mapping must be a named character vector or NULL.\n  Received: %s",
+      paste(class(existing_mapping), collapse = ", ")
+    ))
+  }
+  
+  # -------------------------
+  # Reconcile mapping
+  # -------------------------
+  
+  # Create empty mapping for new IDs
+  new_mapping <- setNames(
+    rep("ENTER_NAME_HERE", length(current_ids)),
+    current_ids
+  )
+  
+  # Preserve existing names where IDs still exist
+  common_ids <- intersect(current_ids, names(existing_mapping))
+  new_mapping[common_ids] <- existing_mapping[common_ids]
+  
+  # Sort alphabetically by ID
+  new_mapping[sort(names(new_mapping))]
 }
 
 
@@ -590,7 +665,8 @@ get_external_sources <- function(params) {
 #' with current data. This is the main entry point for workflow scripts.
 #'
 #' @param raw_data Data frame containing detector_id column
-#' @param yaml_path Path to YAML file (default: "inst/config/study_parameters.yaml")
+#' @param yaml_path Character. Path to YAML file.
+#'   Default: "inst/config/study_parameters.yaml"
 #'
 #' @return Invisible TRUE (function called for side effects)
 #'
@@ -601,7 +677,6 @@ get_external_sources <- function(params) {
 #' - Validates final structure
 #' - Overwrites YAML with clean version
 #' - Logs actions to console
-#' - Includes timezone and external_data_sources sections
 #'
 #' @section DOES NOT:
 #' - Prompt user for detector names
@@ -617,7 +692,7 @@ get_external_sources <- function(params) {
 #'    - Suggested study dates from data
 #'    - Default timezone (America/Chicago)
 #'    - All detector IDs with "ENTER_NAME_HERE" placeholders
-#'    - Empty external_data_sources list
+#'    - Empty external_data_sources
 #'    - Default processing options
 #' 3. Load existing YAML
 #' 4. Reconcile detector_mapping:
@@ -625,7 +700,7 @@ get_external_sources <- function(params) {
 #'    - Preserve existing user-entered names
 #'    - Remove detector IDs no longer in data
 #' 5. Ensure timezone exists (add default if missing)
-#' 6. Ensure external_data_sources exists (add empty list if missing)
+#' 6. Ensure external_data_sources exists (add empty if missing)
 #' 7. Validate final structure
 #' 8. Save clean YAML
 #'
@@ -636,7 +711,6 @@ get_external_sources <- function(params) {
 #'
 #' # YAML now exists with all current detector IDs mapped
 #' # User names preserved, new detectors have placeholders
-#' # Timezone and external_data_sources sections present
 #' }
 #'
 #' @export
@@ -646,51 +720,68 @@ ensure_study_parameters <- function(raw_data,
   # -------------------------
   # Extract detector IDs from data
   # -------------------------
+  
   detector_ids <- raw_data$detector_id[!is.na(raw_data$detector_id)]
   detector_ids <- sort(unique(detector_ids))
   
   if (length(detector_ids) == 0) {
-    stop("No detector_id values found in raw data")
+    stop("No detector_id values found in raw_data.\n  Check that raw_data contains detector_id column with values.")
   }
   
   # -------------------------
-  # Create YAML if missing
+  # Create YAML template if missing
   # -------------------------
+  
   if (!file.exists(yaml_path)) {
-    message("⚠️  study_parameters.yaml not found")
+    message("[*] study_parameters.yaml not found - creating template")
     
-    # Suggest study dates from data
-    dates <- if ("date" %in% names(raw_data)) {
-      lubridate::ymd(raw_data$date)
+    # Suggest dates from data (if DATE column exists)
+    dates <- if ("DATE" %in% names(raw_data)) {
+      lubridate::ymd(raw_data$DATE, quiet = TRUE)
     } else {
-      Sys.Date()
+      NULL
     }
     
-    # Build template configuration
-    cfg <- build_study_config(
-      study_name       = "YourStudyName",
-      start_date       = min(dates, na.rm = TRUE),
-      end_date         = max(dates, na.rm = TRUE),
-      timezone         = "America/Chicago",
-      detector_mapping = setNames(
-        rep("ENTER_NAME_HERE", length(detector_ids)),
-        detector_ids
+    cfg <- list(
+      config_version = 1,
+      study_parameters = list(
+        study_name = "YourStudyName",
+        start_date = as.character(min(dates, na.rm = TRUE)),
+        end_date = as.character(max(dates, na.rm = TRUE)),
+        timezone = "America/Chicago",
+        detector_mapping = setNames(
+          rep("ENTER_NAME_HERE", length(detector_ids)),
+          detector_ids
+        ),
+        external_data_sources = character(0)
       ),
-      external_data_sources = list()  # Empty list - user can add sources later
+      processing_options = list(
+        advanced_scheduling = FALSE,
+        recording_start = "18:00:00",
+        recording_end = "07:00:00",
+        intended_hours = 13
+      ),
+      output_preferences = list(
+        master_filename = "final_master.csv",
+        callspernight_filename = "CallsPerNight_final.csv",
+        save_directory = "results/csv"
+      )
     )
     
     yaml::write_yaml(cfg, yaml_path)
-    message("✓ Created study_parameters.yaml template")
+    message("[OK] Created study_parameters.yaml template")
   }
   
   # -------------------------
   # Load existing config
   # -------------------------
+  
   cfg <- load_study_parameters(yaml_path)
   
   # -------------------------
   # Ensure config_version exists
   # -------------------------
+  
   if (is.null(cfg$config_version)) {
     cfg$config_version <- 1
   }
@@ -698,23 +789,26 @@ ensure_study_parameters <- function(raw_data,
   # -------------------------
   # Ensure timezone exists (add default if missing)
   # -------------------------
+  
   if (is.null(cfg$study_parameters$timezone)) {
     cfg$study_parameters$timezone <- "America/Chicago"
-    message("ℹ️  Added default timezone: America/Chicago")
+    message("[!] Added default timezone: America/Chicago")
   }
   
   # -------------------------
-  # Ensure external_data_sources exists (add empty list if missing)
+  # Ensure external_data_sources exists (add empty if missing)
   # -------------------------
+  
   if (is.null(cfg$study_parameters$external_data_sources)) {
-    cfg$study_parameters$external_data_sources <- list()
-    message("ℹ️  Added empty external_data_sources section")
+    cfg$study_parameters$external_data_sources <- character(0)
+    message("[!] Added empty external_data_sources")
   }
   
   # -------------------------
   # Reconcile detector mapping (KEY STEP)
   # -------------------------
   # This adds new detectors, removes old ones, preserves user names
+  
   cfg$study_parameters$detector_mapping <-
     reconcile_detector_mapping(
       detector_ids,
@@ -724,21 +818,24 @@ ensure_study_parameters <- function(raw_data,
   # -------------------------
   # Validate final structure
   # -------------------------
+  
   validate_study_config(cfg)
   
   # -------------------------
   # Force YAML mapping format (not list)
   # -------------------------
+  
   cfg$study_parameters$detector_mapping <-
     as.list(cfg$study_parameters$detector_mapping)
   
   # -------------------------
   # Save clean YAML (overwrite)
   # -------------------------
+  
   yaml::write_yaml(cfg, yaml_path)
   
   message(sprintf(
-    "✓ study_parameters.yaml reconciled (%d detectors)",
+    "[OK] study_parameters.yaml reconciled (%d detectors)",
     length(detector_ids)
   ))
   

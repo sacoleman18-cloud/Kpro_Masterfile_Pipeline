@@ -865,4 +865,209 @@ artifacts:
         remove_duplicates: yes
         remove_noid: no
         remove_zero_pulse_calls: yes
-last_modified_utc: '2026-01-31T20:40:46Z'
+  kpro_master_20260131_172349:
+    name: kpro_master_20260131_172349
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260131_172349.csv
+    file_hash_sha256: 75572710629db345f8a0b631bdb6e18a7088a3f0e60532c0aee6052d3b033b63
+    file_size_bytes: 782331.0
+    created_utc: '2026-01-31T23:23:49Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1975
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 0.0
+      n_rows_removed_zero_pulse: 33
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: no
+        remove_zero_pulse_calls: yes
+  kpro_master_20260131_173442:
+    name: kpro_master_20260131_173442
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260131_173442.csv
+    file_hash_sha256: 75572710629db345f8a0b631bdb6e18a7088a3f0e60532c0aee6052d3b033b63
+    file_size_bytes: 782331.0
+    created_utc: '2026-01-31T23:34:43Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1975
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 0.0
+      n_rows_removed_zero_pulse: 33
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: no
+        remove_zero_pulse_calls: yes
+  kpro_master_20260131_173624:
+    name: kpro_master_20260131_173624
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260131_173624.csv
+    file_hash_sha256: 75572710629db345f8a0b631bdb6e18a7088a3f0e60532c0aee6052d3b033b63
+    file_size_bytes: 782331.0
+    created_utc: '2026-01-31T23:36:24Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1975
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 0.0
+      n_rows_removed_zero_pulse: 33
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: no
+        remove_zero_pulse_calls: yes
+  kpro_master_20260131_201653:
+    name: kpro_master_20260131_201653
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260131_201653.csv
+    file_hash_sha256: 75572710629db345f8a0b631bdb6e18a7088a3f0e60532c0aee6052d3b033b63
+    file_size_bytes: 782331.0
+    created_utc: '2026-02-01T02:16:53Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1975
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 0.0
+      n_rows_removed_zero_pulse: 33
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: no
+        remove_zero_pulse_calls: yes
+  kpro_master_20260131_204820:
+    name: kpro_master_20260131_204820
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260131_204820.csv
+    file_hash_sha256: 75572710629db345f8a0b631bdb6e18a7088a3f0e60532c0aee6052d3b033b63
+    file_size_bytes: 782331.0
+    created_utc: '2026-02-01T02:48:20Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1975
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 0.0
+      n_rows_removed_zero_pulse: 33
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: no
+        remove_zero_pulse_calls: yes
+last_modified_utc: '2026-02-01T02:48:20Z'
