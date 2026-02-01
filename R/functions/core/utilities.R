@@ -68,12 +68,12 @@
 # File Discovery:
 #   - find_most_recent_file()
 #
-# Checkpoint Management:
-#   - load_or_checkpoint()
-#   - load_intro_standardized()
-#   - load_master_data()
-#   - load_cpn_final()
-#   - load_cpn_template_original()
+# Orchestrator Utilities (NEW for 3-chunk run_* system):
+#   - setup_pipeline_context()        # YAML + validation context setup
+#   - load_most_recent_checkpoint()   # Checkpoint file discovery & loading
+#   - generate_timestamped_filename() # Standardized timestamp generation
+#   - get_schedule_config()           # Schedule parameter extraction with normalization
+#   - create_unified_species_column() # Species priority logic (manual > auto > NoID)
 #
 # Path Generation:
 #   - make_output_path()
