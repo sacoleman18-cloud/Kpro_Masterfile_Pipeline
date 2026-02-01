@@ -22,13 +22,12 @@
 # -----------------
 #   Stage 1: Load configuration from study_parameters.yaml
 #   Stage 2: Discover and load raw CSV files (local + external)
-#   Stage 3: Validate & reconcile configuration (detector mappings)
-#   Stage 4: Transform schemas (v1/v2/v3 -> unified master)
-#   Stage 5: Apply detector mapping (ID -> friendly name)
-#   Stage 6: Convert timestamps (UTC -> local timezone)
-#   Stage 7: Finalize schema and apply optional deduplication
-#   Stage 8: Apply user-configured data filters (NoID, zero-pulse)
-#   Stage 9: Save checkpoint, register artifact, render validation HTML
+#   Stage 3: Transform schemas (v1/v2/v3 -> unified master)
+#   Stage 4: Apply detector mapping (ID -> friendly name)
+#   Stage 5: Convert timestamps (UTC -> local timezone)
+#   Stage 6: Finalize schema and apply optional deduplication
+#   Stage 7: Apply user-configured data filters (NoID, zero-pulse)
+#   Stage 8: Save checkpoint, register artifact, render validation HTML
 #
 # CONTRACT
 # --------
@@ -397,44 +396,10 @@ run_ingest_standardize <- function(verbose = FALSE) {
                       (n_local > 0) + length(external_datasets)))
   
   # ===========================================================================
-  # STAGE 2B: VALIDATE & RECONCILE CONFIGURATION
+  # STAGE 3: SCHEMA TRANSFORMATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("3", "Validate & Reconcile Configuration")
-  
-  # Ensure YAML exists and detector mappings are synchronized
-  # This will:
-  #   1. Create YAML template if missing (with suggested dates from data)
-  #   2. Add new detector IDs discovered in raw_combined
-  #   3. Preserve existing user-entered detector names
-  #   4. Remove obsolete detector IDs no longer in data
-  #   5. Validate final YAML structure
-  ensure_study_parameters(
-    raw_data = raw_combined,
-    yaml_path = yaml_path
-  )
-  
-  # Reload study_params to get reconciled detector mappings
-  study_params <- load_study_parameters(yaml_path)
-  
-  validation_context <- log_validation_event(
-    validation_context,
-    event_type = "config_reconciled",
-    description = "Detector mappings reconciled with YAML",
-    details = list(
-      n_detectors = length(unique(raw_combined$detector_id[!is.na(raw_combined$detector_id)]))
-    )
-  )
-  
-  if (verbose) message("  [OK] YAML validated and detector mappings reconciled")
-  
-  log_message("[Stage 3] Configuration validated and reconciled")
-  
-  # ===========================================================================
-  # STAGE 4: SCHEMA TRANSFORMATION
-  # ===========================================================================
-  
-  if (verbose) print_stage_header("4", "Schema Transformation")
+  if (verbose) print_stage_header("3", "Schema Transformation")
   
   # Capture schema distribution before transformation
   schema_before <- table(raw_combined$schema_version)
@@ -457,7 +422,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message("  [OK] Schema transformation complete")
   
-  log_message("[Stage 3] Transformed schemas to unified format")
+  log_message(sprintf("[Stage 3] Schema transformation complete: %d rows", nrow(unified_data)))
   
   # ===========================================================================
   # STAGE 4: DETECTOR MAPPING
@@ -521,7 +486,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message(sprintf("  [OK] Mapped %d detectors", n_detectors))
   
-  log_message(sprintf("[Stage 4] Applied detector mapping: %d detectors", n_detectors))
+  log_message(sprintf("[Stage 4] Detector mapping: %d detectors", n_detectors))
   
   # ===========================================================================
   # STAGE 5: TIME CONVERSION
@@ -622,14 +587,10 @@ run_ingest_standardize <- function(verbose = FALSE) {
                     format(nrow(kpro_master), big.mark = ",")))
   }
   
-  log_message(sprintf("[Stage 6] Finalized: %d rows, %d duplicates removed",
-                      nrow(kpro_master), n_duplicates))
+  log_message(sprintf("[Stage 6] Finalization: %d rows after deduplication", nrow(kpro_master)))
   
   # ===========================================================================
-  # STAGE 7: USER-CONFIGURED DATA FILTERS
-  # ===========================================================================
-  # CHANGED: Updated `n_before > 0` to be more dynamic
-  # NEW STAGE: Optional NoID and zero-pulse filtering
+  # STAGE 7: DATA FILTERS
   # ===========================================================================
   
   if (verbose) print_stage_header("7", "Data Filters")
@@ -725,10 +686,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   }
   
   # ===========================================================================
-  # STAGE 8: SAVE, REGISTER & RENDER VALIDATION
-  # ===========================================================================
-  # CHANGED: Renumbered from Stage 7 to Stage 8
-  # CHANGED: Updated metadata and artifact registry to include filter tracking
+  # STAGE 8: SAVE, REGISTER & VALIDATE
   # ===========================================================================
   
   if (verbose) print_stage_header("8", "Save, Register & Validate")
@@ -810,8 +768,8 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message(sprintf("  [OK] Validation report: %s", basename(validation_html_path)))
   
-  log_message(sprintf("[Stage 9] Registered artifact: %s", artifact_id))
-  log_message(sprintf("[Stage 9] Validation report: %s", basename(validation_html_path)))
+  log_message(sprintf("[Stage 8] Registered artifact: %s", artifact_id))
+  log_message(sprintf("[Stage 8] Validation report: %s", basename(validation_html_path)))
   
   # ===========================================================================
   # RETURN
