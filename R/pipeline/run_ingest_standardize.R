@@ -210,8 +210,8 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) print_stage_header("1", "Load Configuration")
   
-  # Use utility to setup pipeline context
-  ctx <- setup_pipeline_context("ingest", verbose = verbose)
+  # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
+  ctx <- setup_pipeline_context("ingest")
   study_params <- ctx$study_params
   validation_context <- ctx$validation_context
   yaml_path <- ctx$yaml_path
@@ -703,8 +703,9 @@ run_ingest_standardize <- function(verbose = FALSE) {
   data_hash <- hash_dataframe(kpro_master, 
                               sort_by = c("Detector", "DateTime_local", "auto_id"))
   
-  # Generate artifact ID using utility
-  artifact_id <- generate_timestamped_filename("kpro_master", extension = "")
+  # Generate artifact ID using utility (DETERMINISTIC)
+  # Note: For artifact IDs, we need timestamp without extension - still deterministic
+  artifact_id <- sub("\\.csv$", "", generate_timestamped_filename("kpro_master"))
   
   registry <- init_artifact_registry()
   

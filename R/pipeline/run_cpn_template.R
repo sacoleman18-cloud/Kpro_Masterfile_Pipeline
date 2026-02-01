@@ -228,8 +228,8 @@ run_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("1", "Load Configuration")
   
-  # Use utility to setup pipeline context
-  ctx <- setup_pipeline_context("cpn_template", verbose = verbose)
+  # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
+  ctx <- setup_pipeline_context("cpn_template")
   study_params <- ctx$study_params
   validation_context <- ctx$validation_context
   yaml_path <- ctx$yaml_path
@@ -306,18 +306,14 @@ run_cpn_template <- function(kpro_master = NULL,
     )
     
     # -------------------------
-  # Priority 3: Load from checkpoint using utility
+  # -------------------------
+  # Priority 3: Load from checkpoint using utility (DETERMINISTIC)
   # -------------------------
   } else {
     
     if (verbose) message("  [!] Loading from most recent checkpoint...")
     
-    kpro_master <- load_most_recent_checkpoint(
-      pattern = "02_kpro_master_.*\\.csv$",
-      checkpoint_dir = checkpoint_dir,
-      error_hint = "Run Chunk 1 first or provide kpro_master parameter",
-      verbose = verbose
-    )
+    kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*\\.csv$")
     
     validation_context <- log_validation_event(
       validation_context,
@@ -326,6 +322,8 @@ run_cpn_template <- function(kpro_master = NULL,
       count = nrow(kpro_master),
       details = list(source = "checkpoint")
     )
+    
+    if (verbose) message("  [OK] Loaded from checkpoint")
   }
   
   # Validate required columns
@@ -346,15 +344,11 @@ run_cpn_template <- function(kpro_master = NULL,
     if (verbose) message("  [!] Added manual_id column (all NA)")
   }
   
-  # Create unified species column using utility
+  # Create unified species column using utility (DETERMINISTIC - no parameters)
   # Priority: manual_id > auto_id > "NoID"
-  kpro_master <- create_unified_species_column(
-    kpro_master,
-    manual_col = "manual_id",
-    auto_col = "auto_id",
-    output_col = "species",
-    verbose = verbose
-  )
+  kpro_master <- create_unified_species_column(kpro_master)
+  
+  if (verbose) message("  [OK] Created unified species column")
   
   # Determine species source for metadata
   if (manual_id_used) {
@@ -466,8 +460,8 @@ run_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("5", "Generate Template Grid")
   
-  # Get recording schedule configuration using utility
-  # Handles TRUE/FALSE/"yes"/"no" for advanced_scheduling with defaults
+  # Get recording schedule configuration using utility (DETERMINISTIC)
+  # Handles TRUE/FALSE/"yes"/"no" for advanced_scheduling with FIXED defaults
   schedule <- get_schedule_config(study_params)
   recording_start_for_template <- schedule$recording_start
   recording_end <- schedule$recording_end
@@ -576,14 +570,14 @@ run_cpn_template <- function(kpro_master = NULL,
   assert_directory_exists(outputs_dir, create = TRUE)
   
   # Save ORIGINAL template (for tracking)
-  original_filename <- sprintf("03_CallsPerNight_Template_ORIGINAL_%s.csv", timestamp)
+  original_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "ORIGINAL")
   original_path <- here::here("outputs", original_filename)
   readr::write_csv(cpn_template, original_path)
   
   if (verbose) message(sprintf("  [OK] Saved ORIGINAL: %s", basename(original_path)))
   
   # Save EDIT_THIS template (for user editing)
-  edit_filename <- sprintf("03_CallsPerNight_Template_EDIT_THIS_%s.csv", timestamp)
+  edit_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "EDIT_THIS")
   edit_path <- here::here("outputs", edit_filename)
   readr::write_csv(cpn_template, edit_path)
   
@@ -592,7 +586,8 @@ run_cpn_template <- function(kpro_master = NULL,
   # Register artifacts
   registry <- init_artifact_registry()
   
-  artifact_id_original <- sprintf("cpn_template_original_%s", timestamp)
+  # Generate artifact IDs using utility (DETERMINISTIC)
+  artifact_id_original <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_original"))
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_original,
@@ -608,8 +603,8 @@ run_cpn_template <- function(kpro_master = NULL,
     )
   )
   
-  # Generate artifact ID for EDIT_THIS template using utility
-  artifact_id_edit <- generate_timestamped_filename("cpn_template_edit", extension = "")
+  # Generate artifact ID for EDIT_THIS template using utility (DETERMINISTIC)
+  artifact_id_edit <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_edit"))
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_edit,
