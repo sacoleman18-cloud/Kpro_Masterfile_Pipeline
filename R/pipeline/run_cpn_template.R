@@ -61,7 +61,10 @@
 # ------------
 #   Custom functions (via load_all.R):
 #     - config.R: load_study_parameters
-#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%
+#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%,
+#                    setup_pipeline_context, load_most_recent_checkpoint,
+#                    generate_timestamped_filename, get_schedule_config,
+#                    create_unified_species_column
 #     - callspernight.R: generate_calls_per_night_template, apply_schedule
 #     - validation.R: create_validation_context, log_validation_event,
 #                     finalize_validation_report, assert_file_exists,
@@ -70,6 +73,14 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Integrated new utility functions to eliminate code duplication
+#             - Added setup_pipeline_context() for YAML/validation setup (saves ~20 lines)
+#             - Added load_most_recent_checkpoint() for checkpoint loading (saves ~15 lines)
+#             - Added get_schedule_config() for schedule extraction (saves ~18 lines)
+#             - Added create_unified_species_column() for species logic (saves ~15 lines)
+#             - Added generate_timestamped_filename() for timestamps (saves ~8 lines)
+#             - Total savings: ~76 lines of boilerplate code
+#             - Updated DEPENDENCIES section with new utilities
 # 2026-02-01: CRITICAL BUG FIX - Removed call to undefined get_advanced_scheduling()
 #             - Replaced with inline normalization of advanced_scheduling YAML value
 #             - Fixed undefined variable references (advanced_scheduling -> is_advanced_scheduling)
@@ -211,30 +222,19 @@ run_cpn_template <- function(kpro_master = NULL,
   
   log_message("=== CHUNK 2: Generate CallsPerNight Template - START ===")
   
-  # Initialize validation context
-  validation_context <- create_validation_context(workflow = "cpn_template")
-  
-  # Standard paths
-  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
-  checkpoint_dir <- here::here("outputs", "checkpoints")
-  outputs_dir <- here::here("outputs")
-  
   # ===========================================================================
   # STAGE 1: LOAD CONFIGURATION
   # ===========================================================================
   
   if (verbose) print_stage_header("1", "Load Configuration")
   
-  assert_file_exists(
-    yaml_path,
-    hint = "Configure study parameters in Shiny app first."
-  )
-  
-  study_params <- load_study_parameters(yaml_path)
-  if (verbose) message("  [OK] Loaded study_parameters.yaml")
-  
-  # Update validation context with study name
-  validation_context$study_name <- study_params$study_parameters$study_name
+  # Use utility to setup pipeline context
+  ctx <- setup_pipeline_context("cpn_template", verbose = verbose)
+  study_params <- ctx$study_params
+  validation_context <- ctx$validation_context
+  yaml_path <- ctx$yaml_path
+  checkpoint_dir <- ctx$checkpoint_dir
+  outputs_dir <- ctx$outputs_dir
   
   # Validate recording period
   if (is.null(study_params$study_parameters$start_date) ||
@@ -305,43 +305,27 @@ run_cpn_template <- function(kpro_master = NULL,
       details = list(source = "chunk1_result")
     )
     
-    # Priority 3: Load from checkpoint
+    # -------------------------
+  # Priority 3: Load from checkpoint using utility
+  # -------------------------
   } else {
     
     if (verbose) message("  [!] Loading from most recent checkpoint...")
     
-    assert_directory_exists(checkpoint_dir)
-    
-    checkpoint_files <- list.files(
-      checkpoint_dir,
+    kpro_master <- load_most_recent_checkpoint(
       pattern = "02_kpro_master_.*\\.csv$",
-      full.names = TRUE
+      checkpoint_dir = checkpoint_dir,
+      error_hint = "Run Chunk 1 first or provide kpro_master parameter",
+      verbose = verbose
     )
-    
-    if (length(checkpoint_files) == 0) {
-      stop(
-        "No kpro_master data available.\n",
-        "  Run Chunk 1 first or provide kpro_master parameter."
-      )
-    }
-    
-    # Get most recent
-    checkpoint_file <- checkpoint_files[length(checkpoint_files)]
-    kpro_master <- safe_read_csv(checkpoint_file)
     
     validation_context <- log_validation_event(
       validation_context,
       event_type = "data_loaded",
       description = "Master data from checkpoint",
       count = nrow(kpro_master),
-      details = list(
-        source = "checkpoint",
-        file_path = checkpoint_file,
-        file_name = basename(checkpoint_file)
-      )
+      details = list(source = "checkpoint")
     )
-    
-    if (verbose) message(sprintf("  [OK] Loaded from: %s", basename(checkpoint_file)))
   }
   
   # Validate required columns
@@ -362,20 +346,15 @@ run_cpn_template <- function(kpro_master = NULL,
     if (verbose) message("  [!] Added manual_id column (all NA)")
   }
   
-  # Create unified species column (manual_id takes priority)
-  kpro_master <- kpro_master %>%
-    dplyr::mutate(
-      species = dplyr::case_when(
-        # Priority 1: manual_id (if valid)
-        !is.na(manual_id) & manual_id != "" & 
-          manual_id != "NoID" & manual_id != "UNKNOWN" ~ manual_id,
-        # Priority 2: auto_id (if valid)
-        !is.na(auto_id) & auto_id != "" & 
-          auto_id != "NoID" & auto_id != "UNKNOWN" ~ auto_id,
-        # Fallback: NoID
-        TRUE ~ "NoID"
-      )
-    )
+  # Create unified species column using utility
+  # Priority: manual_id > auto_id > "NoID"
+  kpro_master <- create_unified_species_column(
+    kpro_master,
+    manual_col = "manual_id",
+    auto_col = "auto_id",
+    output_col = "species",
+    verbose = verbose
+  )
   
   # Determine species source for metadata
   if (manual_id_used) {
@@ -487,21 +466,12 @@ run_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("5", "Generate Template Grid")
   
-  # Extract recording schedule parameters with proper defaults
-  recording_start_for_template <- study_params$processing_options$recording_start %||% "18:00:00"
-  recording_end <- study_params$processing_options$recording_end %||% "07:00:00"
-  
-  # Get advanced_scheduling flag (normalize TRUE/"yes" or FALSE/"no" to boolean)
-  advanced_scheduling_raw <- study_params$processing_options$advanced_scheduling
-  is_advanced_scheduling <- if (is.null(advanced_scheduling_raw)) {
-    FALSE
-  } else if (is.logical(advanced_scheduling_raw)) {
-    advanced_scheduling_raw
-  } else if (is.character(advanced_scheduling_raw)) {
-    tolower(advanced_scheduling_raw) %in% c("yes", "true", "1")
-  } else {
-    FALSE
-  }
+  # Get recording schedule configuration using utility
+  # Handles TRUE/FALSE/"yes"/"no" for advanced_scheduling with defaults
+  schedule <- get_schedule_config(study_params)
+  recording_start_for_template <- schedule$recording_start
+  recording_end <- schedule$recording_end
+  is_advanced_scheduling <- schedule$advanced_scheduling
   
   if (verbose) {
     message(sprintf("  [OK] recording_start: %s", recording_start_for_template))
@@ -638,7 +608,8 @@ run_cpn_template <- function(kpro_master = NULL,
     )
   )
   
-  artifact_id_edit <- sprintf("cpn_template_edit_%s", timestamp)
+  # Generate artifact ID for EDIT_THIS template using utility
+  artifact_id_edit <- generate_timestamped_filename("cpn_template_edit", extension = "")
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_edit,
