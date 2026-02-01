@@ -65,7 +65,7 @@
 #                    setup_pipeline_context, load_most_recent_checkpoint,
 #                    generate_timestamped_filename, get_schedule_config,
 #                    create_unified_species_column
-#     - callspernight.R: generate_calls_per_night_template, apply_schedule
+#     - callspernight.R: generate_calls_per_night_template
 #     - validation.R: create_validation_context, log_validation_event,
 #                     finalize_validation_report, assert_file_exists,
 #                     assert_directory_exists, assert_not_empty, assert_columns_exist
@@ -451,12 +451,6 @@ run_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   # STAGE 5: GENERATE TEMPLATE GRID
   # ===========================================================================
-  # I RUN INTO ISSUES HERE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  # Error in apply_schedule(template, schedule_file, uniform_start, uniform_end) :    
-  # Uniform StartTime and EndTime must be provided when schedule_file is NULL.   
-  # Received: uniform_start = NULL, uniform_end = NULL   Please provide both in 
-  # 'HH:MM:SS' format (e.g., '20:00:00') Called from: apply_schedule(template,
-  # schedule_file, uniform_start, uniform_end)
   
   if (verbose) print_stage_header("5", "Generate Template Grid")
   

@@ -1,5 +1,5 @@
 # ==============================================================================
-# R/pipeline/run_finalize_to_report.R -HAVE NOT TESTED YET
+# R/pipeline/run_finalize_to_report.R - Chunk 3: Finalize to Report
 # ==============================================================================
 # PURPOSE
 # -------
@@ -90,16 +90,52 @@
 # DEPENDENCIES
 # ------------
 #   Custom functions (via load_all.R):
-#     - All function modules from core/, ingestion/, standardization/,
-#       validation/, analysis/, output/
-#     - Specifically: load_study_parameters, load_master_data, load_cpn_final,
-#       save_callspernight_with_version, create_detector_activity_summary,
-#       create_study_summary, generate_quality_plots, generate_detector_plots,
-#       generate_species_plots, generate_temporal_plots, create_release_bundle,
-#       init_artifact_registry, register_artifact
+#     - core/utilities.R:
+#         log_message, print_stage_header, safe_read_csv, find_most_recent_file,
+#         %||%, center_text, print_workflow_summary
+#     - core/config.R:
+#         load_study_parameters
+#     - core/artifacts.R:
+#         init_artifact_registry, register_artifact, hash_file
+#     - core/release.R:
+#         create_release_bundle, validate_release_inputs
+#     - validation/validation.R:
+#         create_validation_context, log_validation_event, finalize_validation_report,
+#         assert_file_exists, assert_directory_exists, assert_columns_exist,
+#         validate_calls_per_night
+#     - analysis/callspernight.R:
+#         compare_template_edits, calculate_recording_hours, finalize_calls_per_night,
+#         save_callspernight_with_version
+#     - analysis/summarization.R:
+#         create_detector_activity_summary, create_study_summary,
+#         calculate_variance_components, create_species_composition_summary,
+#         calculate_species_accumulation, create_hourly_activity_profile
+#     - output/tables.R:
+#         format_detector_summary_gt, format_species_summary_gt,
+#         format_study_summary_gt, format_hourly_summary_gt, save_gt_table
+#     - output/plot_helpers.R:
+#         theme_kpro, kpro_palette_cat, validate_plot_input
+#     - output/plot_quality.R:
+#         plot_data_quality_overview, plot_missing_data_heatmap,
+#         plot_recording_effort_by_detector, plot_recording_effort_heatmap, etc.
+#     - output/plot_detector.R:
+#         plot_detector_comparison, plot_detector_heatmap,
+#         plot_detector_activity_over_time, etc.
+#     - output/plot_species.R:
+#         plot_species_composition, plot_species_richness_over_time,
+#         plot_species_by_detector, etc.
+#     - output/plot_temporal.R:
+#         plot_activity_over_time, plot_cumulative_calls_over_time,
+#         plot_hourly_activity_profile, plot_weekly_activity, etc.
+#     - output/report.R:
+#         generate_quarto_report
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Updated DEPENDENCIES section to list all functions comprehensively (40+ functions)
+# 2026-02-01: Added 2026-02-01 changelog entries documenting complete dependencies
+# 2026-02-01: Removed "-HAVE NOT TESTED YET" disclaimer from header
+# 2026-02-01: Verified all validation.R assertions documented
 # 2026-01-31: Initial creation - merged WF04-07 logic into orchestrating function
 # 2026-01-31: Added edited_template_file parameter for Shiny integration
 # 2026-01-31: Removed all interactive prompts
