@@ -67,11 +67,20 @@
 #                     finalize_validation_report, assert_file_exists,
 #                     assert_directory_exists, assert_not_empty
 #     - config.R: load_study_parameters
-#     - artifacts.R: init_artifact_registry, register_artifact
-#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%
+#     - artifacts.R: init_artifact_registry, register_artifact, hash_dataframe
+#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%,
+#                    setup_pipeline_context, generate_timestamped_filename
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Integrated new utility functions to eliminate code duplication
+#             - Added setup_pipeline_context() for YAML/validation setup (saves ~20 lines)
+#             - Added generate_timestamped_filename() for timestamps (saves ~10 lines)
+#             - Added hash_dataframe() for data content hashing (reproducibility)
+#             - Enhanced register_artifact() with data_hash parameter
+#             - Updated DEPENDENCIES section with new utilities
+# 2026-02-01: Reverted Stage 3 (config reconciliation) - violated fail-fast principle
+#             - Renumbered all stages back (4→3, 5→4, 6→5, 7→6, 8→7, 9→8)
 # 2026-01-30: Renumbered stages to integers (Stage 6.5 -> Stage 7, Stage 7 -> Stage 8)
 # 2026-01-30: Made deduplication optional via data_filters (default: TRUE)
 # 2026-01-30: Added Stage 7 user-configured data filters (NoID, zero-pulse)
@@ -194,7 +203,6 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   # Standard paths (not configurable - derived from project structure)
   raw_data_dir <- here::here("data", "raw")
-  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
   
   # ===========================================================================
   # STAGE 1: LOAD CONFIGURATION
@@ -202,26 +210,13 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) print_stage_header("1", "Load Configuration")
   
-  # Load study parameters from YAML (created by Shiny app)
-  # Using centralized assertion for file existence
-  assert_file_exists(
-    yaml_path,
-    hint = "Configure study parameters in Shiny app first."
-  )
-  
-  study_params <- load_study_parameters(yaml_path)
-  if (verbose) message("  [OK] Loaded study_parameters.yaml")
-  
-  # Update validation context with study name
-  validation_context$study_name <- study_params$study_parameters$study_name
-  
-  # Validate required configuration
-  if (is.null(study_params$study_parameters$timezone)) {
-    stop(
-      "Timezone not configured in study_parameters.yaml.\n",
-      "  Add timezone in Shiny app configuration."
-    )
-  }
+  # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
+  ctx <- setup_pipeline_context("ingest")
+  study_params <- ctx$study_params
+  validation_context <- ctx$validation_context
+  yaml_path <- ctx$yaml_path
+  checkpoint_dir <- ctx$checkpoint_dir
+  outputs_dir <- ctx$outputs_dir
   
   # Get external sources from YAML (may be NULL)
   external_sources <- study_params$study_parameters$external_data_sources
@@ -416,7 +411,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message("  [OK] Schema transformation complete")
   
-  log_message("[Stage 3] Transformed schemas to unified format")
+  log_message(sprintf("[Stage 3] Schema transformation complete: %d rows", nrow(unified_data)))
   
   # ===========================================================================
   # STAGE 4: DETECTOR MAPPING
@@ -480,7 +475,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message(sprintf("  [OK] Mapped %d detectors", n_detectors))
   
-  log_message(sprintf("[Stage 4] Applied detector mapping: %d detectors", n_detectors))
+  log_message(sprintf("[Stage 4] Detector mapping: %d detectors", n_detectors))
   
   # ===========================================================================
   # STAGE 5: TIME CONVERSION
@@ -581,14 +576,10 @@ run_ingest_standardize <- function(verbose = FALSE) {
                     format(nrow(kpro_master), big.mark = ",")))
   }
   
-  log_message(sprintf("[Stage 6] Finalized: %d rows, %d duplicates removed",
-                      nrow(kpro_master), n_duplicates))
+  log_message(sprintf("[Stage 6] Finalization: %d rows after deduplication", nrow(kpro_master)))
   
   # ===========================================================================
-  # STAGE 7: USER-CONFIGURED DATA FILTERS
-  # ===========================================================================
-  # CHANGED: Updated `n_before > 0` to be more dynamic
-  # NEW STAGE: Optional NoID and zero-pulse filtering
+  # STAGE 7: DATA FILTERS
   # ===========================================================================
   
   if (verbose) print_stage_header("7", "Data Filters")
@@ -684,16 +675,10 @@ run_ingest_standardize <- function(verbose = FALSE) {
   }
   
   # ===========================================================================
-  # STAGE 8: SAVE, REGISTER & RENDER VALIDATION
-  # ===========================================================================
-  # CHANGED: Renumbered from Stage 7 to Stage 8
-  # CHANGED: Updated metadata and artifact registry to include filter tracking
+  # STAGE 8: SAVE, REGISTER & VALIDATE
   # ===========================================================================
   
   if (verbose) print_stage_header("8", "Save, Register & Validate")
-  
-  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  artifact_id <- sprintf("kpro_master_%s", timestamp)
   
   # -------------------------
   # Save checkpoint (using centralized assertion for directory)
@@ -702,16 +687,25 @@ run_ingest_standardize <- function(verbose = FALSE) {
   checkpoint_dir <- here::here("outputs", "checkpoints")
   assert_directory_exists(checkpoint_dir, create = TRUE)
   
-  checkpoint_path <- here::here("outputs", "checkpoints",
-                                sprintf("02_kpro_master_%s.csv", timestamp))
+  # Generate timestamped checkpoint filename using utility
+  checkpoint_filename <- generate_timestamped_filename("02_kpro_master")
+  checkpoint_path <- here::here("outputs", "checkpoints", checkpoint_filename)
   
   readr::write_csv(kpro_master, checkpoint_path)
   
   if (verbose) message(sprintf("  [OK] Checkpoint saved: %s", basename(checkpoint_path)))
   
   # -------------------------
-  # Register artifact
+  # Register artifact with data hash
   # -------------------------
+  
+  # Compute deterministic hash of data content for reproducibility
+  data_hash <- hash_dataframe(kpro_master, 
+                              sort_by = c("Detector", "DateTime_local", "auto_id"))
+  
+  # Generate artifact ID using utility (DETERMINISTIC)
+  # Note: For artifact IDs, we need timestamp without extension - still deterministic
+  artifact_id <- sub("\\.csv$", "", generate_timestamped_filename("kpro_master"))
   
   registry <- init_artifact_registry()
   
@@ -721,6 +715,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
     artifact_type = "masterfile",
     workflow = "ingest",
     file_path = checkpoint_path,
+    data_hash = data_hash,  # Add data hash for reproducibility tracking
     metadata = list(
       n_rows_final = nrow(kpro_master),
       n_rows_removed_invalid = total_rows_removed,
