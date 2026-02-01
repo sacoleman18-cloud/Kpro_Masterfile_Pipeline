@@ -22,6 +22,7 @@
 # -----------------
 #   Stage 1: Load configuration from study_parameters.yaml
 #   Stage 2: Discover and load raw CSV files (local + external)
+#   Stage 2B: Validate & reconcile configuration (detector mappings)
 #   Stage 3: Transform schemas (v1/v2/v3 -> unified master)
 #   Stage 4: Apply detector mapping (ID -> friendly name)
 #   Stage 5: Convert timestamps (UTC -> local timezone)
@@ -66,12 +67,17 @@
 #                     create_validation_context, log_validation_event,
 #                     finalize_validation_report, assert_file_exists,
 #                     assert_directory_exists, assert_not_empty
-#     - config.R: load_study_parameters
+#     - config.R: load_study_parameters, ensure_study_parameters
 #     - artifacts.R: init_artifact_registry, register_artifact
 #     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Added Stage 2B - validate & reconcile configuration using ensure_study_parameters()
+#             - Auto-creates YAML template if missing
+#             - Reconciles detector mappings (add new, preserve existing, remove old)
+#             - Validates YAML structure before continuing
+#             - Reloads study_params to get reconciled mappings for Stage 4
 # 2026-01-30: Renumbered stages to integers (Stage 6.5 -> Stage 7, Stage 7 -> Stage 8)
 # 2026-01-30: Made deduplication optional via data_filters (default: TRUE)
 # 2026-01-30: Added Stage 7 user-configured data filters (NoID, zero-pulse)
@@ -388,6 +394,40 @@ run_ingest_standardize <- function(verbose = FALSE) {
   log_message(sprintf("[Stage 2] Loaded %d rows from %d source(s)",
                       nrow(raw_combined),
                       (n_local > 0) + length(external_datasets)))
+  
+  # ===========================================================================
+  # STAGE 2B: VALIDATE & RECONCILE CONFIGURATION
+  # ===========================================================================
+  
+  if (verbose) print_stage_header("2B", "Validate & Reconcile Configuration")
+  
+  # Ensure YAML exists and detector mappings are synchronized
+  # This will:
+  #   1. Create YAML template if missing (with suggested dates from data)
+  #   2. Add new detector IDs discovered in raw_combined
+  #   3. Preserve existing user-entered detector names
+  #   4. Remove obsolete detector IDs no longer in data
+  #   5. Validate final YAML structure
+  ensure_study_parameters(
+    raw_data = raw_combined,
+    yaml_path = yaml_path
+  )
+  
+  # Reload study_params to get reconciled detector mappings
+  study_params <- load_study_parameters(yaml_path)
+  
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "config_reconciled",
+    description = "Detector mappings reconciled with YAML",
+    details = list(
+      n_detectors = length(unique(raw_combined$detector_id[!is.na(raw_combined$detector_id)]))
+    )
+  )
+  
+  if (verbose) message("  [OK] YAML validated and detector mappings reconciled")
+  
+  log_message("[Stage 2B] Configuration validated and reconciled")
   
   # ===========================================================================
   # STAGE 3: SCHEMA TRANSFORMATION
