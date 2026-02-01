@@ -70,6 +70,11 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: CRITICAL BUG FIX - Removed call to undefined get_advanced_scheduling()
+#             - Replaced with inline normalization of advanced_scheduling YAML value
+#             - Fixed undefined variable references (advanced_scheduling -> is_advanced_scheduling)
+#             - Fixed variable name consistency (recording_start -> recording_start_for_template)
+#             - Ensures uniform_start/uniform_end are always set correctly from YAML with defaults
 # 2026-01-31: Initial creation - merged WF03 logic into orchestrating function
 # 2026-01-31: Added manual_id_file parameter for Shiny integration
 # 2026-01-31: Removed interactive prompts, added structured return
@@ -77,7 +82,6 @@
 # 2026-01-31: Fixed Stage 5 - removed invalid detectors/verbose parameters
 # 2026-01-31: Fixed Stage 5 - pass schedule to generate_calls_per_night_template()
 # 2026-01-31: Fixed Stage 6 - changed from "Apply" to "Verify" (schedule applied in Stage 5)
-# 2026-01-31: Refactored to use get_advanced_scheduling() helper for YAML normalization
 #
 # ==============================================================================
 #' Run CallsPerNight Template Generation
@@ -483,10 +487,21 @@ run_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("5", "Generate Template Grid")
   
-  # Extract recording schedule parameters using helpers for robust YAML handling
+  # Extract recording schedule parameters with proper defaults
   recording_start_for_template <- study_params$processing_options$recording_start %||% "18:00:00"
   recording_end <- study_params$processing_options$recording_end %||% "07:00:00"
-  is_advanced_scheduling <- get_advanced_scheduling(study_params)  # Normalized boolean
+  
+  # Get advanced_scheduling flag (normalize TRUE/"yes" or FALSE/"no" to boolean)
+  advanced_scheduling_raw <- study_params$processing_options$advanced_scheduling
+  is_advanced_scheduling <- if (is.null(advanced_scheduling_raw)) {
+    FALSE
+  } else if (is.logical(advanced_scheduling_raw)) {
+    advanced_scheduling_raw
+  } else if (is.character(advanced_scheduling_raw)) {
+    tolower(advanced_scheduling_raw) %in% c("yes", "true", "1")
+  } else {
+    FALSE
+  }
   
   if (verbose) {
     message(sprintf("  [OK] recording_start: %s", recording_start_for_template))
@@ -548,7 +563,7 @@ run_cpn_template <- function(kpro_master = NULL,
   # Schedule was already applied in Stage 5 by generate_calls_per_night_template()
   # This stage just validates and reports the schedule configuration
   
-  if (advanced_scheduling == "no") {
+  if (!is_advanced_scheduling) {
     # Uniform schedule was applied - verify columns exist
     if (!all(c("StartTime", "EndTime", "RecordingHours") %in% names(cpn_template))) {
       stop("Template missing expected schedule columns. Check generate_calls_per_night_template().")
@@ -556,7 +571,7 @@ run_cpn_template <- function(kpro_master = NULL,
     
     if (verbose) {
       message(sprintf("  [OK] Uniform schedule applied: %s - %s",
-                      recording_start, recording_end))
+                      recording_start_for_template, recording_end))
       
       # Report on RecordingHours calculation
       hours_summary <- summary(cpn_template$RecordingHours)
@@ -619,7 +634,7 @@ run_cpn_template <- function(kpro_master = NULL,
       n_detectors = length(detectors),
       n_nights = n_nights,
       template_type = "ORIGINAL",
-      recording_schedule = advanced_scheduling
+      recording_schedule = is_advanced_scheduling
     )
   )
   
@@ -635,7 +650,7 @@ run_cpn_template <- function(kpro_master = NULL,
       n_detectors = length(detectors),
       n_nights = n_nights,
       template_type = "EDIT_THIS",
-      recording_schedule = advanced_scheduling
+      recording_schedule = is_advanced_scheduling
     )
   )
   
@@ -695,9 +710,9 @@ run_cpn_template <- function(kpro_master = NULL,
       n_nights = n_nights,
       date_range = c(as.character(start_date), as.character(end_date)),
       recording_schedule = list(
-        start = recording_start,
+        start = recording_start_for_template,
         end = recording_end,
-        advanced = advanced_scheduling
+        advanced = is_advanced_scheduling
       ),
       manual_id_used = manual_id_used,
       rows_removed_noid = n_noid_removed,
