@@ -26,7 +26,7 @@
 #
 # Hashing: 
 #   - hash_file(): Compute SHA256 of file
-#   - hash_dataframe(): Compute hash of data frame
+#   - hash_dataframe(): Compute deterministic hash of data frame (restored)
 #   - verify_artifact(): Check if artifact matches registered hash
 #
 # Validation Tracking:
@@ -87,6 +87,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Restored hash_dataframe() with enhanced documentation for 3-chunk system
+#             - Added deterministic sorting recommendations for kpro_master and CPN data
+#             - Enhanced CONTRACT and RECOMMENDED USAGE sections
+#             - Ensures reproducibility tracking for all data artifacts
 # 2026-01-30: Added filter_noid and filter_zero_pulses event tracking
 # 2026-01-30: Enhanced Summary Metrics card with collapsible breakdown
 # 2026-01-30: Added CSS styling for details/summary elements
@@ -180,24 +184,35 @@ init_artifact_registry <- function(registry_path = REGISTRY_PATH) {
 #'
 #' @description
 #' Adds an artifact to the registry with full provenance metadata including
-#' file hash, source workflow, and timestamps.
+#' file hash, optional data hash for reproducibility, source workflow, and timestamps.
 #'
 #' @param registry List. Registry object from init_artifact_registry()
 #' @param artifact_name Character. Unique name for this artifact
 #' @param artifact_type Character. One of ARTIFACT_TYPES
-#' @param workflow Character. Workflow that produced this (e.g., "01", "02")
+#' @param workflow Character. Workflow that produced this (e.g., "ingest", "cpn_template")
 #' @param file_path Character. Path to artifact file
 #' @param input_artifacts Character vector. Names of input artifacts (for lineage)
 #' @param metadata List. Additional metadata to store
+#' @param data_hash Character. Optional SHA256 hash of data frame content for
+#'   deterministic reproducibility. If provided, stored as data_hash_sha256. Default: NULL
 #' @param quiet Logical. Suppress messages if TRUE
 #'
 #' @return List. Updated registry object (also saved to disk)
 #'
 #' @section CONTRACT:
-#' - Computes SHA256 hash of file
+#' - Computes SHA256 hash of file automatically
+#' - Stores data_hash if provided for reproducibility tracking
 #' - Adds timestamp and pipeline version
 #' - Saves registry to disk
 #' - Returns updated registry invisibly
+#'
+#' @section RECOMMENDED:
+#' For data artifacts (checkpoints), provide data_hash:
+#' ```r
+#' data_hash <- hash_dataframe(kpro_master, sort_by = c("Detector", "DateTime_local"))
+#' registry <- register_artifact(registry, "kpro_master", "masterfile", "ingest",
+#'                                file_path, data_hash = data_hash)
+#' ```
 #'
 #' @section DOES NOT:
 #' - Validate that input_artifacts exist in registry
@@ -212,6 +227,7 @@ register_artifact <- function(registry,
                               file_path,
                               input_artifacts = NULL,
                               metadata = list(),
+                              data_hash = NULL,
                               quiet = FALSE) {
   
   # Validate artifact type
@@ -244,6 +260,11 @@ register_artifact <- function(registry,
     input_artifacts = input_artifacts,
     metadata = metadata
   )
+  
+  # Add data hash if provided (for reproducibility tracking)
+  if (!is.null(data_hash)) {
+    artifact_entry$data_hash_sha256 <- data_hash
+  }
   
   # Add to registry
   registry$artifacts[[artifact_name]] <- artifact_entry
@@ -398,24 +419,52 @@ hash_file <- function(file_path) {
 #' Compute Hash of Data Frame
 #'
 #' @description
-#' Computes a content-based hash of a data frame, independent of
-#' row order or attribute metadata.
+#' Computes a content-based hash of a data frame for deterministic
+#' reproducibility tracking. Ensures same data produces same hash
+#' regardless of row order when sort_by is specified.
 #'
-#' @param df Data frame
-#' @param sort_by Character vector. Columns to sort by for deterministic order
+#' @param df Data frame to hash
+#' @param sort_by Character vector. Column names to sort by for deterministic
+#'   order. If NULL, uses existing row order (not recommended). Default: NULL
 #'
-#' @return Character. SHA256 hash string
+#' @return Character. SHA256 hash string (64 hex characters)
 #'
 #' @section CONTRACT:
-#' - Hash is deterministic if sort_by is specified
-#' - Ignores row names and attributes
-#' - Only considers data content
+#' - Hash is deterministic when sort_by is specified
+#' - Ignores row names and attributes (only data content)
+#' - Same data in different order produces same hash (with sort_by)
 #'
 #' @section DOES NOT:
-#' - Validate that sort_by columns exist
-#' - Handle NA values specially in sorting
+#' - Validate that sort_by columns exist (will error if missing)
+#' - Handle NA values specially (sorts NA to end)
+#' - Include metadata or attributes in hash
+#'
+#' @section RECOMMENDED USAGE:
+#' ```r
+#' # For kpro_master: sort by detector, datetime, species
+#' hash <- hash_dataframe(kpro_master, sort_by = c("Detector", "DateTime_local", "auto_id"))
+#' 
+#' # For CPN data: sort by detector and night
+#' hash <- hash_dataframe(cpn_final, sort_by = c("Detector", "Night"))
+#' ```
 #'
 #' @export
+hash_dataframe <- function(df, sort_by = NULL) {
+  
+  if (!is.data.frame(df)) {
+    stop("Input must be a data frame")
+  }
+  
+  # Sort for deterministic order
+  if (!is.null(sort_by)) {
+    df <- df[do.call(order, df[sort_by]), ]
+  }
+  
+  # Hash the serialized content
+  digest::digest(df, algo = "sha256")
+}
+
+
 #' Verify Artifact Integrity
 #'
 #' @description
