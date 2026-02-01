@@ -22,13 +22,13 @@
 # -----------------
 #   Stage 1: Load configuration from study_parameters.yaml
 #   Stage 2: Discover and load raw CSV files (local + external)
-#   Stage 2B: Validate & reconcile configuration (detector mappings)
-#   Stage 3: Transform schemas (v1/v2/v3 -> unified master)
-#   Stage 4: Apply detector mapping (ID -> friendly name)
-#   Stage 5: Convert timestamps (UTC -> local timezone)
-#   Stage 6: Finalize schema and apply optional deduplication
-#   Stage 7: Apply user-configured data filters (NoID, zero-pulse)
-#   Stage 8: Save checkpoint, register artifact, render validation HTML
+#   Stage 3: Validate & reconcile configuration (detector mappings)
+#   Stage 4: Transform schemas (v1/v2/v3 -> unified master)
+#   Stage 5: Apply detector mapping (ID -> friendly name)
+#   Stage 6: Convert timestamps (UTC -> local timezone)
+#   Stage 7: Finalize schema and apply optional deduplication
+#   Stage 8: Apply user-configured data filters (NoID, zero-pulse)
+#   Stage 9: Save checkpoint, register artifact, render validation HTML
 #
 # CONTRACT
 # --------
@@ -73,11 +73,12 @@
 #
 # CHANGELOG
 # ---------
-# 2026-02-01: Added Stage 2B - validate & reconcile configuration using ensure_study_parameters()
+# 2026-02-01: Added Stage 3 (validate & reconcile configuration) using ensure_study_parameters()
+#             - Renumbered all subsequent stages (old Stage 3 -> new Stage 4, etc.)
 #             - Auto-creates YAML template if missing
 #             - Reconciles detector mappings (add new, preserve existing, remove old)
 #             - Validates YAML structure before continuing
-#             - Reloads study_params to get reconciled mappings for Stage 4
+#             - Reloads study_params to get reconciled mappings for Stage 5
 # 2026-01-30: Renumbered stages to integers (Stage 6.5 -> Stage 7, Stage 7 -> Stage 8)
 # 2026-01-30: Made deduplication optional via data_filters (default: TRUE)
 # 2026-01-30: Added Stage 7 user-configured data filters (NoID, zero-pulse)
@@ -399,7 +400,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 2B: VALIDATE & RECONCILE CONFIGURATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("2B", "Validate & Reconcile Configuration")
+  if (verbose) print_stage_header("3", "Validate & Reconcile Configuration")
   
   # Ensure YAML exists and detector mappings are synchronized
   # This will:
@@ -427,13 +428,13 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message("  [OK] YAML validated and detector mappings reconciled")
   
-  log_message("[Stage 2B] Configuration validated and reconciled")
+  log_message("[Stage 3] Configuration validated and reconciled")
   
   # ===========================================================================
-  # STAGE 3: SCHEMA TRANSFORMATION
+  # STAGE 4: SCHEMA TRANSFORMATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("3", "Schema Transformation")
+  if (verbose) print_stage_header("4", "Schema Transformation")
   
   # Capture schema distribution before transformation
   schema_before <- table(raw_combined$schema_version)
@@ -809,8 +810,8 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   if (verbose) message(sprintf("  [OK] Validation report: %s", basename(validation_html_path)))
   
-  log_message(sprintf("[Stage 8] Registered artifact: %s", artifact_id))
-  log_message(sprintf("[Stage 8] Validation report: %s", basename(validation_html_path)))
+  log_message(sprintf("[Stage 9] Registered artifact: %s", artifact_id))
+  log_message(sprintf("[Stage 9] Validation report: %s", basename(validation_html_path)))
   
   # ===========================================================================
   # RETURN

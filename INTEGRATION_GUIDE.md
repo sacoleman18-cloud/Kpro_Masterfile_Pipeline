@@ -14,18 +14,18 @@ One-call function to:
 
 ### Where to Integrate
 **File**: `R/pipeline/run_ingest_standardize.R`  
-**Location**: Stage 1 - after loading and combining raw data
+**Location**: Stage 3 - after loading and combining raw data
 
 ### Code Snippet
 ```r
-# In run_ingest_standardize.R, after Stage 1 (around line 240)
+# In run_ingest_standardize.R, after Stage 2 (around line 395)
 # After: raw_combined <- bind_rows(local_data, external_data)
 
 # ===========================================================================
-# STAGE 1B: ENSURE YAML PARAMETERS & RECONCILE DETECTORS
+# STAGE 3: VALIDATE & RECONCILE CONFIGURATION
 # ===========================================================================
 
-if (verbose) print_stage_header("1B", "Validate & Reconcile Configuration")
+if (verbose) print_stage_header("3", "Validate & Reconcile Configuration")
 
 # Ensure YAML exists and detector mappings are synchronized
 ensure_study_parameters(
@@ -44,9 +44,9 @@ validation_context <- log_validation_event(
 
 if (verbose) message("  [OK] YAML validated and detector mappings reconciled")
 
-log_message("[Stage 1B] Configuration validated")
+log_message("[Stage 3] Configuration validated")
 
-# Then continue with Stage 2 (Schema Detection)
+# Then continue with Stage 4 (Schema Detection)
 ```
 
 ### Benefits
@@ -125,10 +125,10 @@ Validates all required config keys exist before running expensive operations
 # In any run_* function, after loading study_params
 
 # ===========================================================================
-# STAGE 1B: VALIDATE REQUIRED CONFIG KEYS
+# STAGE 2: VALIDATE REQUIRED CONFIG KEYS
 # ===========================================================================
 
-if (verbose) print_stage_header("1B", "Validate Configuration")
+if (verbose) print_stage_header("2", "Validate Configuration")
 
 # Define required keys for this workflow
 required_config <- list(
@@ -168,7 +168,7 @@ if (length(missing_keys) > 0) {
 
 if (verbose) message("  [OK] All required configuration keys present")
 
-log_message("[Stage 1B] Configuration validated")
+log_message("[Stage 2] Configuration validated")
 ```
 
 ### Benefits
@@ -211,7 +211,7 @@ After integrating any of the above functions, run this checklist:
 # 1. Delete existing YAML
 unlink("inst/config/study_parameters.yaml")
 
-# 2. Run Chunk 1 (should auto-create YAML)
+# 2. Run Chunk 1 (should auto-create YAML in Stage 3)
 result <- run_ingest_standardize(verbose = TRUE)
 
 # 3. Verify YAML was created
@@ -244,15 +244,15 @@ expect_silent(validate_study_config(good_cfg))
 
 | Function | Priority | File to Edit | Stage | Lines to Add |
 |----------|----------|--------------|-------|--------------|
-| ensure_study_parameters | 🔴 HIGH | run_ingest_standardize.R | After Stage 1 | ~20 |
+| ensure_study_parameters | 🔴 HIGH | run_ingest_standardize.R | Stage 3 | ~35 |
 | validate_study_config | 🟡 MED | Shiny app | Save handler | ~5 |
-| Pre-flight validation | ℹ️ OPT | All run_*.R | Stage 1B | ~30 |
+| Pre-flight validation | ℹ️ OPT | All run_*.R | Stage 2 | ~30 |
 
 ---
 
 **Integration Priority Order:**
 1. Fix Stage 5 bug (✅ DONE)
-2. Add ensure_study_parameters() to run_ingest_standardize
+2. Add ensure_study_parameters() to run_ingest_standardize (✅ DONE - Stage 3)
 3. Add validate_study_config() to Shiny save handler
 4. Add pre-flight validation to run_* scripts (optional but recommended)
 5. Implement run_finalize_to_report() to use analysis/output functions

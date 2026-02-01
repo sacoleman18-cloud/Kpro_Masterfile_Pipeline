@@ -63,7 +63,7 @@ Complete analysis covering:
 
 **Section A - Workflow Interplay Table**
 - All 3 run_* orchestrators mapped with inputs/outputs/config dependencies
-- 8 processing stages documented
+- 9 processing stages documented for Chunk 1
 - Function call chains traced
 
 **Section B - Unused/Underused Functions**
@@ -108,13 +108,13 @@ Quick reference guide:
 │ ─────────────────────────────────────────────────────────────── │
 │ Stage 1:  Load configuration                                    │
 │ Stage 2:  Load raw CSV files (local + external)                │
-│ Stage 2B: Validate & reconcile configuration ✨ NEW             │
-│ Stage 3:  Transform schemas (v1/v2/v3 → unified)               │
-│ Stage 4:  Apply detector mapping                               │
-│ Stage 5:  Convert timestamps (UTC → local)                     │
-│ Stage 6:  Finalize schema & deduplication                      │
-│ Stage 7:  Apply data filters                                   │
-│ Stage 8:  Save checkpoint + validation HTML                    │
+│ Stage 3:  Validate & reconcile configuration ✨ NEW             │
+│ Stage 4:  Transform schemas (v1/v2/v3 → unified)               │
+│ Stage 5:  Apply detector mapping                               │
+│ Stage 6:  Convert timestamps (UTC → local)                     │
+│ Stage 7:  Finalize schema & deduplication                      │
+│ Stage 8:  Apply data filters                                   │
+│ Stage 9:  Save checkpoint + validation HTML                    │
 │                                                                 │
 │ Output: kpro_master.csv                                         │
 └─────────────────────────────────────────────────────────────────┘
@@ -268,9 +268,18 @@ output_preferences:
 
 ## Files Modified
 
-### Code Changes
-1. `R/pipeline/run_cpn_template.R` - Stage 5 bug fix
-2. `R/pipeline/run_ingest_standardize.R` - Stage 2B integration
+### Code Changes (2 files)
+1. **R/pipeline/run_cpn_template.R**
+   - Fixed Stage 5 bug (undefined function)
+   - Fixed 4 variable name inconsistencies
+   - Added robust YAML normalization
+   - Updated changelog
+
+2. **R/pipeline/run_ingest_standardize.R**
+   - Added Stage 3 (config validation)
+   - Integrated ensure_study_parameters()
+   - Renumbered all subsequent stages (3→4, 4→5, 5→6, 6→7, 7→8, 8→9)
+   - Updated dependencies and changelog
 
 ### Documentation Added
 1. `AUDIT_REPORT.md` - Complete audit analysis (400+ lines)

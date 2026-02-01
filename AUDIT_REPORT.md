@@ -51,7 +51,7 @@ Chunk 3: run_finalize_to_report() [Not yet implemented]
 
 | Workflow | Stages | Key Inputs | Key Outputs | Config Fields Used | Functions Called |
 |----------|--------|------------|-------------|-------------------|------------------|
-| **run_ingest_standardize** | 1-6 | • Local CSV files (data/raw/)<br>• External sources (from YAML)<br>• study_parameters.yaml | • kpro_master checkpoint<br>• validation HTML | • study_name<br>• timezone<br>• external_data_sources<br>• detector_mapping<br>• data_filters | • load_study_parameters<br>• load_local_raw_data<br>• load_external_raw_data<br>• standardize_kpro_schema<br>• convert_datetime_to_local<br>• create_validation_context<br>• register_artifact |
+| **run_ingest_standardize** | 1-9 | • Local CSV files (data/raw/)<br>• External sources (from YAML)<br>• study_parameters.yaml | • kpro_master checkpoint<br>• validation HTML | • study_name<br>• timezone<br>• external_data_sources<br>• detector_mapping<br>• data_filters | • load_study_parameters<br>• ensure_study_parameters<br>• load_local_raw_data<br>• load_external_raw_data<br>• standardize_kpro_schema<br>• convert_datetime_to_local<br>• create_validation_context<br>• register_artifact |
 | **run_cpn_template** | 1-8 | • kpro_master (from Chunk 1)<br>• OR manual_id CSV<br>• study_parameters.yaml | • CPN Template ORIGINAL<br>• CPN Template EDIT_THIS<br>• validation HTML | • study_name<br>• start_date / end_date<br>• recording_start / recording_end<br>• **advanced_scheduling** ⚠️ | • load_study_parameters<br>• generate_calls_per_night_template<br>• apply_schedule (internal)<br>• create_validation_context<br>• register_artifact |
 | **run_finalize_to_report** | [Pending] | • CPN Template (edited)<br>• kpro_master<br>• study_parameters.yaml | • CallsPerNight_final.csv<br>• 26 plot PNG files<br>• Summary stats RDS<br>• Quarto HTML report<br>• Release ZIP bundle | • output_preferences<br>• intended_hours | • [To be implemented]<br>• calculate_summary_statistics<br>• create_detector_plots<br>• create_species_plots<br>• render_quarto_report |
 
@@ -67,10 +67,10 @@ Chunk 3: run_finalize_to_report() [Not yet implemented]
 - **Currently Called**: NOWHERE
 - **Should Be Called**: 
   - **File**: `R/pipeline/run_ingest_standardize.R`
-  - **Stage**: Stage 1 (after loading raw data)
+  - **Stage**: Stage 3 (after loading raw data)
   - **Integration Point**:
     ```r
-    # After Stage 1 (line ~240)
+    # After Stage 2 (around line 395)
     # Ensure YAML exists and detectors are reconciled
     ensure_study_parameters(
       raw_data = raw_combined,
@@ -512,10 +512,10 @@ test_that("advanced_scheduling normalization works", {
 
 ### Immediate Actions (Before Production Use)
 
-1. **Add ensure_study_parameters() to run_ingest_standardize** ✅ HIGH PRIORITY
+1. **Add ensure_study_parameters() to run_ingest_standardize** ✅ COMPLETED
    - Automatically reconcile detector mappings
    - Prevent placeholder detector names in final outputs
-   - Integration point: Stage 1, after loading raw data
+   - Integration point: Stage 3, after loading raw data
 
 2. **Add Pre-Flight Validation to Each run_* Script** ⚠️ MEDIUM PRIORITY
    ```r
