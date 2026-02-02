@@ -1,5 +1,5 @@
 # =============================================================================
-# core/utilities.R — FOUNDATIONAL UTILITIES (LOCKED CONTRACT)
+# core/utilities.R - FOUNDATIONAL UTILITIES (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
@@ -45,6 +45,7 @@
 #   - Contain domain logic (bat data, schemas, detectors)
 #   - Depend on any other project module
 #   - Perform complex input validation (use validation/validation.R)
+#   - Parse configuration files (use config/config.R)
 #
 # DEPENDENCIES
 # ------------
@@ -68,12 +69,11 @@
 # File Discovery:
 #   - find_most_recent_file()
 #
-# Checkpoint Management:
-#   - load_or_checkpoint()
-#   - load_intro_standardized()
-#   - load_master_data()
-#   - load_cpn_final()
-#   - load_cpn_template_original()
+# Orchestrator Utilities (NEW for 3-chunk run_* system):
+#   - setup_pipeline_context()        # YAML + validation context setup
+#   - load_most_recent_checkpoint()   # Checkpoint file discovery & loading
+#   - generate_timestamped_filename() # Standardized timestamp generation
+#   - create_unified_species_column() # Species priority logic (manual > auto > NoID)
 #
 # Path Generation:
 #   - make_output_path()
@@ -105,6 +105,20 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: MOVED get_schedule_config() to config.R (proper architectural placement)
+#             - Configuration parsing belongs in config module, not utilities
+#             - Utilities should remain domain-agnostic with zero config knowledge
+#             - get_schedule_config() has domain knowledge (bat study defaults, YAML structure)
+# 2026-02-01: CLEANUP - Removed legacy functions for workflow 01-07 pattern
+#             - Removed load_or_checkpoint(), load_intro_standardized()
+#             - Removed load_master_data(), load_cpn_final(), load_cpn_template_original()
+#             - These were designed for legacy workflow scripts, not run_* orchestrators
+# 2026-02-01: Added orchestrator utility functions to consolidate code patterns
+#             - Added setup_pipeline_context() for YAML/validation setup
+#             - Added load_most_recent_checkpoint() for checkpoint discovery
+#             - Added generate_timestamped_filename() for timestamp generation
+#             - Added create_unified_species_column() for species priority logic
+#             - All designed for deterministic 3-chunk run_* orchestrator system
 # 2026-01-31: Refactored for standards compliance
 #             - Added ensure_dir_exists() helper
 #             - Added center_text() helper
@@ -117,6 +131,7 @@
 # 2024-12-26: Initial CODING_STANDARDS compliant version
 #
 # =============================================================================
+
 
 
 # ==============================================================================
@@ -510,187 +525,6 @@ find_most_recent_file <- function(directory,
 #' }
 #'
 #' @export
-load_or_checkpoint <- function(var_name,
-                               checkpoint_dir,
-                               checkpoint_pattern,
-                               loader_fn = safe_read_csv,
-                               hint = NULL,
-                               verbose = TRUE) {
-  
-  # Check if variable exists in global environment
-  if (exists(var_name, envir = .GlobalEnv)) {
-    data <- get(var_name, envir = .GlobalEnv)
-    
-    if (verbose) {
-      message(sprintf("[OK] Using %s from memory", var_name))
-      if (is.data.frame(data)) {
-        message(sprintf("  Rows: %s", format(nrow(data), big.mark = ",")))
-      }
-    }
-    
-    return(data)
-  }
-  
-  # Load from checkpoint
-  if (verbose) {
-    message(sprintf("%s not found in memory - loading from checkpoint...", var_name))
-  }
-  
-  checkpoint_file <- find_most_recent_file(
-    checkpoint_dir,
-    checkpoint_pattern,
-    error_if_none = TRUE,
-    hint = hint
-  )
-  
-  if (verbose) {
-    message(sprintf("  Loading: %s", basename(checkpoint_file)))
-  }
-  
-  data <- loader_fn(checkpoint_file)
-  
-  if (is.null(data)) {
-    stop(sprintf("Failed to load checkpoint: %s", checkpoint_file))
-  }
-  
-  if (verbose) {
-    if (is.data.frame(data)) {
-      message(sprintf("[OK] Loaded checkpoint: %s rows",
-                      format(nrow(data), big.mark = ",")))
-    } else {
-      message("[OK] Loaded checkpoint")
-    }
-  }
-  
-  data
-}
-
-
-#' Load Intro-Standardized Data (Workflow 01 Output)
-#'
-#' @description
-#' Loads raw_combined from memory or most recent checkpoint.
-#' Workflow-specific wrapper around load_or_checkpoint().
-#'
-#' @param verbose Logical. Print status messages? Default: TRUE
-#'
-#' @return Data frame with intro-standardized data.
-#'
-#' @section CONTRACT:
-#' - Returns data from memory or checkpoint
-#' - Stops if no data available
-#'
-#' @export
-load_intro_standardized <- function(verbose = TRUE) {
-  load_or_checkpoint(
-    "raw_combined",
-    "outputs",
-    "^01_intro_standardized_.*\\.csv$",
-    hint = "Run 01_ingest_raw_data.R first",
-    verbose = verbose
-  )
-}
-
-
-#' Load Master File (Workflow 02 Output)
-#'
-#' @description
-#' Loads kpro_master from memory or most recent checkpoint.
-#' Ensures DateTime is POSIXct if loaded from CSV.
-#'
-#' @param verbose Logical. Print status messages? Default: TRUE
-#'
-#' @return Data frame with master data.
-#'
-#' @section CONTRACT:
-#' - Returns data from memory or checkpoint
-#' - Converts DateTime to POSIXct if loaded from file
-#' - Stops if no data available
-#'
-#' @export
-load_master_data <- function(verbose = TRUE) {
-  data <- load_or_checkpoint(
-    "kpro_master",
-    "outputs",
-    "^02_kpro_master_.*\\.csv$",
-    hint = "Run 02_standardize.R first",
-    verbose = verbose
-  )
-  
-  # Ensure DateTime is POSIXct if loaded from CSV
-  # CSV files lose POSIXct class, so we need to restore it
-  if ("DateTime" %in% names(data) && !inherits(data$DateTime, "POSIXt")) {
-    data$DateTime <- lubridate::ymd_hms(data$DateTime)
-  }
-  
-  data
-}
-
-
-#' Load CallsPerNight Final (Workflow 04 Output)
-#'
-#' @description
-#' Loads calls_per_night_final from memory or most recent checkpoint.
-#' Ensures Night is Date class and numeric columns are numeric.
-#'
-#' @param verbose Logical. Print status messages? Default: TRUE
-#'
-#' @return Data frame with CPN final data.
-#'
-#' @section CONTRACT:
-#' - Returns data from memory or checkpoint
-#' - Converts Night to Date if loaded from file
-#' - Converts numeric columns (CallsPerNight, RecordingHours, CallsPerHour)
-#' - Stops if no data available
-#'
-#' @export
-load_cpn_final <- function(verbose = TRUE) {
-  data <- load_or_checkpoint(
-    "calls_per_night_final",
-    "outputs",
-    "^04_CallsPerNight_Final_.*\\.csv$",
-    hint = "Run 04_finalize_cpn.R first",
-    verbose = verbose
-  )
-  
-  # Ensure Night is Date class if loaded from CSV
-  if ("Night" %in% names(data) && !inherits(data$Night, "Date")) {
-    data$Night <- as.Date(data$Night)
-  }
-  
-  # Ensure numeric columns are numeric (CSV loads as character)
-  numeric_cols <- c("CallsPerNight", "RecordingHours", "CallsPerHour")
-  for (col in numeric_cols) {
-    if (col %in% names(data) && !is.numeric(data[[col]])) {
-      data[[col]] <- as.numeric(data[[col]])
-    }
-  }
-  
-  data
-}
-
-
-#' Load CPN Template Original (Workflow 03 Output)
-#'
-#' @description
-#' Loads the original (unedited) CPN template for edit tracking.
-#'
-#' @param verbose Logical. Print status messages? Default: TRUE
-#'
-#' @return Data frame with original template.
-#'
-#' @export
-load_cpn_template_original <- function(verbose = TRUE) {
-  load_or_checkpoint(
-    "template_original",
-    "outputs",
-    "^03_CallsPerNight_Template_ORIGINAL_.*\\.csv$",
-    hint = "Run 03_generate_cpn_template.R first",
-    verbose = verbose
-  )
-}
-
-
 # ==============================================================================
 # PATH GENERATION
 # ==============================================================================
@@ -1106,6 +940,279 @@ print_pipeline_complete <- function(outputs, next_steps, report_path, width = 65
   message("")
   
   invisible(NULL)
+}
+
+
+# ==============================================================================
+# ORCHESTRATOR UTILITIES (Added 2026-02-01)
+# ==============================================================================
+# Purpose: Consolidate common patterns in run_* orchestrating functions
+# Per CODE_EFFICIENCY_ANALYSIS.md and standards documents
+
+
+#' Setup Pipeline Context
+#'
+#' @description
+#' Consolidates the standard initialization pattern used by all orchestrating
+#' functions: load YAML config, create validation context, set up paths.
+#' Reduces ~20 lines of boilerplate per orchestrator.
+#' 
+#' This is a DETERMINISTIC helper - all behavior is fixed, no parameters
+#' to customize behavior. The orchestrating function controls verbosity.
+#'
+#' @param workflow_name Character. Workflow identifier (e.g., "ingest", 
+#'   "cpn_template", "finalize")
+#'
+#' @return Named list with:
+#'   \describe{
+#'     \item{yaml_path}{Path to study_parameters.yaml}
+#'     \item{study_params}{Loaded study parameters list}
+#'     \item{validation_context}{Initialized validation tracking context}
+#'     \item{checkpoint_dir}{Path to checkpoints directory}
+#'     \item{outputs_dir}{Path to outputs directory}
+#'   }
+#'
+#' @section CONTRACT:
+#' - Asserts YAML exists before loading
+#' - Creates validation context with study_name
+#' - Returns all paths using here::here()
+#' - No configurable behavior - purely deterministic
+#'
+#' @section DOES NOT:
+#' - Load any data files
+#' - Modify YAML configuration
+#' - Create directories (just returns paths)
+#' - Accept verbose parameter (orchestrator controls console output)
+#'
+#' @examples
+#' \dontrun{
+#' ctx <- setup_pipeline_context("ingest")
+#' study_params <- ctx$study_params
+#' validation_context <- ctx$validation_context
+#' }
+#'
+#' @export
+setup_pipeline_context <- function(workflow_name) {
+  
+  # Standard paths - FIXED by project structure
+  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
+  checkpoint_dir <- here::here("outputs", "checkpoints")
+  outputs_dir <- here::here("outputs")
+  
+  # Assert YAML exists
+  if (!file.exists(yaml_path)) {
+    stop(sprintf(
+      "Configuration file not found: %s\n  Configure study parameters in Shiny app first.",
+      yaml_path
+    ))
+  }
+  
+  # Load configuration (requires load_study_parameters from config.R)
+  study_params <- load_study_parameters(yaml_path)
+  
+  # Create validation context (requires create_validation_context from validation.R)
+  validation_context <- create_validation_context(workflow = workflow_name)
+  validation_context$study_name <- study_params$study_parameters$study_name
+  
+  list(
+    yaml_path = yaml_path,
+    study_params = study_params,
+    validation_context = validation_context,
+    checkpoint_dir = checkpoint_dir,
+    outputs_dir = outputs_dir
+  )
+}
+
+
+#' Load Most Recent Checkpoint
+#'
+#' @description
+#' Discovers and loads the most recent checkpoint file matching a pattern.
+#' Consolidates the checkpoint discovery pattern used across orchestrators.
+#' Reduces ~15 lines of boilerplate per usage.
+#' 
+#' This is a DETERMINISTIC helper - checkpoint directory is FIXED by project
+#' structure. Error messages are standardized.
+#'
+#' @param pattern Character. Regex pattern for filename matching (e.g.,
+#'   "02_kpro_master_.*\\.csv$")
+#'
+#' @return Tibble loaded from most recent checkpoint file
+#'
+#' @section CONTRACT:
+#' - Always searches outputs/checkpoints (FIXED path)
+#' - Selects most recent file (last in sorted list)
+#' - Loads using safe_read_csv()
+#' - Stops with helpful error if no files found
+#' - No configurable behavior - purely deterministic
+#'
+#' @section DOES NOT:
+#' - Validate data structure
+#' - Modify loaded data
+#' - Create checkpoint directory
+#' - Accept verbose parameter (orchestrator controls console output)
+#' - Allow custom checkpoint directories (violates project structure)
+#'
+#' @examples
+#' \dontrun{
+#' kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*\\.csv$")
+#' }
+#'
+#' @export
+load_most_recent_checkpoint <- function(pattern) {
+  
+  # Checkpoint directory - FIXED by project structure
+  checkpoint_dir <- here::here("outputs", "checkpoints")
+  
+  # Assert directory exists
+  if (!dir.exists(checkpoint_dir)) {
+    stop(sprintf(
+      "Checkpoint directory not found: %s\n  Run previous chunk first.",
+      checkpoint_dir
+    ))
+  }
+  
+  # Find matching files
+  files <- list.files(checkpoint_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(files) == 0) {
+    stop(sprintf(
+      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  Run previous chunk first.",
+      pattern, checkpoint_dir
+    ))
+  }
+  
+  # Get most recent (last in sorted list)
+  most_recent <- files[length(files)]
+  
+  # Load using safe_read_csv
+  safe_read_csv(most_recent)
+}
+
+
+#' Generate Timestamped Filename
+#'
+#' @description
+#' Generates a filename with embedded timestamp. Consolidates the timestamp
+#' generation pattern used for checkpoints and artifacts. Reduces ~5 lines
+#' of boilerplate per usage.
+#' 
+#' This is a DETERMINISTIC helper - format is FIXED per project standards.
+#' No parameters to customize format, separator, or extension behavior.
+#'
+#' @param prefix Character. Filename prefix (e.g., "02_kpro_master")
+#' @param suffix Character. Optional suffix before extension (e.g., "ORIGINAL").
+#'   Default: ""
+#'
+#' @return Character. Formatted filename string with .csv extension
+#'
+#' @section CONTRACT:
+#' - Generates timestamp using Sys.time() in YYYYMMDD_HHMMSS format (FIXED)
+#' - Concatenates parts with underscore separator (FIXED)
+#' - Always uses .csv extension (FIXED per project standards)
+#' - Omits empty suffix
+#' - No configurable behavior - purely deterministic
+#'
+#' @section DOES NOT:
+#' - Create any files
+#' - Validate prefix/suffix content
+#' - Check for existing files
+#' - Allow custom formats, separators, or extensions
+#'
+#' @examples
+#' \dontrun{
+#' # Basic checkpoint
+#' generate_timestamped_filename("02_kpro_master")
+#' # Returns: "02_kpro_master_20260201_143022.csv"
+#'
+#' # With suffix
+#' generate_timestamped_filename("03_CPN_Template", suffix = "ORIGINAL")
+#' # Returns: "03_CPN_Template_20260201_143022_ORIGINAL.csv"
+#' }
+#'
+#' @export
+generate_timestamped_filename <- function(prefix, suffix = "") {
+  
+  # Generate timestamp - FIXED format per project standards
+  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  
+  # Build parts list
+  parts <- c(prefix, timestamp)
+  
+  # Add suffix if provided
+  if (!is.null(suffix) && nchar(suffix) > 0) {
+    parts <- c(parts, suffix)
+  }
+  
+  # Combine with underscore (FIXED separator) and add .csv (FIXED extension)
+  base_name <- paste(parts, collapse = "_")
+  paste0(base_name, ".csv")
+}
+
+
+
+#' Create Unified Species Column
+#'
+#' @description
+#' Creates a unified species column with priority: manual_id > auto_id > "NoID".
+#' Consolidates the species unification logic used in multiple orchestrators.
+#' Filters out unidentifiable values. Reduces ~15 lines of boilerplate per usage.
+#' 
+#' This is a DETERMINISTIC helper - column names are FIXED per schema standards.
+#' No parameters to customize behavior (violates deterministic principle).
+#'
+#' @param data Data frame. Must contain auto_id column at minimum
+#'
+#' @return Data frame with unified species column added
+#'
+#' @section CONTRACT:
+#' - Priority: manual_id > auto_id > "NoID" (FIXED)
+#' - Column names: manual_id, auto_id, species (FIXED per schema)
+#' - Treats NA, "", "NoID", "UNKNOWN" as unidentifiable (FIXED)
+#' - Adds 'species' column to data frame
+#' - Does not modify input data frame (returns new one)
+#' - No configurable behavior - purely deterministic
+#'
+#' @section DOES NOT:
+#' - Remove rows (just marks as "NoID")
+#' - Modify existing columns
+#' - Validate species names
+#' - Accept custom column names (violates schema standards)
+#' - Accept verbose parameter (orchestrator controls console output)
+#'
+#' @examples
+#' \dontrun{
+#' kpro_master <- create_unified_species_column(kpro_master)
+#' # Now has 'species' column with priority logic applied
+#' }
+#'
+#' @export
+create_unified_species_column <- function(data) {
+  
+  # Helper to check if value is valid
+  is_valid <- function(x) {
+    !is.na(x) & x != "" & x != "NoID" & x != "UNKNOWN"
+  }
+  
+  # FIXED column names per schema standards
+  manual_col <- "manual_id"
+  auto_col <- "auto_id"
+  output_col <- "species"
+  
+  # Build species column with FIXED priority logic
+  data <- data %>%
+    dplyr::mutate(
+      !!output_col := dplyr::case_when(
+        # Priority 1: manual_id (if valid)
+        manual_col %in% names(.) & is_valid(.data[[manual_col]]) ~ .data[[manual_col]],
+        # Priority 2: auto_id (if valid)
+        is_valid(.data[[auto_col]]) ~ .data[[auto_col]],
+        # Fallback: NoID
+        TRUE ~ "NoID"
+      )
+    )
+  
+  data
 }
 
 

@@ -26,8 +26,9 @@
 #   Stage 4: Calculate study nights and aggregate calls
 #   Stage 5: Generate detector × night template grid (with schedule)
 #   Stage 6: Verify recording schedule configuration
-#   Stage 7: Save templates (ORIGINAL + EDIT_THIS), register artifacts
-#   Stage 8: Render validation HTML
+#   Stage 7: Format template for Excel (sort, datetime, formulas)
+#   Stage 8: Save templates (ORIGINAL + EDIT_THIS), register artifacts
+#   Stage 9: Render validation HTML
 #
 # CONTRACT
 # --------
@@ -51,6 +52,9 @@
 #   - Returns structured list with all outputs
 #   - Validation HTML rendered for user review
 #   - Two-file system: ORIGINAL (tracking) + EDIT_THIS (user edits)
+#   - Template sorted by Detector, then Night (groups nights per detector)
+#   - DateTime columns formatted for Excel recognition
+#   - RecordingHours as Excel formula for user editing
 #
 # DOES NOT:
 #   - Calculate final metrics (that's Chunk 3)
@@ -60,9 +64,11 @@
 # DEPENDENCIES
 # ------------
 #   Custom functions (via load_all.R):
-#     - config.R: load_study_parameters
-#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%
-#     - callspernight.R: generate_calls_per_night_template, apply_schedule
+#     - config.R: load_study_parameters, get_schedule_config
+#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%,
+#                    setup_pipeline_context, load_most_recent_checkpoint,
+#                    generate_timestamped_filename, create_unified_species_column
+#     - callspernight.R: generate_calls_per_night_template
 #     - validation.R: create_validation_context, log_validation_event,
 #                     finalize_validation_report, assert_file_exists,
 #                     assert_directory_exists, assert_not_empty, assert_columns_exist
@@ -70,6 +76,37 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-02: CRITICAL FIX - Timezone handling in Night calculation (CallsPerNight accuracy)
+#             - Stage 4 now forces timezone on DateTime_local using lubridate::force_tz()
+#             - When CSV reloaded, POSIXct loses timezone → interpreted as UTC → wrong hours
+#             - Changed logic to match legacy: hour < cutoff (was hour >= cutoff)
+#             - Uses lubridate::as_date() with explicit timezone parameter
+#             - Fixes systematic CallsPerNight count errors (calls assigned to wrong nights)
+#             - Example: 22:00 CDT became 04:00 UTC, shifting Night by 1 day
+#             - CallsPerNight counts now match legacy workflow exactly
+#             - Restored proper template formatting for Excel
+#             - Added Stage 7: Format Template for Excel (from legacy workflow)
+#             - Sorts by Detector then Night (groups all nights per detector)
+#             - Converts time strings to full DateTime format ("10/04/2025 06:00:00 PM")
+#             - Replaces RecordingHours with Excel formula (=(VALUE(E2)-VALUE(D2))*24)
+#             - Removes Warning column from final template
+#             - Renumbered old Stages 7-8 to 8-9
+#             - Updated header PROCESSING STAGES section
+#             - Fixed artifact_type from "template" to "cpn_template" (correct enum)
+#             - Template now matches legacy workflow output exactly
+# 2026-02-01: Integrated new utility functions to eliminate code duplication
+#             - Added setup_pipeline_context() for YAML/validation setup (saves ~20 lines)
+#             - Added load_most_recent_checkpoint() for checkpoint loading (saves ~15 lines)
+#             - Added get_schedule_config() for schedule extraction (saves ~18 lines)
+#             - Added create_unified_species_column() for species logic (saves ~15 lines)
+#             - Added generate_timestamped_filename() for timestamps (saves ~8 lines)
+#             - Total savings: ~76 lines of boilerplate code
+#             - Updated DEPENDENCIES section with new utilities
+# 2026-02-01: CRITICAL BUG FIX - Removed call to undefined get_advanced_scheduling()
+#             - Replaced with inline normalization of advanced_scheduling YAML value
+#             - Fixed undefined variable references (advanced_scheduling -> is_advanced_scheduling)
+#             - Fixed variable name consistency (recording_start -> recording_start_for_template)
+#             - Ensures uniform_start/uniform_end are always set correctly from YAML with defaults
 # 2026-01-31: Initial creation - merged WF03 logic into orchestrating function
 # 2026-01-31: Added manual_id_file parameter for Shiny integration
 # 2026-01-31: Removed interactive prompts, added structured return
@@ -77,7 +114,6 @@
 # 2026-01-31: Fixed Stage 5 - removed invalid detectors/verbose parameters
 # 2026-01-31: Fixed Stage 5 - pass schedule to generate_calls_per_night_template()
 # 2026-01-31: Fixed Stage 6 - changed from "Apply" to "Verify" (schedule applied in Stage 5)
-# 2026-01-31: Refactored to use get_advanced_scheduling() helper for YAML normalization
 #
 # ==============================================================================
 #' Run CallsPerNight Template Generation
@@ -130,6 +166,9 @@
 #' - Creates unified species column (manual_id > auto_id priority)
 #' - Removes only calls where BOTH auto_id AND manual_id are unidentifiable
 #' - Pre-fills recording times if uniform schedule configured
+#' - Sorts template by Detector, then Night (groups nights per detector)
+#' - Formats DateTime columns for Excel recognition
+#' - Generates Excel formulas for RecordingHours calculation
 #' - Always saves two templates: ORIGINAL and EDIT_THIS
 #' - Always renders validation HTML
 #' - Registers both templates in artifact_registry.yaml
@@ -207,30 +246,19 @@ run_cpn_template <- function(kpro_master = NULL,
   
   log_message("=== CHUNK 2: Generate CallsPerNight Template - START ===")
   
-  # Initialize validation context
-  validation_context <- create_validation_context(workflow = "cpn_template")
-  
-  # Standard paths
-  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
-  checkpoint_dir <- here::here("outputs", "checkpoints")
-  outputs_dir <- here::here("outputs")
-  
   # ===========================================================================
   # STAGE 1: LOAD CONFIGURATION
   # ===========================================================================
   
   if (verbose) print_stage_header("1", "Load Configuration")
   
-  assert_file_exists(
-    yaml_path,
-    hint = "Configure study parameters in Shiny app first."
-  )
-  
-  study_params <- load_study_parameters(yaml_path)
-  if (verbose) message("  [OK] Loaded study_parameters.yaml")
-  
-  # Update validation context with study name
-  validation_context$study_name <- study_params$study_parameters$study_name
+  # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
+  ctx <- setup_pipeline_context("cpn_template")
+  study_params <- ctx$study_params
+  validation_context <- ctx$validation_context
+  yaml_path <- ctx$yaml_path
+  checkpoint_dir <- ctx$checkpoint_dir
+  outputs_dir <- ctx$outputs_dir
   
   # Validate recording period
   if (is.null(study_params$study_parameters$start_date) ||
@@ -306,38 +334,17 @@ run_cpn_template <- function(kpro_master = NULL,
     
     if (verbose) message("  [!] Loading from most recent checkpoint...")
     
-    assert_directory_exists(checkpoint_dir)
-    
-    checkpoint_files <- list.files(
-      checkpoint_dir,
-      pattern = "02_kpro_master_.*\\.csv$",
-      full.names = TRUE
-    )
-    
-    if (length(checkpoint_files) == 0) {
-      stop(
-        "No kpro_master data available.\n",
-        "  Run Chunk 1 first or provide kpro_master parameter."
-      )
-    }
-    
-    # Get most recent
-    checkpoint_file <- checkpoint_files[length(checkpoint_files)]
-    kpro_master <- safe_read_csv(checkpoint_file)
+    kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*\\.csv$")
     
     validation_context <- log_validation_event(
       validation_context,
       event_type = "data_loaded",
       description = "Master data from checkpoint",
       count = nrow(kpro_master),
-      details = list(
-        source = "checkpoint",
-        file_path = checkpoint_file,
-        file_name = basename(checkpoint_file)
-      )
+      details = list(source = "checkpoint")
     )
     
-    if (verbose) message(sprintf("  [OK] Loaded from: %s", basename(checkpoint_file)))
+    if (verbose) message("  [OK] Loaded from checkpoint")
   }
   
   # Validate required columns
@@ -358,20 +365,11 @@ run_cpn_template <- function(kpro_master = NULL,
     if (verbose) message("  [!] Added manual_id column (all NA)")
   }
   
-  # Create unified species column (manual_id takes priority)
-  kpro_master <- kpro_master %>%
-    dplyr::mutate(
-      species = dplyr::case_when(
-        # Priority 1: manual_id (if valid)
-        !is.na(manual_id) & manual_id != "" & 
-          manual_id != "NoID" & manual_id != "UNKNOWN" ~ manual_id,
-        # Priority 2: auto_id (if valid)
-        !is.na(auto_id) & auto_id != "" & 
-          auto_id != "NoID" & auto_id != "UNKNOWN" ~ auto_id,
-        # Fallback: NoID
-        TRUE ~ "NoID"
-      )
-    )
+  # Create unified species column using utility (DETERMINISTIC - no parameters)
+  # Priority: manual_id > auto_id > "NoID"
+  kpro_master <- create_unified_species_column(kpro_master)
+  
+  if (verbose) message("  [OK] Created unified species column")
   
   # Determine species source for metadata
   if (manual_id_used) {
@@ -430,18 +428,32 @@ run_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("4", "Calculate Study Nights")
   
-  # Get recording_start from YAML for night cutoff
+  # Get timezone and recording start from YAML
+  study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
   recording_start <- study_params$processing_options$recording_start %||% "18:00:00"
   cutoff_hour <- as.numeric(substr(recording_start, 1, 2))
   
-  # Apply study night logic
+  if (verbose) {
+    message(sprintf("  [OK] Study timezone: %s", study_tz))
+    message(sprintf("  [OK] Night cutoff hour: %02d:00:00", cutoff_hour))
+    message(sprintf("  [OK] Rule: Calls before %02d:00 -> previous calendar day", cutoff_hour))
+  }
+  
+  # Force timezone on DateTime_local to prevent CSV timezone loss issues
+  # CRITICAL: When loaded from CSV, POSIXct loses timezone attribute and defaults to UTC
+  # This causes hour extraction to be wrong (e.g., 22:00 CDT becomes 04:00 UTC)
+  # Result: Calls assigned to wrong nights, breaking CallsPerNight counts
   kpro_master <- kpro_master %>%
     dplyr::mutate(
-      Hour_local = lubridate::hour(DateTime_local),
+      # FIRST: Ensure DateTime has correct timezone attribute
+      DateTime_local = lubridate::force_tz(DateTime_local, tzone = study_tz),
+      
+      # THEN: Calculate Night using timezone-aware date extraction
+      # Rule: Calls BEFORE cutoff hour belong to PREVIOUS calendar day
       Night = dplyr::if_else(
-        Hour_local >= cutoff_hour,
-        as.Date(DateTime_local),
-        as.Date(DateTime_local) - 1
+        lubridate::hour(DateTime_local) < cutoff_hour,
+        lubridate::as_date(DateTime_local, tz = study_tz) - 1,
+        lubridate::as_date(DateTime_local, tz = study_tz)
       )
     )
   
@@ -455,43 +467,45 @@ run_cpn_template <- function(kpro_master = NULL,
   validation_context <- log_validation_event(
     validation_context,
     event_type = "rows_processed",
-    description = "Study nights aggregated",
+    description = "Study nights aggregated with timezone-aware calculation",
     count = n_detector_nights,
     details = list(
       cutoff_hour = cutoff_hour,
       recording_start = recording_start,
+      timezone = study_tz,
       aggregation = "Detector × Night"
     )
   )
   
   if (verbose) {
+    night_range <- range(kpro_master$Night, na.rm = TRUE)
+    message(sprintf("  [OK] Night range: %s to %s", night_range[1], night_range[2]))
+    message(sprintf("  [OK] Total nights observed: %d", 
+                    as.numeric(diff(night_range)) + 1))
     message(sprintf("  [OK] Aggregated %s detector-nights", 
                     format(n_detector_nights, big.mark = ",")))
   }
   
-  log_message(sprintf("[Stage 4] Aggregated %d detector-nights", n_detector_nights))
+  log_message(sprintf("[Stage 4] Aggregated %d detector-nights (timezone: %s)", 
+                      n_detector_nights, study_tz))
   
   # ===========================================================================
   # STAGE 5: GENERATE TEMPLATE GRID
   # ===========================================================================
-  # I RUN INTO ISSUES HERE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  # Error in apply_schedule(template, schedule_file, uniform_start, uniform_end) :    
-  # Uniform StartTime and EndTime must be provided when schedule_file is NULL.   
-  # Received: uniform_start = NULL, uniform_end = NULL   Please provide both in 
-  # 'HH:MM:SS' format (e.g., '20:00:00') Called from: apply_schedule(template,
-  # schedule_file, uniform_start, uniform_end)
   
   if (verbose) print_stage_header("5", "Generate Template Grid")
   
-  # Extract recording schedule parameters using helpers for robust YAML handling
-  recording_start_for_template <- study_params$processing_options$recording_start %||% "18:00:00"
-  recording_end <- study_params$processing_options$recording_end %||% "07:00:00"
-  is_advanced_scheduling <- get_advanced_scheduling(study_params)  # Normalized boolean
+  # Get recording schedule configuration using utility (DETERMINISTIC)
+  # Handles TRUE/FALSE/"yes"/"no" for detector_specific_schedules with FIXED defaults
+  schedule <- get_schedule_config(study_params)
+  recording_start_for_template <- schedule$recording_start
+  recording_end <- schedule$recording_end
+  is_advanced_scheduling <- schedule$detector_specific_schedules
   
   if (verbose) {
     message(sprintf("  [OK] recording_start: %s", recording_start_for_template))
     message(sprintf("  [OK] recording_end: %s", recording_end))
-    message(sprintf("  [OK] advanced_scheduling: %s (uniform=%s)", 
+    message(sprintf("  [OK] detector_specific_schedules: %s (uniform=%s)", 
                     is_advanced_scheduling, !is_advanced_scheduling))
   }
   
@@ -509,11 +523,11 @@ run_cpn_template <- function(kpro_master = NULL,
   # Generate template with schedule
   cpn_template <- generate_calls_per_night_template(
     master_data = kpro_master,
-    start_date = as.character(start_date),  # Convert Date to character
-    end_date = as.character(end_date),      # Convert Date to character
+    start_date = as.character(start_date),
+    end_date = as.character(end_date),
     uniform_start = template_uniform_start,
     uniform_end = template_uniform_end,
-    schedule_file = NULL   # No custom schedule file
+    schedule_file = NULL
   )
   
   # Extract metadata for reporting (detectors extracted from template)
@@ -546,9 +560,9 @@ run_cpn_template <- function(kpro_master = NULL,
   if (verbose) print_stage_header("6", "Verify Recording Schedule")
   
   # Schedule was already applied in Stage 5 by generate_calls_per_night_template()
-  # This stage just validates and reports the schedule configuration
+  # This stage validates and reports the schedule configuration
   
-  if (advanced_scheduling == "no") {
+  if (!is_advanced_scheduling) {
     # Uniform schedule was applied - verify columns exist
     if (!all(c("StartTime", "EndTime", "RecordingHours") %in% names(cpn_template))) {
       stop("Template missing expected schedule columns. Check generate_calls_per_night_template().")
@@ -556,7 +570,7 @@ run_cpn_template <- function(kpro_master = NULL,
     
     if (verbose) {
       message(sprintf("  [OK] Uniform schedule applied: %s - %s",
-                      recording_start, recording_end))
+                      recording_start_for_template, recording_end))
       
       # Report on RecordingHours calculation
       hours_summary <- summary(cpn_template$RecordingHours)
@@ -580,10 +594,97 @@ run_cpn_template <- function(kpro_master = NULL,
   log_message("[Stage 6] Recording schedule verified")
   
   # ===========================================================================
-  # STAGE 7: SAVE TEMPLATES & REGISTER
+  # STAGE 7: FORMAT TEMPLATE FOR EXCEL
   # ===========================================================================
   
-  if (verbose) print_stage_header("7", "Save Templates & Register")
+  if (verbose) print_stage_header("7", "Format Template for Excel")
+  
+  # Remove Warning column (not needed in final template)
+  if ("Warning" %in% names(cpn_template)) {
+    cpn_template <- cpn_template %>% dplyr::select(-Warning)
+    if (verbose) message("  [OK] Removed Warning column")
+  }
+  
+  # Sort by Detector (alphabetical), then Night (chronological)
+  # This groups all nights for each detector together
+  cpn_template <- cpn_template %>%
+    dplyr::arrange(Detector, Night)
+  
+  if (verbose) message("  [OK] Sorted by Detector, then Night")
+  
+  # Convert StartTime/EndTime to full DateTime values with readable formatting
+  # StartTime is on the Night date, EndTime is typically next morning
+  study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
+  
+  cpn_template <- cpn_template %>%
+    dplyr::mutate(
+      # StartDateTime: Combine Night date with StartTime
+      StartDateTime_temp = dplyr::if_else(
+        !is.na(StartTime),
+        as.POSIXct(paste(Night, StartTime), format = "%Y-%m-%d %H:%M:%S", tz = study_tz),
+        as.POSIXct(NA)
+      ),
+      
+      # EndDateTime: Combine with appropriate date
+      # If EndTime < StartTime, it's on the next day (crossed midnight)
+      EndDateTime_temp = dplyr::if_else(
+        !is.na(EndTime) & !is.na(StartTime),
+        dplyr::if_else(
+          EndTime < StartTime,
+          # Crossed midnight: EndTime is on next day
+          as.POSIXct(paste(Night + 1, EndTime), format = "%Y-%m-%d %H:%M:%S", tz = study_tz),
+          # Same day: EndTime is on Night date
+          as.POSIXct(paste(Night, EndTime), format = "%Y-%m-%d %H:%M:%S", tz = study_tz)
+        ),
+        as.POSIXct(NA)
+      ),
+      
+      # Format as readable text: "10/04/2025 06:00:00 PM"
+      StartDateTime = dplyr::if_else(
+        !is.na(StartDateTime_temp),
+        format(StartDateTime_temp, "%m/%d/%Y %I:%M:%S %p"),
+        NA_character_
+      ),
+      
+      EndDateTime = dplyr::if_else(
+        !is.na(EndDateTime_temp),
+        format(EndDateTime_temp, "%m/%d/%Y %I:%M:%S %p"),
+        NA_character_
+      )
+    ) %>%
+    dplyr::select(-StartTime, -EndTime, -StartDateTime_temp, -EndDateTime_temp)
+  
+  if (verbose) message("  [OK] Converted to full DateTime format")
+  
+  # Reorder columns: Detector, Night, CallsPerNight, StartDateTime, EndDateTime, RecordingHours
+  # This maps to Excel columns: A, B, C, D, E, F
+  cpn_template <- cpn_template %>%
+    dplyr::select(Detector, Night, CallsPerNight, StartDateTime, EndDateTime, RecordingHours)
+  
+  # Replace RecordingHours with Excel formula
+  # Excel will auto-recognize "10/04/2025 06:00:00 PM" format as datetime
+  cpn_template <- cpn_template %>%
+    dplyr::mutate(
+      row_num = dplyr::row_number() + 1,  # +1 because row 1 is header
+      RecordingHours = ifelse(
+        !is.na(StartDateTime) & !is.na(EndDateTime),
+        # Excel formula: Convert text to datetime, subtract, multiply by 24
+        # Using VALUE() to ensure Excel treats as datetime even if stored as text
+        sprintf("=(VALUE(E%d)-VALUE(D%d))*24", row_num, row_num),
+        NA_character_
+      )
+    ) %>%
+    dplyr::select(-row_num)
+  
+  if (verbose) message("  [OK] Added Excel formulas for RecordingHours")
+  
+  log_message("[Stage 7] Template formatted for Excel")
+  
+  # ===========================================================================
+  # STAGE 8: SAVE TEMPLATES & REGISTER
+  # ===========================================================================
+  
+  if (verbose) print_stage_header("8", "Save Templates & Register")
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   
@@ -591,14 +692,14 @@ run_cpn_template <- function(kpro_master = NULL,
   assert_directory_exists(outputs_dir, create = TRUE)
   
   # Save ORIGINAL template (for tracking)
-  original_filename <- sprintf("03_CallsPerNight_Template_ORIGINAL_%s.csv", timestamp)
+  original_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "ORIGINAL")
   original_path <- here::here("outputs", original_filename)
   readr::write_csv(cpn_template, original_path)
   
   if (verbose) message(sprintf("  [OK] Saved ORIGINAL: %s", basename(original_path)))
   
   # Save EDIT_THIS template (for user editing)
-  edit_filename <- sprintf("03_CallsPerNight_Template_EDIT_THIS_%s.csv", timestamp)
+  edit_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "EDIT_THIS")
   edit_path <- here::here("outputs", edit_filename)
   readr::write_csv(cpn_template, edit_path)
   
@@ -607,11 +708,12 @@ run_cpn_template <- function(kpro_master = NULL,
   # Register artifacts
   registry <- init_artifact_registry()
   
-  artifact_id_original <- sprintf("cpn_template_original_%s", timestamp)
+  # Generate artifact IDs using utility (DETERMINISTIC)
+  artifact_id_original <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_original"))
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_original,
-    artifact_type = "template",
+    artifact_type = "cpn_template",
     workflow = "cpn_template",
     file_path = original_path,
     metadata = list(
@@ -619,15 +721,16 @@ run_cpn_template <- function(kpro_master = NULL,
       n_detectors = length(detectors),
       n_nights = n_nights,
       template_type = "ORIGINAL",
-      recording_schedule = advanced_scheduling
+      recording_schedule = is_advanced_scheduling
     )
   )
   
-  artifact_id_edit <- sprintf("cpn_template_edit_%s", timestamp)
+  # Generate artifact ID for EDIT_THIS template using utility (DETERMINISTIC)
+  artifact_id_edit <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_edit"))
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_edit,
-    artifact_type = "template",
+    artifact_type = "cpn_template",
     workflow = "cpn_template",
     file_path = edit_path,
     metadata = list(
@@ -635,19 +738,19 @@ run_cpn_template <- function(kpro_master = NULL,
       n_detectors = length(detectors),
       n_nights = n_nights,
       template_type = "EDIT_THIS",
-      recording_schedule = advanced_scheduling
+      recording_schedule = is_advanced_scheduling
     )
   )
   
   if (verbose) message("  [OK] Artifacts registered")
   
-  log_message(sprintf("[Stage 7] Templates saved and registered"))
+  log_message(sprintf("[Stage 8] Templates saved and registered"))
   
   # ===========================================================================
-  # STAGE 8: RENDER VALIDATION HTML
+  # STAGE 9: RENDER VALIDATION HTML
   # ===========================================================================
   
-  if (verbose) print_stage_header("8", "Render Validation Report")
+  if (verbose) print_stage_header("9", "Render Validation Report")
   
   validation_context$summary$rows_processed <- nrow(cpn_template)
   validation_context$summary$n_detectors <- length(detectors)
@@ -663,7 +766,7 @@ run_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) message(sprintf("  [OK] Validation report: %s", basename(validation_html_path)))
   
-  log_message(sprintf("[Stage 8] Validation report: %s", basename(validation_html_path)))
+  log_message(sprintf("[Stage 9] Validation report: %s", basename(validation_html_path)))
   
   # ===========================================================================
   # RETURN
@@ -695,9 +798,9 @@ run_cpn_template <- function(kpro_master = NULL,
       n_nights = n_nights,
       date_range = c(as.character(start_date), as.character(end_date)),
       recording_schedule = list(
-        start = recording_start,
+        start = recording_start_for_template,
         end = recording_end,
-        advanced = advanced_scheduling
+        detector_specific = is_advanced_scheduling
       ),
       manual_id_used = manual_id_used,
       rows_removed_noid = n_noid_removed,

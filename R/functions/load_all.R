@@ -453,9 +453,10 @@ if (file.exists(here::here("R", "pipeline", "run_ingest_standardize.R"))) {
 }
 
 # Chunk 2 and 3 will be sourced when implemented
-# if (file.exists(here::here("R", "pipeline", "run_cpn_template.R"))) {
-#   source(here::here("R", "pipeline", "run_cpn_template.R"))
-# }
+if (file.exists(here::here("R", "pipeline", "run_cpn_template.R"))) {
+  source(here::here("R", "pipeline", "run_cpn_template.R"))
+}
+
 # if (file.exists(here::here("R", "pipeline", "run_finalize_to_report.R"))) {
 #   source(here::here("R", "pipeline", "run_finalize_to_report.R"))
 # }

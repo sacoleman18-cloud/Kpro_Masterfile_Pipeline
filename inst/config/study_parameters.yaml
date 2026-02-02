@@ -16,11 +16,12 @@ study_parameters:
   timezone: America/Chicago
   external_data_sources: F:/Schmeeckle analyzed 102725
   data_filters:
-    remove_noid: false
+    remove_noid: true
     remove_zero_pulse_calls: true
     remove_duplicates: true
 processing_options:
-  advanced_scheduling: TRUE
+  detector_specific_schedules: no
+  generate_editable_template: yes
   recording_start: '18:00:00'
   recording_end: '07:00:00'
   intended_hours: 13

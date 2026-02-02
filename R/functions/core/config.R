@@ -4,8 +4,9 @@
 # PURPOSE
 # -------
 # Manages study_parameters.yaml configuration file with automatic reconciliation
-# of detector mappings. YAML is generated deterministically by Shiny app, so no
-# format normalization is needed - just read/write operations.
+# of detector mappings and extraction of schedule parameters. YAML is generated 
+# deterministically by Shiny app, so no format normalization is needed - just 
+# read/write operations and parameter extraction.
 #
 # CONFIGURATION CONTRACT
 # ----------------------
@@ -32,9 +33,15 @@
 #    - Suggests study dates from actual data range
 #    - Provides standard processing options
 #
-# 5. Shiny integration
+# 5. Schedule parameter extraction
+#    - Normalizes boolean values (TRUE/FALSE/"yes"/"no" -> logical)
+#    - Provides FIXED defaults for bat study standards
+#    - Handles both old (advanced_scheduling) and new (detector_specific_schedules) parameters
+#    - Returns complete parameter list for orchestrators
+#
+# 6. Shiny integration
 #    - Assumes YAML written by Shiny app (deterministic format)
-#    - No normalization of boolean/string/list formats needed
+#    - No normalization of boolean/string/list formats needed (except schedule params)
 #    - Direct field access without type coercion
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
@@ -47,6 +54,7 @@
 #   - Process or transform data
 #   - Validate external data paths exist on disk
 #   - Validate timezone against OlsonNames()
+#   - Validate time formats (HH:MM:SS) - handled by orchestrators
 #
 # DEPENDENCIES
 # ------------
@@ -60,6 +68,7 @@
 #   - save_study_parameters()        # Write list to YAML
 #   - build_study_config()           # Construct config list with defaults
 #   - validate_study_config()        # Ensure required structure exists
+#   - get_schedule_config()          # Extract and normalize schedule parameters
 #
 # Reconciliation functions:
 #   - reconcile_detector_mapping()   # Merge current IDs with existing names
@@ -73,19 +82,30 @@
 #   start_date = as.character(input$start_date),
 #   detector_mapping = detected_ids,
 #   processing_options = list(
-#     advanced_scheduling = input$advanced_scheduling,  # TRUE/FALSE
-#     recording_start = input$recording_start           # "HH:MM:SS"
+#     detector_specific_schedules = input$detector_specific_schedules,  # TRUE/FALSE
+#     generate_editable_template = input$generate_editable_template,    # TRUE/FALSE
+#     recording_start = input$recording_start                           # "HH:MM:SS"
 #   )
 # )
 # save_study_parameters(cfg)
 #
-# # Orchestrating functions read YAML directly:
+# # Orchestrating functions extract schedule config:
 # params <- load_study_parameters()
-# is_advanced <- params$processing_options$advanced_scheduling  # Direct access
-# rec_start <- params$processing_options$recording_start        # Direct access
+# schedule <- get_schedule_config(params)
+# 
+# # Access normalized schedule parameters
+# needs_detector_csv <- schedule$detector_specific_schedules  # Logical
+# needs_template <- schedule$generate_editable_template       # Logical
+# rec_start <- schedule$recording_start                       # "HH:MM:SS"
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Added get_schedule_config() - moved from utilities.R
+#             - Properly belongs in config module (parses YAML, has domain knowledge)
+#             - Updated to support detector_specific_schedules (renamed from advanced_scheduling)
+#             - Added generate_editable_template parameter for workflow control
+#             - Maintains backward compatibility with advanced_scheduling (deprecated)
+#             - Normalizes boolean values from YAML to logical
 # 2026-01-31: Simplified for Shiny integration
 #             - Removed get_advanced_scheduling() (not needed)
 #             - Removed get_external_sources() (not needed)
@@ -96,6 +116,7 @@
 # 2024-12-27: Added YAML format normalization helpers
 #
 # =============================================================================
+
 
 
 # ==============================================================================
@@ -547,6 +568,115 @@ validate_study_config <- function(cfg) {
   
   TRUE
 }
+
+# ------------------------------------------------------------------------------
+# Core Function: Get Schedule Configuration
+# ------------------------------------------------------------------------------
+
+#' Get Schedule Configuration
+#'
+#' @description
+#' Extracts and normalizes schedule configuration from study_parameters.
+#' Consolidates the parameter extraction pattern used in multiple orchestrators.
+#' Handles both boolean and string values for scheduling parameters.
+#' Reduces ~15 lines of boilerplate per usage.
+#' 
+#' This is a DETERMINISTIC helper - defaults are FIXED by bat study standards.
+#' No parameters to override defaults (violates deterministic principle).
+#'
+#' @param study_params List. Study parameters from load_study_parameters()
+#'
+#' @return Named list with:
+#'   \describe{
+#'     \item{recording_start}{Character. Start time (e.g., "18:00:00")}
+#'     \item{recording_end}{Character. End time (e.g., "07:00:00")}
+#'     \item{detector_specific_schedules}{Logical. TRUE for detector-specific, FALSE for uniform}
+#'     \item{generate_editable_template}{Logical. TRUE to generate EDIT_THIS template}
+#'     \item{intended_hours}{Numeric. Expected recording duration}
+#'     \item{advanced_scheduling}{Logical. DEPRECATED - use detector_specific_schedules}
+#'   }
+#'
+#' @section CONTRACT:
+#' - Normalizes boolean parameters (handles TRUE/FALSE/"yes"/"no")
+#' - Uses FIXED defaults for bat studies (18:00:00 / 07:00:00 / 13 hours / FALSE / TRUE)
+#' - Maintains backward compatibility with advanced_scheduling parameter (deprecated)
+#' - Always returns complete list
+#' - No configurable behavior - purely deterministic
+#'
+#' @section DOES NOT:
+#' - Validate time format (orchestrators should validate)
+#' - Modify study_params
+#' - Check if times are reasonable
+#' - Accept custom defaults (violates determinism)
+#' - Load YAML file (expects pre-loaded params)
+#'
+#' @examples
+#' \dontrun{
+#' study_params <- load_study_parameters()
+#' schedule <- get_schedule_config(study_params)
+#' 
+#' recording_start <- schedule$recording_start
+#' needs_detector_schedules <- schedule$detector_specific_schedules
+#' needs_manual_edits <- schedule$generate_editable_template
+#' }
+#'
+#' @export
+get_schedule_config <- function(study_params) {
+  
+  # Extract processing options
+  opts <- study_params$processing_options
+  
+  # FIXED defaults per bat study standards - NOT customizable
+  default_recording_start <- "18:00:00"
+  default_recording_end <- "07:00:00"
+  default_detector_specific_schedules <- FALSE
+  default_generate_editable_template <- TRUE
+  default_intended_hours <- 13
+  
+  # Get values with FIXED defaults
+  recording_start <- opts$recording_start %||% default_recording_start
+  recording_end <- opts$recording_end %||% default_recording_end
+  intended_hours <- opts$intended_hours %||% default_intended_hours
+  
+  # Handle new parameter name with backward compatibility
+  # Priority: detector_specific_schedules > advanced_scheduling > default
+  detector_specific_raw <- opts$detector_specific_schedules %||% 
+    opts$advanced_scheduling %||% 
+    default_detector_specific_schedules
+  
+  # Normalize detector_specific_schedules to logical
+  detector_specific_schedules <- if (is.logical(detector_specific_raw)) {
+    detector_specific_raw
+  } else if (is.character(detector_specific_raw)) {
+    tolower(detector_specific_raw) %in% c("yes", "true", "1")
+  } else {
+    FALSE
+  }
+  
+  # Get generate_editable_template parameter
+  generate_template_raw <- opts$generate_editable_template %||% 
+    default_generate_editable_template
+  
+  # Normalize generate_editable_template to logical
+  generate_editable_template <- if (is.logical(generate_template_raw)) {
+    generate_template_raw
+  } else if (is.character(generate_template_raw)) {
+    tolower(generate_template_raw) %in% c("yes", "true", "1")
+  } else {
+    TRUE
+  }
+  
+  list(
+    recording_start = recording_start,
+    recording_end = recording_end,
+    detector_specific_schedules = detector_specific_schedules,
+    generate_editable_template = generate_editable_template,
+    intended_hours = intended_hours,
+    # Deprecated - maintain for backward compatibility
+    advanced_scheduling = detector_specific_schedules
+  )
+}
+
 
 
 # ==============================================================================

@@ -1,739 +1,1303 @@
 # =============================================================================
-# analysis/summarization.R — SUMMARY STATISTICS (LOCKED CONTRACT)
+# analysis/callspernight.R - CALLSPERNIGHT WORKFLOW (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
-# Generates comprehensive summary statistics and tables for exploratory
-# analysis of bat acoustic data. Provides per-detector summaries, study-wide
-# aggregations, species composition analysis, and temporal activity profiles.
+# Generates CallsPerNight templates, handles user edits, calculates recording
+# hours and CallsPerHour metrics.
 #
-# All functions are purely descriptive — no hypothesis testing or statistical
-# inference. Output is designed for use in reports, publications, and as input
-# to visualization functions.
-#
-# SUMMARIZATION CONTRACT
-# ----------------------
+# RECORDING HOURS CONTRACT
+# ------------------------
 # All functions in this file MUST adhere to the following guarantees:
 #
-# 1. Descriptive statistics only
-#    - Mean, median, range, IQR, coefficient of variation
-#    - No p-values, no hypothesis tests, no inference
-#    - No ecological interpretations
+# 1. Study night calculation
+#    - Calls at/after 12:00:00 -> Night = that date
+#    - Calls before 12:00:00 -> Night = previous date
+#    - Example: 02:35:50 on 10/26 -> Night = 10/25
 #
-# 2. Input validation
-#    - All functions validate inputs using validation.R helpers
-#    - Clear error messages with source hints
-#    - Type checking for critical columns
+# 2. Template generation
+#    - Creates CSV with columns: Detector, Night, CallsPerNight,
+#      RecordingHours (Excel formula), StartDateTime, EndDateTime
+#    - Excel formula handles overnight recording automatically
+#    - Template saved as _ORIGINAL for comparison
 #
-# 3. Output format
-#    - All functions return tibbles
-#    - Consistent column naming (snake_case)
-#    - Ready for export to CSV or use in reports
-#    - Ready for formatting with output/tables.R
+# 3. Recording hours calculation
+#    - Handles both time-only ("HH:MM:SS") and full datetime formats
+#    - Handles overnight spans (e.g., 20:00 -> 06:00 = 10 hours)
+#    - Formula: IF(End<Start, (24-Start)+End, End-Start)
 #
-# 4. Non-destructive
-#    - Input data frames are never modified
-#    - Functions return new tibbles
+# 4. Edit tracking
+#    - Compares ORIGINAL vs EDITED templates
+#    - Generates detailed edit log with all changes
+#
+# 5. Finalization
+#    - RETAINS "dead nights" (RecordingHours = 0 or NA) with Status = Fail
+#    - Calculates CallsPerHour = CallsPerNight / RecordingHours
+#    - Saves with auto-incrementing version (v1, v2, v3...)
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
-#   - Perform statistical hypothesis testing
-#   - Generate visualizations (output/visualization.R)
-#   - Format tables for display (output/tables.R)
-#   - Make ecological interpretations
-#   - Read or write files directly
+#   - Validate data quality beyond template structure (validation/)
+#   - Generate plots or visualizations (output/)
+#   - Transform schema versions (standardization/)
 #
 # DEPENDENCIES
 # ------------
-#   - core/utilities.R: log_message
-#   - validation/validation.R: validate_data_frame, validate_cpn_data,
-#     assert_column_type, assert_columns_exist
-#   - dplyr: group_by, summarize, across, n, n_distinct
-#   - tidyr: pivot_wider (for species summaries)
+#   - core/utilities.R: log_message, save_with_version
+#   - validation/validation.R: validate_calls_per_night
+#   - dplyr: group_by, summarize, mutate
+#   - lubridate: date/time parsing, date/time extraction
+#   - hms: time-only parsing
+#   - here: path management
 #
 # CONTENTS
 # --------
-# Detector-Level Summaries:
-#   - create_detector_activity_summary()   # Comprehensive per-detector metrics
-#   - calculate_coefficient_of_variation() # CV per detector
-#   - create_effort_summary_table()        # Recording effort by detector
+# - calculate_recording_hours()          # Recording duration calculation
+# - is.Date()                            # Type checker for Date objects
+# - parse_datetime_safe()                # Parse full datetime strings
+# - extract_time()                       # Extract time component from datetime
+# - parse_date_safe()                    # Parse date strings (multi-format)
+# - format_datetime_for_log()            # Format datetime for edit log display
+# - generate_calls_per_night_template()  # Template generation
+# - apply_schedule()                     # Apply recording schedule
+# - save_callspernight_with_version()    # Save with version numbering
 #
-# Study-Wide Summaries:
-#   - create_study_summary()               # Single-row study overview
-#   - calculate_variance_components()      # Between/within detector variance
-#
-# Species Analysis:
-#   - create_species_summary_by_detector() # Species composition per detector
-#   - create_species_accumulation_summary() # Species over time
-#
-# Temporal Analysis:
-#   - create_hourly_activity_summary()     # Activity by hour of night
-#
-# File I/O:
-#   - save_master_with_timestamp()         # Save with timestamp in filename
-#
-# USAGE EXAMPLE
-# -------------
-# # After loading CallsPerNight final data
-# cpn_final <- load_cpn_final()
-#
-# # Generate summaries
-# detector_summary <- create_detector_activity_summary(cpn_final)
-# study_summary <- create_study_summary(cpn_final)
-# species_summary <- create_species_summary_by_detector(kpro_master)
-#
-# # Format as GT tables
-# detector_gt <- format_detector_summary_gt(detector_summary)
-# study_gt <- format_study_summary_gt(study_summary)
+# EXCEL FORMULA FOR RECORDINGHOURS
+# --------------------------------
+#   =(VALUE(E2)-VALUE(D2))*24
+#   Where E2 = EndDateTime, D2 = StartDateTime
+#   VALUE() converts text datetime to Excel serial number
 #
 # CHANGELOG
 # ---------
-# 2024-12-29: Added new summary functions for Workflow 05
-# 2024-12-29: Refactored to use validation.R helpers
-# 2024-12-26: Initial CODING_STANDARDS compliant version
+# 2026-02-01: Verified deterministic behavior - all functions follow standards
+# 2026-02-01: Confirmed usage in run_cpn_template.R (Chunk 2) and run_finalize_to_report.R (Chunk 3)
+# 2024-12-29: Added is.Date(), parse_datetime_safe(), extract_time()
+#             for Workflow 04 template comparison support
 #
 # =============================================================================
 
+# ------------------------------------------------------------------------------
+# Constants
+# ------------------------------------------------------------------------------
 
-# ==============================================================================
-# DETECTOR-LEVEL SUMMARIES
-# ==============================================================================
+SECONDS_PER_HOUR <- 3600
+HOURS_PER_DAY <- 24
 
+# ------------------------------------------------------------------------------
+# Calculate Recording Hours (Handles Time-Only and Full DateTime)
+# ------------------------------------------------------------------------------
 
-#' Create Comprehensive Detector Activity Summary
+#' Calculate Recording Duration in Hours
 #'
 #' @description
-#' Creates a comprehensive per-detector summary combining effort metrics,
-#' activity metrics (both per-night and per-hour), and variability metrics.
-#' This is the primary summary for assessing detector performance and bat 
-#' activity patterns.
+#' Computes the number of recording hours between a start and end time.
+#' Handles both time-only ("HH:MM:SS") and full datetime formats
+#' ("MM/DD/YYYY HH:MM:SS AM/PM"). Correctly handles overnight recordings.
 #'
-#' @param cpn_final Data frame. CallsPerNight final data from Workflow 04.
-#'   Must contain: Detector, Night, CallsPerNight, RecordingHours, Status,
-#'   CallsPerHour.
+#' @param start_time Character. Either:
+#'   - Time-only: "HH:MM:SS" (e.g., "20:00:00")
+#'   - Full datetime (multiple formats supported):
+#'     * "MM/DD/YYYY HH:MM:SS AM/PM" (e.g., "10/25/2025 8:00:00 PM")
+#'     * "MM/DD/YYYY HH:MM" (e.g., "10/4/2025 18:00") - Excel auto-format
+#'     * "M/D/YYYY HH:MM" (e.g., "10/4/2025 18:00") - Single-digit month/day
+#'   - NA (returns NA)
+#' @param end_time Character. Same format as start_time, or NA.
 #'
-#' @return Tibble with one row per detector and columns:
-#'   \describe{
-#'     \item{Detector}{Detector name}
-#'     \item{n_nights}{Number of nights in study period}
-#'     \item{total_hours}{Total recording hours}
-#'     \item{mean_hours}{Mean hours per night}
-#'     \item{pct_success}{Percent of nights with full recording}
-#'     \item{pct_partial}{Percent of nights with partial recording}
-#'     \item{pct_fail}{Percent of nights with no recording (equipment failure)}
-#'     \item{total_calls}{Total bat calls detected}
-#'     \item{mean_cpn}{Mean calls per night}
-#'     \item{median_cpn}{Median calls per night}
-#'     \item{sd_cpn}{Standard deviation of calls per night}
-#'     \item{min_cpn}{Minimum calls per night}
-#'     \item{max_cpn}{Maximum calls per night}
-#'     \item{mean_cph}{Mean calls per hour}
-#'     \item{median_cph}{Median calls per hour}
-#'     \item{sd_cph}{Standard deviation of calls per hour}
-#'     \item{min_cph}{Minimum calls per hour}
-#'     \item{max_cph}{Maximum calls per hour}
-#'     \item{cv_pct}{Coefficient of variation in CPH (percent). Measures relative variability: Low CV (~20%) = consistent activity, High CV (~100%+) = highly variable}
-#'     \item{pct_zero}{Percent of nights with zero calls (detector recorded but no bats detected). Different from pct_fail (equipment didn't record)}
-#'     \item{first_night}{First night of recording}
-#'     \item{last_night}{Last night of recording}
-#'   }
+#' @return Numeric duration in hours, or NA if either input is NA.
+#'
+#' @details
+#' **Format Detection:**
+#' - If input contains "/" -> parsed as full datetime
+#' - Otherwise -> parsed as time-only (HH:MM:SS)
+#' 
+#' **Supported Datetime Formats:**
+#' The function tries multiple formats in order:
+#'   1. "MM/DD/YYYY HH:MM:SS AM/PM" (e.g., "10/25/2025 8:00:00 PM")
+#'   2. "MM/DD/YYYY HH:MM" (e.g., "10/4/2025 18:00") - Excel 24-hour
+#'   3. "M/D/YYYY HH:MM" (e.g., "10/4/2025 18:00") - Single-digit month/day
+#' 
+#' This handles Excel auto-formatting which often converts our AM/PM format
+#' to 24-hour format without seconds when the file is saved.
+#' 
+#' **Overnight Handling (Time-Only):**
+#' If end_time < start_time, assumes recording crossed midnight:
+#'   Duration = (24 - start_time) + end_time
+#' 
+#' **Overnight Handling (Full DateTime):**
+#' Automatically handled by date arithmetic (end_datetime - start_datetime)
+#' 
+#' **Examples:**
+#' Time-only:
+#'   - "20:00:00" to "08:00:00" -> 12 hours (crosses midnight)
+#'   - "06:00:00" to "18:00:00" -> 12 hours (same day)
+#' 
+#' Full datetime (AM/PM format):
+#'   - "10/25/2025 8:00:00 PM" to "10/26/2025 6:00:00 AM" -> 10 hours
+#'   - "10/25/2025 6:00:00 PM" to "10/26/2025 7:00:00 AM" -> 13 hours
+#' 
+#' Full datetime (24-hour format - Excel auto-formatted):
+#'   - "10/25/2025 20:00" to "10/26/2025 6:00" -> 10 hours
+#'   - "10/25/2025 18:00" to "10/26/2025 7:00" -> 13 hours
+#' 
+#' **NA Handling:**
+#' Returns NA if either time is missing (allows template generation
+#' to proceed even when times haven't been entered yet).
 #'
 #' @section CONTRACT:
-#' - Returns one row per detector
-#' - All metrics calculated with na.rm = TRUE
-#' - Percentages are 0-100 scale
-#' - CV calculated as (sd/mean) * 100 for CallsPerHour
-#' - pct_zero based on CallsPerNight (nights with 0 calls but RecordingHours > 0)
-#' - pct_fail based on Status column (nights with Fail status)
+#' - Accepts time-only ("HH:MM:SS") OR full datetime (multiple formats)
+#' - Automatically tries multiple datetime formats (handles Excel formatting)
+#' - Returns NA if either input is NA (fails gracefully)
+#' - Handles overnight recordings correctly (end < start for time-only)
+#' - Returns numeric hours (not negative values)
+#' - Detects format automatically (no explicit format parameter needed)
+#' - Uses 24-hour clock for time-only, either 12 or 24-hour for full datetime
 #'
 #' @section DOES NOT:
-#' - Make ecological interpretations
-#' - Filter out any detectors
-#' - Modify input data
+#' - Require explicit format specification (auto-detects)
+#' - Perform timezone conversions (assumes all times in same zone)
+#' - Validate clock correctness (assumes valid times)
+#' - Round to nearest hour (returns decimal hours)
+#' - Check if duration exceeds 24 hours
 #'
 #' @examples
 #' \dontrun{
-#' cpn_final <- load_cpn_final()
-#' detector_summary <- create_detector_activity_summary(cpn_final)
+#' # Time-only format (for template generation)
+#' calculate_recording_hours("20:00:00", "08:00:00")
+#' # [1] 12
+#' 
+#' calculate_recording_hours("06:00:00", "18:00:00")
+#' # [1] 12
+#' 
+#' # Full datetime - AM/PM format (Workflow 03 generated)
+#' calculate_recording_hours("10/25/2025 8:00:00 PM", "10/26/2025 6:00:00 AM")
+#' # [1] 10
+#' 
+#' # Full datetime - 24-hour format (Excel auto-formatted)
+#' calculate_recording_hours("10/25/2025 20:00", "10/26/2025 6:00")
+#' # [1] 10
+#' 
+#' calculate_recording_hours("10/4/2025 18:00", "10/5/2025 7:00")
+#' # [1] 13
+#' 
+#' # NA handling
+#' calculate_recording_hours(NA, "08:00:00")
+#' # [1] NA
 #' }
 #'
 #' @export
-create_detector_activity_summary <- function(cpn_final) {
+calculate_recording_hours <- function(start_time, end_time) {
   
-  # Input validation using helpers
-  validate_cpn_data(cpn_final, require_status = TRUE, require_cph = TRUE)
-  
-  # Calculate comprehensive summary
-  cpn_final %>%
-    dplyr::group_by(Detector) %>%
-    dplyr::summarise(
-      # Effort metrics
-      n_nights = dplyr::n(),
-      total_hours = round(sum(RecordingHours, na.rm = TRUE), 1),
-      mean_hours = round(mean(RecordingHours, na.rm = TRUE), 1),
-      pct_success = round(100 * sum(Status == "Success", na.rm = TRUE) / dplyr::n(), 1),
-      pct_partial = round(100 * sum(Status == "Partial", na.rm = TRUE) / dplyr::n(), 1),
-      pct_fail = round(100 * sum(Status == "Fail", na.rm = TRUE) / dplyr::n(), 1),
-      
-      # Activity metrics - Calls Per Night
-      total_calls = sum(CallsPerNight, na.rm = TRUE),
-      mean_cpn = round(mean(CallsPerNight, na.rm = TRUE), 1),
-      median_cpn = round(median(CallsPerNight, na.rm = TRUE), 1),
-      sd_cpn = round(sd(CallsPerNight, na.rm = TRUE), 1),
-      min_cpn = round(min(CallsPerNight, na.rm = TRUE), 1),
-      max_cpn = round(max(CallsPerNight, na.rm = TRUE), 1),
-      
-      # Activity metrics - Calls Per Hour
-      mean_cph = round(mean(CallsPerHour, na.rm = TRUE), 2),
-      median_cph = round(median(CallsPerHour, na.rm = TRUE), 2),
-      sd_cph = round(sd(CallsPerHour, na.rm = TRUE), 2),
-      min_cph = round(min(CallsPerHour, na.rm = TRUE), 2),
-      max_cph = round(max(CallsPerHour, na.rm = TRUE), 2),
-      
-      # Variability metrics
-      cv_pct = round(100 * sd(CallsPerHour, na.rm = TRUE) /
-                       mean(CallsPerHour, na.rm = TRUE), 1),
-      pct_zero = round(100 * sum(CallsPerNight == 0, na.rm = TRUE) / dplyr::n(), 1),
-      
-      # Date range
-      first_night = min(Night, na.rm = TRUE),
-      last_night = max(Night, na.rm = TRUE),
-      
-      .groups = "drop"
-    )
-}
-
-
-#' Calculate Coefficient of Variation by Detector
-#'
-#' @description
-#' Computes mean calls, standard deviation, and coefficient of variation
-#' for nightly detector activity. Simpler alternative to full detector summary.
-#'
-#' @param calls_per_night Data frame. Must contain Detector and CallsPerNight.
-#'
-#' @return Tibble with columns: Detector, mean_calls, sd_calls, cv.
-#'
-#' @section CONTRACT:
-#' - Groups strictly by Detector
-#' - Uses sd / mean definition of CV
-#' - Returns NA for cv if mean_calls is 0
-#'
-#' @section DOES NOT:
-#' - Perform filtering
-#' - Normalize detector identifiers
-#'
-#' @export
-calculate_coefficient_of_variation <- function(calls_per_night) {
-  
-  # Input validation using helpers
-  validate_data_frame(
-    calls_per_night,
-    required_cols = c("Detector", "CallsPerNight"),
-    arg_name = "calls_per_night"
-  )
-  assert_column_type(calls_per_night, "CallsPerNight", "numeric")
-  
-  calls_per_night %>%
-    dplyr::group_by(Detector) %>%
-    dplyr::summarise(
-      mean_calls = mean(CallsPerNight, na.rm = TRUE),
-      sd_calls = sd(CallsPerNight, na.rm = TRUE),
-      cv = ifelse(mean_calls == 0, NA_real_, sd_calls / mean_calls),
-      .groups = "drop"
-    )
-}
-
-
-#' Summary Table of Recording Effort by Detector
-#'
-#' @description
-#' Produces descriptive statistics summarizing deployment effort for each
-#' detector. Focused on recording hours and data completeness.
-#'
-#' @param calls_per_night Data frame. Must contain Detector, Night, RecordingHours.
-#'
-#' @return Tibble with columns: Detector, total_nights, nights_with_data,
-#'   total_recording_hours, percent_nights_with_data, mean_hours_per_night,
-#'   date_range.
-#'
-#' @section CONTRACT:
-#' - One row per detector
-#' - date_range is character string "YYYY-MM-DD to YYYY-MM-DD"
-#' - Percentages rounded to 1 decimal
-#'
-#' @section DOES NOT:
-#' - Include call counts (use create_detector_activity_summary)
-#' - Filter detectors
-#'
-#' @export
-create_effort_summary_table <- function(calls_per_night) {
-  
-  # Input validation using helpers
-  validate_data_frame(
-    calls_per_night,
-    required_cols = c("Detector", "Night", "RecordingHours"),
-    arg_name = "calls_per_night"
-  )
-  assert_column_type(calls_per_night, "Night", "Date")
-  assert_column_type(calls_per_night, "RecordingHours", "numeric")
-  
-  calls_per_night %>%
-    dplyr::group_by(Detector) %>%
-    dplyr::summarise(
-      total_nights = dplyr::n(),
-      nights_with_data = sum(!is.na(RecordingHours) & RecordingHours > 0),
-      total_recording_hours = round(sum(RecordingHours, na.rm = TRUE), 1),
-      percent_nights_with_data = round(100 * nights_with_data / total_nights, 1),
-      mean_hours_per_night = round(mean(RecordingHours, na.rm = TRUE), 2),
-      date_range = paste(min(Night, na.rm = TRUE), "to", max(Night, na.rm = TRUE)),
-      .groups = "drop"
-    )
-}
-
-
-# ==============================================================================
-# STUDY-WIDE SUMMARIES
-# ==============================================================================
-
-
-#' Create Study-Wide Summary
-#'
-#' @description
-#' Creates a single-row summary of the entire study. Aggregates across all
-#' detectors and nights. Useful for report headers and study overview tables.
-#'
-#' @param cpn_final Data frame. CallsPerNight final data from Workflow 04.
-#'
-#' @return Single-row tibble with columns:
-#'   \describe{
-#'     \item{n_detectors}{Number of unique detectors}
-#'     \item{n_detector_nights}{Total detector-nights}
-#'     \item{study_start}{First night of study}
-#'     \item{study_end}{Last night of study}
-#'     \item{study_duration_days}{Number of days in study}
-#'     \item{total_calls}{Total bat calls across all detectors}
-#'     \item{total_hours}{Total recording hours}
-#'     \item{overall_mean_cpn}{Mean calls per night (study-wide)}
-#'     \item{overall_median_cpn}{Median calls per night}
-#'     \item{overall_sd_cpn}{Standard deviation of CPN}
-#'     \item{overall_min_cpn}{Minimum calls per night}
-#'     \item{overall_max_cpn}{Maximum calls per night}
-#'     \item{overall_mean_cph}{Mean calls per hour (study-wide)}
-#'     \item{overall_median_cph}{Median calls per hour}
-#'     \item{overall_sd_cph}{Standard deviation of CPH}
-#'     \item{overall_min_cph}{Minimum calls per hour}
-#'     \item{overall_max_cph}{Maximum calls per hour}
-#'     \item{overall_cv_pct}{Coefficient of variation in CPH. Low (~20%) = consistent, High (~100%+) = variable}
-#'     \item{pct_success}{Percent detector-nights with full recording}
-#'     \item{pct_partial}{Percent with partial recording}
-#'     \item{pct_fail}{Percent with no recording (equipment failure)}
-#'   }
-#'
-#' @section CONTRACT:
-#' - Returns exactly one row
-#' - Aggregates across ALL detectors
-#' - CV calculated as (sd/mean) * 100 for CallsPerHour
-#' - All percentages sum to 100 (Success + Partial + Fail)
-#'
-#' @section DOES NOT:
-#' - Break down by detector (use create_detector_activity_summary)
-#' - Include species information
-#'
-#' @export
-create_study_summary <- function(cpn_final) {
-  
+  # -------------------------
   # Input validation
-  validate_cpn_data(cpn_final, require_status = TRUE, require_cph = TRUE)
+  # -------------------------
   
-  tibble::tibble(
-    n_detectors = dplyr::n_distinct(cpn_final$Detector),
-    n_detector_nights = nrow(cpn_final),
-    study_start = min(cpn_final$Night, na.rm = TRUE),
-    study_end = max(cpn_final$Night, na.rm = TRUE),
-    study_duration_days = as.integer(study_end - study_start) + 1L,
-    total_calls = sum(cpn_final$CallsPerNight, na.rm = TRUE),
-    total_hours = round(sum(cpn_final$RecordingHours, na.rm = TRUE), 1),
-    
-    # Calls Per Night metrics
-    overall_mean_cpn = round(mean(cpn_final$CallsPerNight, na.rm = TRUE), 1),
-    overall_median_cpn = round(median(cpn_final$CallsPerNight, na.rm = TRUE), 1),
-    overall_sd_cpn = round(sd(cpn_final$CallsPerNight, na.rm = TRUE), 1),
-    overall_min_cpn = round(min(cpn_final$CallsPerNight, na.rm = TRUE), 1),
-    overall_max_cpn = round(max(cpn_final$CallsPerNight, na.rm = TRUE), 1),
-    
-    # Calls Per Hour metrics
-    overall_mean_cph = round(mean(cpn_final$CallsPerHour, na.rm = TRUE), 2),
-    overall_median_cph = round(median(cpn_final$CallsPerHour, na.rm = TRUE), 2),
-    overall_sd_cph = round(sd(cpn_final$CallsPerHour, na.rm = TRUE), 2),
-    overall_min_cph = round(min(cpn_final$CallsPerHour, na.rm = TRUE), 2),
-    overall_max_cph = round(max(cpn_final$CallsPerHour, na.rm = TRUE), 2),
-    overall_cv_pct = round(100 * overall_sd_cph / overall_mean_cph, 1),
-    
-    # Recording status percentages
-    pct_success = round(100 * sum(cpn_final$Status == "Success", na.rm = TRUE) /
-                          nrow(cpn_final), 1),
-    pct_partial = round(100 * sum(cpn_final$Status == "Partial", na.rm = TRUE) /
-                          nrow(cpn_final), 1),
-    pct_fail = round(100 * sum(cpn_final$Status == "Fail", na.rm = TRUE) /
-                       nrow(cpn_final), 1)
-  )
-}
-
-
-#' Calculate Variance Components
-#'
-#' @description
-#' Decomposes total variance in calls per hour into between-detector and
-#' within-detector components. Helps understand whether variation is
-#' primarily spatial (between sites) or temporal (within sites).
-#'
-#' @param cpn_final Data frame. CallsPerNight final data.
-#'
-#' @return Single-row tibble with columns:
-#'   \describe{
-#'     \item{var_total}{Total variance in CPH}
-#'     \item{var_between}{Between-detector variance}
-#'     \item{var_within}{Within-detector variance (residual)}
-#'     \item{pct_between}{Percent of variance between detectors}
-#'     \item{pct_within}{Percent of variance within detectors}
-#'     \item{icc}{Intraclass correlation coefficient}
-#'     \item{interpretation}{Plain-English interpretation of spatial heterogeneity}
-#'   }
-#'
-#' @section CONTRACT:
-#' - Returns single row
-#' - ICC = var_between / var_total
-#' - pct_between + pct_within = 100 (approximately)
-#' - Interpretation based on ICC thresholds
-#'
-#' @section DOES NOT:
-#' - Perform formal ANOVA or hypothesis testing
-#' - Account for temporal autocorrelation
-#'
-#' @export
-calculate_variance_components <- function(cpn_final) {
+  # Handle NA inputs (fail gracefully)
+  if (is.na(start_time) || is.na(end_time)) return(NA_real_)
   
-  # Input validation
-  validate_cpn_data(cpn_final, require_cph = TRUE)
-  
-  # Calculate detector means
-  detector_means <- cpn_final %>%
-    dplyr::group_by(Detector) %>%
-    dplyr::summarise(
-      detector_mean = mean(CallsPerHour, na.rm = TRUE),
-      n_obs = dplyr::n(),
-      .groups = "drop"
-    )
-  
-  # Grand mean
-  grand_mean <- mean(cpn_final$CallsPerHour, na.rm = TRUE)
-  
-  # Total variance
-  var_total <- var(cpn_final$CallsPerHour, na.rm = TRUE)
-  
-  # Between-detector variance (variance of detector means)
-  var_between <- var(detector_means$detector_mean, na.rm = TRUE)
-  
-  # Within-detector variance (mean of within-detector variances)
-  within_vars <- cpn_final %>%
-    dplyr::group_by(Detector) %>%
-    dplyr::summarise(
-      var_within = var(CallsPerHour, na.rm = TRUE),
-      .groups = "drop"
-    )
-  var_within <- mean(within_vars$var_within, na.rm = TRUE)
-  
-  # Calculate ICC
-  icc <- var_between / var_total
-  
-  # Generate interpretation based on ICC
-  interpretation <- dplyr::case_when(
-    icc >= 0.75 ~ "Very high spatial heterogeneity (most variation between sites)",
-    icc >= 0.50 ~ "High spatial heterogeneity (more variation between than within sites)",
-    icc >= 0.25 ~ "Moderate spatial heterogeneity (balanced spatial and temporal variation)",
-    icc >= 0.10 ~ "Low spatial heterogeneity (more variation within sites over time)",
-    TRUE ~ "Very low spatial heterogeneity (most variation is temporal)"
-  )
-  
-  tibble::tibble(
-    var_total = round(var_total, 2),
-    var_between = round(var_between, 2),
-    var_within = round(var_within, 2),
-    pct_between = round(100 * var_between / var_total, 1),
-    pct_within = round(100 * var_within / var_total, 1),
-    icc = round(icc, 3),
-    interpretation = interpretation
-  )
-}
-
-
-# ==============================================================================
-# SPECIES ANALYSIS
-# ==============================================================================
-
-
-#' Create Species Summary by Detector
-#'
-#' @description
-#' Summarizes species composition for each detector. Shows call counts
-#' and percentages for each species detected.
-#'
-#' @param master_data Data frame. Master file from Workflow 02.
-#'   Must contain Detector and auto_id columns.
-#' @param species_col Character. Column containing species ID.
-#'   Default: "auto_id"
-#' @param min_calls Integer. Minimum calls to include species.
-#'   Default: 1 (include all)
-#'
-#' @return Tibble with columns:
-#'   \describe{
-#'     \item{Detector}{Detector name}
-#'     \item{species}{Species code}
-#'     \item{n_calls}{Number of calls}
-#'     \item{pct_of_detector}{Percent of detector's total calls}
-#'   }
-#'
-#' @section CONTRACT:
-#' - One row per detector-species combination
-#' - Excludes NoID/UNKNOWN unless they meet min_calls
-#' - Percentages sum to 100 within each detector
-#' - Sorted by Detector, then n_calls descending
-#'
-#' @section DOES NOT:
-#' - Make species richness comparisons
-#' - Account for detection probability
-#'
-#' @export
-create_species_summary_by_detector <- function(master_data,
-                                               species_col = "auto_id",
-                                               min_calls = 1) {
-  
-  # Input validation
-  validate_master_data(master_data)
-  assert_columns_exist(master_data, species_col)
-  
-  master_data %>%
-    dplyr::filter(!is.na(.data[[species_col]])) %>%
-    dplyr::group_by(Detector, species = .data[[species_col]]) %>%
-    dplyr::summarise(
-      n_calls = dplyr::n(),
-      .groups = "drop"
-    ) %>%
-    dplyr::group_by(Detector) %>%
-    dplyr::mutate(
-      pct_of_detector = round(100 * n_calls / sum(n_calls), 1)
-    ) %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(n_calls >= min_calls) %>%
-    dplyr::arrange(Detector, dplyr::desc(n_calls))
-}
-
-
-#' Create Species Accumulation Summary
-#'
-#' @description
-#' Shows cumulative species count over time. Useful for assessing
-#' whether sampling effort was sufficient to detect most species.
-#'
-#' @param master_data Data frame. Master file with DateTime or Night column and auto_id.
-#' @param species_col Character. Column containing species ID.
-#'   Default: "auto_id"
-#' @param date_col Character. Column containing date. Default: "Night"
-#'   Can also accept "DateTime" which will be converted to date.
-#'
-#' @return Tibble with columns:
-#'   \describe{
-#'     \item{Night}{Date}
-#'     \item{new_species}{Number of new species detected that date}
-#'     \item{cumulative_species}{Running total of unique species}
-#'     \item{new_species_list}{Character, comma-separated new species}
-#'   }
-#'
-#' @section CONTRACT:
-#' - One row per date with detections
-#' - Excludes NoID/UNKNOWN from species counts
-#' - cumulative_species is monotonically increasing
-#' - Returns Night column (not date) for consistency with workflow
-#'
-#' @section DOES NOT:
-#' - Account for detection probability
-#' - Weight by effort
-#'
-#' @export
-create_species_accumulation_summary <- function(master_data,
-                                                species_col = "auto_id",
-                                                date_col = "Night") {
-  
-  # Input validation
-  validate_master_data(master_data)
-  assert_columns_exist(master_data, c(species_col, date_col))
-  
-  # Extract date from DateTime if needed
-  if (inherits(master_data[[date_col]], "POSIXt")) {
-    master_data <- master_data %>%
-      dplyr::mutate(.date = as.Date(.data[[date_col]]))
-  } else {
-    master_data <- master_data %>%
-      dplyr::mutate(.date = as.Date(.data[[date_col]]))
+  # Validate input types
+  if (!is.character(start_time) || !is.character(end_time)) {
+    stop(sprintf(
+      "start_time and end_time must be character strings or NA.\n  Received: start_time = %s (%s), end_time = %s (%s)\n  Expected formats:\n    Time-only: 'HH:MM:SS' (e.g., '20:00:00')\n    Full datetime: 'MM/DD/YYYY HH:MM:SS AM/PM' (e.g., '10/25/2025 8:00:00 PM')",
+      start_time, class(start_time)[1],
+      end_time, class(end_time)[1]
+    ))
   }
   
-  # Exclude unidentified
-  valid_species <- master_data %>%
-    dplyr::filter(
-      !is.na(.data[[species_col]]),
-      !.data[[species_col]] %in% c("NoID", "UNKNOWN", "NOISE", "")
-    )
+  # -------------------------
+  # Format detection & computation
+  # -------------------------
   
-  # Get first detection date for each species
-  first_detections <- valid_species %>%
-    dplyr::group_by(species = .data[[species_col]]) %>%
-    dplyr::summarise(
-      first_date = min(.date, na.rm = TRUE),
-      .groups = "drop"
-    )
-  
-  # Accumulate by date
-  accumulation <- first_detections %>%
-    dplyr::group_by(Night = first_date) %>%  # ✅ Changed from date to Night
-    dplyr::summarise(
-      new_species = dplyr::n(),
-      new_species_list = paste(species, collapse = ", "),
-      .groups = "drop"
-    ) %>%
-    dplyr::arrange(Night) %>%  # ✅ Changed from date to Night
-    dplyr::mutate(
-      cumulative_species = cumsum(new_species)
-    )
-  
-  accumulation
-}
-
-
-# ==============================================================================
-# TEMPORAL ANALYSIS
-# ==============================================================================
-
-
-#' Create Hourly Activity Summary
-#'
-#' @description
-#' Summarizes bat activity by hour of the night. Can be calculated overall
-#' or per-detector. Useful for identifying peak activity periods.
-#'
-#' @param master_data Data frame. Master file with DateTime or Hour column.
-#' @param by_detector Logical. Summarize by detector? Default: FALSE
-#'
-#' @return Tibble with columns:
-#'   \describe{
-#'     \item{Hour}{Hour of day (0-23)}
-#'     \item{Detector}{(if by_detector=TRUE) Detector name}
-#'     \item{n_calls}{Number of calls in that hour}
-#'     \item{pct_of_total}{Percent of total calls}
-#'   }
-#'
-#' @section CONTRACT:
-#' - One row per hour (or per hour-detector)
-#' - Hour is 0-23 integer
-#' - Percentages sum to 100 (within detector if by_detector)
-#'
-#' @section DOES NOT:
-#' - Account for recording effort differences between hours
-#' - Adjust for seasonal variation in night length
-#'
-#' @export
-create_hourly_activity_summary <- function(master_data,
-                                           by_detector = FALSE) {
-  
-  # Input validation
-  validate_master_data(master_data)
-  
-  # Get hour from DateTime if Hour column doesn't exist
-  if (!"Hour_local" %in% names(master_data)) {
-    if ("DateTime_local" %in% names(master_data)) {
-      master_data <- master_data %>%
-        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
+  # Detect format: if contains "/" it's a full datetime, otherwise time-only
+  if (grepl("/", start_time)) {
+    # Full datetime format - try multiple formats Excel might produce
+    
+    # Try format 1: "MM/DD/YYYY HH:MM:SS AM/PM" (our intended format)
+    start_dt <- lubridate::mdy_hms(start_time, quiet = TRUE)
+    end_dt <- lubridate::mdy_hms(end_time, quiet = TRUE)
+    
+    # If that failed, try format 2: "MM/DD/YYYY HH:MM" (24-hour, no seconds - Excel auto-format)
+    if (is.na(start_dt)) {
+      start_dt <- lubridate::mdy_hm(start_time, quiet = TRUE)
+    }
+    if (is.na(end_dt)) {
+      end_dt <- lubridate::mdy_hm(end_time, quiet = TRUE)
+    }
+    
+    # If still failed, try format 3: "M/D/YYYY HH:MM" (single-digit month/day)
+    if (is.na(start_dt)) {
+      # lubridate::mdy_hm should handle this, but try explicit parse
+      start_dt <- as.POSIXct(start_time, format = "%m/%d/%Y %H:%M", tz = "UTC")
+    }
+    if (is.na(end_dt)) {
+      end_dt <- as.POSIXct(end_time, format = "%m/%d/%Y %H:%M", tz = "UTC")
+    }
+    
+    # Check if parsing succeeded
+    if (is.na(start_dt) || is.na(end_dt)) {
+      stop(sprintf(
+        "Failed to parse datetime strings.\n  start_time: '%s'\n  end_time: '%s'\n  Tried formats:\n    - 'MM/DD/YYYY HH:MM:SS AM/PM' (e.g., '10/25/2025 8:00:00 PM')\n    - 'MM/DD/YYYY HH:MM' (e.g., '10/4/2025 18:00')\n    - 'M/D/YYYY HH:MM' (e.g., '10/4/2025 18:00')\n  Hint: Excel may have auto-formatted your datetimes.",
+        start_time, end_time
+      ))
+    }
+    
+    # Calculate difference in hours
+    # This automatically handles overnight/multi-day spans
+    return(as.numeric(difftime(end_dt, start_dt, units = "hours")))
+    
+  } else {
+    # Time-only format: "HH:MM:SS"
+    # Parse using hms package
+    start_h <- as.numeric(hms::as_hms(start_time)) / SECONDS_PER_HOUR
+    end_h   <- as.numeric(hms::as_hms(end_time)) / SECONDS_PER_HOUR
+    
+    # Calculate duration (handle overnight)
+    if (end_h < start_h) {
+      # Overnight recording crosses midnight
+      (HOURS_PER_DAY - start_h) + end_h
     } else {
-      stop("master_data must have either 'Hour_local' or 'DateTime_local' column")
+      # Same-day recording
+      end_h - start_h
     }
   }
-  
-  if (by_detector) {
-    summary <- master_data %>%
-      dplyr::group_by(Detector, Hour_local) %>%
-      dplyr::summarise(
-        n_calls = dplyr::n(),
-        .groups = "drop"
-      ) %>%
-      dplyr::group_by(Detector) %>%
-      dplyr::mutate(
-        pct_of_total = round(100 * n_calls / sum(n_calls), 1)
-      ) %>%
-      dplyr::ungroup() %>%
-      dplyr::arrange(Detector, Hour_local)
-  } else {
-    summary <- master_data %>%
-      dplyr::group_by(Hour_local) %>%
-      dplyr::summarise(
-        n_calls = dplyr::n(),
-        .groups = "drop"
-      ) %>%
-      dplyr::mutate(
-        pct_of_total = round(100 * n_calls / sum(n_calls), 1)
-      ) %>%
-      dplyr::arrange(Hour_local)
-  }
-  
-  summary
 }
 
 
-# ==============================================================================
-# FILE I/O
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# Template Comparison Utilities (For Workflow 04 Edit Tracking)
+# ------------------------------------------------------------------------------
 
-
-#' Save Master File with Timestamp
+#' Check if Object is a Date
 #'
 #' @description
-#' Saves data frame as CSV with current timestamp in filename. Creates
-#' output directory if it doesn't exist.
+#' Simple type checker to determine if an object inherits from the Date class.
+#' Used in Workflow 04 for validating column types before joins in template
+#' comparison logic.
 #'
-#' @param data Data frame to save.
-#' @param base_name Character. Base name for file. Default: "Master"
-#' @param output_dir Character. Directory to save the file.
-#'   Default: "results/csv"
+#' @param x Object to check (any type)
 #'
-#' @return Character. Full file path of saved CSV.
+#' @return Logical: TRUE if x is a Date object, FALSE otherwise
+#'
+#' @details
+#' **Purpose:**
+#' When comparing ORIGINAL vs EDITED templates in Workflow 04, the Night
+#' column must be Date type for join operations. This function provides a
+#' readable way to check column types.
+#'
+#' **Implementation:**
+#' Wrapper around `inherits(x, "Date")` for improved code readability.
 #'
 #' @section CONTRACT:
-#' - Creates directory if needed
-#' - Filename format: {base_name}_{YYYY-MM-DD_HHMM}.csv
-#' - Messages on success
+#' - Returns TRUE if x inherits from "Date" class
+#' - Returns FALSE for all other types (including POSIXct, POSIXlt)
+#' - Does not coerce or modify input
+#' - Never throws errors (returns FALSE for invalid input)
 #'
 #' @section DOES NOT:
-#' - Overwrite existing files
-#' - Validate data structure
+#' - Check if x can be PARSED as a date string
+#' - Validate date correctness (e.g., Feb 30 would still be Date class)
+#' - Coerce to Date type
+#' - Distinguish between different Date subclasses
+#'
+#' @examples
+#' \dontrun{
+#' # TRUE cases
+#' is.Date(as.Date("2024-10-15"))
+#' # [1] TRUE
+#'
+#' is.Date(Sys.Date())
+#' # [1] TRUE
+#'
+#' # FALSE cases
+#' is.Date("2024-10-15")
+#' # [1] FALSE (character, not Date)
+#'
+#' is.Date(Sys.time())
+#' # [1] FALSE (POSIXct, not Date)
+#'
+#' is.Date(NULL)
+#' # [1] FALSE
+#'
+#' is.Date(123)
+#' # [1] FALSE
+#'
+#' # Usage in Workflow 04
+#' if (is.Date(template$Night)) {
+#'   # Already Date type, use as-is
+#'   template <- template %>% mutate(Night = as.Date(Night))
+#' } else {
+#'   # Parse from string
+#'   template <- template %>% mutate(Night = parse_date_safe(Night))
+#' }
+#' }
 #'
 #' @export
-save_master_with_timestamp <- function(data,
-                                       base_name = "Master",
-                                       output_dir = "results/csv") {
+is.Date <- function(x) {
+  inherits(x, "Date")
+}
+
+
+#' Parse DateTime Strings Safely
+#'
+#' @description
+#' Parses full datetime strings in multiple formats commonly produced by
+#' Excel or user editing. Tries AM/PM format first, then 24-hour format,
+#' handling auto-formatting gracefully. Used for template comparison in
+#' Workflow 04.
+#'
+#' @param dt_string Character datetime string to parse, or NA
+#'
+#' @return POSIXct datetime object in UTC timezone, or NA if parsing fails
+#'   or input is NA
+#'
+#' @details
+#' **Purpose:**
+#' When comparing ORIGINAL vs EDITED templates in Workflow 04, datetime
+#' strings may have been reformatted by Excel. This function handles multiple
+#' formats to ensure accurate comparison.
+#'
+#' **Supported formats (tried in order):**
+#' 1. "MM/DD/YYYY HH:MM:SS AM/PM" (e.g., "10/24/2025 6:00:00 PM")
+#' 2. "MM/DD/YYYY HH:MM" (e.g., "10/24/2025 18:00") - Excel auto-format
+#' 3. Explicit parse with format = "%m/%d/%Y %H:%M"
+#'
+#' **Excel auto-formatting:**
+#' Excel often converts "6:00:00 PM" to "18:00" when saving CSV files.
+#' This function handles both formats seamlessly by trying AM/PM first,
+#' then falling back to 24-hour format.
+#'
+#' **Time-only formats:**
+#' This function expects FULL datetime strings with dates. For time-only
+#' strings like "18:00:00", returns NA (use hms::as_hms() instead).
+#'
+#' **NA handling:**
+#' - Input: NA or empty string → Output: NA (POSIXct)
+#' - Input: Unparseable string → Output: NA (POSIXct)
+#' - No errors thrown - fails gracefully to NA
+#'
+#' **Timezone:**
+#' All datetimes parsed as UTC. This is appropriate for template comparison
+#' where we're checking if two datetime strings represent the same instant,
+#' regardless of timezone display.
+#'
+#' @section CONTRACT:
+#' - Returns POSIXct object with tz="UTC"
+#' - Returns NA (POSIXct) for NA or blank input (fails gracefully)
+#' - Returns NA (POSIXct) for unparseable strings (no errors)
+#' - Tries multiple formats automatically (no format parameter needed)
+#' - Handles Excel auto-formatting (AM/PM → 24-hour)
+#' - Never throws errors (silent NA return on failure)
+#'
+#' @section DOES NOT:
+#' - Perform timezone conversions (always UTC output)
+#' - Validate if datetime is "reasonable" (e.g., Feb 30 would parse)
+#' - Handle time-only formats (requires full datetime with date)
+#' - Log parsing failures (silent operation)
+#' - Require explicit format specification (auto-detects)
+#' - Throw errors on parse failures (returns NA instead)
+#'
+#' @examples
+#' \dontrun{
+#' # AM/PM format (original template)
+#' parse_datetime_safe("10/24/2025 6:00:00 PM")
+#' # [1] "2025-10-24 18:00:00 UTC"
+#'
+#' # 24-hour format (Excel auto-formatted)
+#' parse_datetime_safe("10/24/2025 18:00")
+#' # [1] "2025-10-24 18:00:00 UTC"
+#'
+#' # Both parse to same instant
+#' identical(
+#'   parse_datetime_safe("10/24/2025 6:00:00 PM"),
+#'   parse_datetime_safe("10/24/2025 18:00")
+#' )
+#' # [1] TRUE
+#'
+#' # Morning time
+#' parse_datetime_safe("10/24/2025 7:30:00 AM")
+#' # [1] "2025-10-24 07:30:00 UTC"
+#'
+#' # NA handling
+#' parse_datetime_safe(NA)
+#' # [1] NA (POSIXct)
+#'
+#' parse_datetime_safe("")
+#' # [1] NA (POSIXct)
+#'
+#' # Unparseable format
+#' parse_datetime_safe("invalid")
+#' # [1] NA (POSIXct)
+#'
+#' # Time-only NOT supported
+#' parse_datetime_safe("18:00:00")
+#' # [1] NA (POSIXct) - use hms::as_hms() for time-only
+#'
+#' # Usage in Workflow 04 template comparison
+#' template_orig <- template_orig %>%
+#'   mutate(
+#'     StartDateTime_parsed = sapply(StartDateTime, parse_datetime_safe),
+#'     EndDateTime_parsed = sapply(EndDateTime, parse_datetime_safe)
+#'   )
+#' }
+#'
+#' @export
+parse_datetime_safe <- function(dt_string) {
   
-  # Input validation using helpers
-  assert_data_frame(data, "data")
-  assert_scalar_string(base_name, "base_name")
-  assert_scalar_string(output_dir, "output_dir")
-  assert_directory_exists(output_dir, create = TRUE)
+  # -------------------------
+  # Handle NA or empty input
+  # -------------------------
   
-  # Build filename with timestamp
-  timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M")
-  file_path <- file.path(output_dir, paste0(base_name, "_", timestamp, ".csv"))
+  if (is.na(dt_string) || trimws(dt_string) == "") {
+    return(as.POSIXct(NA))
+  }
   
-  # Save
+  # -------------------------
+  # Parse full datetime formats
+  # -------------------------
+  
+  # Only process if contains "/" (full datetime format)
+  # Time-only formats like "18:00:00" should return NA
+  if (grepl("/", dt_string)) {
+    
+    # Try AM/PM format first (our intended template format)
+    # Example: "10/24/2025 6:00:00 PM"
+    result <- lubridate::mdy_hms(dt_string, quiet = TRUE)
+    
+    # Try 24-hour format if that failed (Excel auto-formatting)
+    # Example: "10/24/2025 18:00"
+    if (is.na(result)) {
+      result <- lubridate::mdy_hm(dt_string, quiet = TRUE)
+    }
+    
+    # Try explicit parse if still failed
+    # Handles edge cases like single-digit months/days
+    if (is.na(result)) {
+      result <- as.POSIXct(dt_string, format = "%m/%d/%Y %H:%M", tz = "UTC")
+    }
+    
+    return(result)
+    
+  } else {
+    # Time-only format - not expected in template comparison
+    # Return NA (this function is for FULL datetimes only)
+    return(as.POSIXct(NA))
+  }
+}
+
+
+#' Extract Time Component from DateTime String
+#'
+#' @description
+#' Parses a full datetime string and extracts just the time component as
+#' HH:MM:SS (24-hour format). Used for comparing recording times between
+#' original and edited templates when checking for manual edits in Workflow 04.
+#'
+#' @param datetime_str Character datetime string, or NA
+#'
+#' @return Character time string in format "HH:MM:SS" (24-hour, zero-padded),
+#'   or NA_character_ if parsing fails or input is NA
+#'
+#' @details
+#' **Purpose:**
+#' In Workflow 04 edit tracking, we need to compare whether two datetime
+#' strings represent the same TIME, even if Excel reformatted them differently.
+#'
+#' **Example use case:**
+#' - Original: "10/24/2025 06:00:00 PM" (12-hour AM/PM)
+#' - Edited:   "10/24/2025 18:00"      (24-hour, no seconds)
+#' - Both extract to: "18:00:00"
+#' - Comparison: Times match → No manual edit occurred
+#'
+#' **Process:**
+#' 1. Parse datetime_str using parse_datetime_safe()
+#' 2. Extract time component as HH:MM:SS string (24-hour)
+#' 3. Return NA if parsing failed
+#'
+#' **Output format:**
+#' Always returns 24-hour format with seconds: "18:00:00"
+#' - Never includes AM/PM
+#' - Always includes seconds (even if :00)
+#' - Always zero-padded (e.g., "08:00:00" not "8:00:00")
+#'
+#' **Comparison logic:**
+#' By extracting times to a consistent format, we can compare them directly:
+#' ```r
+#' extract_time("10/24/2025 6:00:00 PM") == extract_time("10/24/2025 18:00")
+#' # [1] TRUE - Both are "18:00:00", so times match
+#' ```
+#'
+#' @section CONTRACT:
+#' - Returns time string in format "HH:MM:SS" (24-hour, zero-padded)
+#' - Returns NA_character_ for NA or blank input (fails gracefully)
+#' - Returns NA_character_ if datetime parsing fails (no errors)
+#' - Uses parse_datetime_safe() for robust parsing
+#' - Always includes seconds in output (:00 if not present)
+#' - Always zero-padded (08:00:00 not 8:00:00)
+#'
+#' @section DOES NOT:
+#' - Preserve original AM/PM or 24-hour format (always 24-hour output)
+#' - Include date component in output (time only)
+#' - Perform timezone conversions (uses UTC from parse_datetime_safe)
+#' - Validate if time is "reasonable" (e.g., 25:00:00 would be invalid input)
+#' - Round or truncate times (exact extraction)
+#' - Throw errors (returns NA_character_ on failure)
+#'
+#' @examples
+#' \dontrun{
+#' # AM/PM format -> 24-hour time
+#' extract_time("10/24/2025 6:00:00 PM")
+#' # [1] "18:00:00"
+#'
+#' # 24-hour format (Excel auto-formatted)
+#' extract_time("10/24/2025 18:00")
+#' # [1] "18:00:00"
+#'
+#' # Morning time (zero-padded)
+#' extract_time("10/24/2025 7:30:00 AM")
+#' # [1] "07:30:00"
+#'
+#' # Early morning (zero-padded hour)
+#' extract_time("10/24/2025 1:15:00 AM")
+#' # [1] "01:15:00"
+#'
+#' # NA handling
+#' extract_time(NA)
+#' # [1] NA_character_
+#'
+#' extract_time("")
+#' # [1] NA_character_
+#'
+#' # Unparseable datetime
+#' extract_time("invalid")
+#' # [1] NA_character_
+#'
+#' # Usage in Workflow 04 template comparison:
+#' # Compare times between original and edited templates
+#' comparison <- comparison %>%
+#'   mutate(
+#'     StartTime_orig = sapply(StartDateTime_orig, extract_time),
+#'     StartTime_edit = sapply(StartDateTime_edit, extract_time),
+#'     
+#'     # Check if times match (handles Excel reformatting)
+#'     times_match = (StartTime_orig == StartTime_edit)
+#'   )
+#'
+#' # Example comparison result:
+#' # StartDateTime_orig: "10/24/2025 6:00:00 PM"  → StartTime_orig: "18:00:00"
+#' # StartDateTime_edit: "10/24/2025 18:00"      → StartTime_edit: "18:00:00"
+#' # times_match: TRUE (Excel reformatted but time unchanged)
+#' }
+#'
+#' @export
+extract_time <- function(datetime_str) {
+  
+  # -------------------------
+  # Handle NA or empty input
+  # -------------------------
+  
+  if (is.na(datetime_str) || trimws(datetime_str) == "") {
+    return(NA_character_)
+  }
+  
+  # -------------------------
+  # Parse and extract time
+  # -------------------------
+  
+  # Parse the datetime using our safe parser
+  dt <- parse_datetime_safe(datetime_str)
+  
+  # If parsing failed, return NA
+  if (is.na(dt)) {
+    return(NA_character_)
+  }
+  
+  # Extract time component as HH:MM:SS (24-hour format)
+  # format() with %H:%M:%S gives zero-padded 24-hour time
+  return(format(dt, "%H:%M:%S"))
+}
+
+
+' Parse Date Strings Safely
+#'
+#' @description
+#' Parses date strings in multiple formats commonly produced by Excel or
+#' user editing. Handles mixed date formats gracefully. Used for parsing
+#' Night column in template comparison (Workflow 04).
+#'
+#' @param date_string Character date string to parse, Date object, or NA
+#'
+#' @return Date object, or NA if parsing fails or input is NA
+#'
+#' @details
+#' **Purpose:**
+#' When comparing ORIGINAL vs EDITED templates in Workflow 04, the Night
+#' column may have been saved in different date formats by Excel. This
+#' function handles multiple formats to ensure successful joins.
+#'
+#' **Supported formats (tried in order):**
+#' 1. YYYY-MM-DD (standard R format)
+#' 2. MM/DD/YYYY (US Excel format)
+#' 3. MM-DD-YYYY (Excel variant)
+#' 4. M/D/YYYY (single-digit month/day)
+#'
+#' **Already Date objects:**
+#' If input is already a Date object, returns it unchanged.
+#'
+#' **Excel date formats:**
+#' Excel saves dates in various formats depending on locale and settings.
+#' This function tries all common formats to maximize compatibility.
+#'
+#' **NA handling:**
+#' - Input: NA or empty string → Output: NA (Date)
+#' - Input: Unparseable string → Output: NA (Date) with warning
+#'
+#' @section CONTRACT:
+#' - Returns Date object (R Date class)
+#' - Returns NA (Date) for NA or blank input (fails gracefully)
+#' - Returns input unchanged if already Date object
+#' - Tries multiple formats automatically (no format parameter needed)
+#' - Warns on parse failures (logs unparseable strings)
+#' - Never throws errors (returns NA on failure)
+#'
+#' @section DOES NOT:
+#' - Parse datetime strings (use parse_datetime_safe for those)
+#' - Validate if date is "reasonable" (e.g., Feb 30 would parse to NA)
+#' - Perform timezone conversions (Date has no timezone)
+#' - Require explicit format specification (auto-detects)
+#' - Throw errors on parse failures (warns and returns NA)
+#'
+#' @examples
+#' \dontrun{
+#' # Standard R format
+#' parse_date_safe("2024-10-15")
+#' # [1] "2024-10-15"
+#'
+#' # US Excel format
+#' parse_date_safe("10/15/2024")
+#' # [1] "2024-10-15"
+#'
+#' # Excel variant
+#' parse_date_safe("10-15-2024")
+#' # [1] "2024-10-15"
+#'
+#' # Single-digit month/day
+#' parse_date_safe("1/5/2024")
+#' # [1] "2024-01-05"
+#'
+#' # Already Date object (unchanged)
+#' parse_date_safe(as.Date("2024-10-15"))
+#' # [1] "2024-10-15"
+#'
+#' # NA handling
+#' parse_date_safe(NA)
+#' # [1] NA (Date)
+#'
+#' parse_date_safe("")
+#' # [1] NA (Date)
+#'
+#' # Unparseable format (warns and returns NA)
+#' parse_date_safe("invalid")
+#' # Warning: Could not parse date: 'invalid'
+#' # [1] NA (Date)
+#'
+#' # Usage in Workflow 04 template comparison:
+#' template <- template %>%
+#'   mutate(Night = sapply(Night, parse_date_safe) %>% 
+#'            as.Date(origin = "1970-01-01"))
+#' }
+#'
+#' @export
+parse_date_safe <- function(date_string) {
+  
+  # -------------------------
+  # Handle special cases
+  # -------------------------
+  
+  # NA or empty string
+  if (is.na(date_string) || trimws(date_string) == "") {
+    return(as.Date(NA))
+  }
+  
+  # Already a Date object - return unchanged
+  if (inherits(date_string, "Date")) {
+    return(date_string)
+  }
+  
+  # -------------------------
+  # Try multiple date formats
+  # -------------------------
+  
+  # Format 1: YYYY-MM-DD (standard R format)
+  result <- as.Date(date_string, format = "%Y-%m-%d")
+  if (!is.na(result)) return(result)
+  
+  # Format 2: MM/DD/YYYY (US Excel)
+  result <- lubridate::mdy(date_string, quiet = TRUE)
+  if (!is.na(result)) return(result)
+  
+  # Format 3: MM-DD-YYYY (Excel variant)
+  result <- as.Date(date_string, format = "%m-%d-%Y")
+  if (!is.na(result)) return(result)
+  
+  # Format 4: M/D/YYYY (single-digit month/day)
+  result <- as.Date(date_string, format = "%m/%d/%Y")
+  if (!is.na(result)) return(result)
+  
+  # -------------------------
+  # All formats failed - warn and return NA
+  # -------------------------
+  
+  warning(sprintf("Could not parse date: '%s'", date_string))
+  return(as.Date(NA))
+}
+
+
+#' Format DateTime for Edit Log Display
+#'
+#' @description
+#' Formats a parsed POSIXct datetime for display in the CallsPerNight edit
+#' log. Returns consistent 24-hour format without seconds for readability.
+#' Used in Workflow 04 edit tracking.
+#'
+#' @param dt_parsed POSIXct datetime object (parsed), or NA
+#' @param dt_string Character original datetime string (for reference, unused)
+#'
+#' @return Character string in format "MM/DD/YYYY HH:MM" (24-hour, no seconds),
+#'   or "<blank>" if dt_parsed is NA
+#'
+#' @details
+#' **Purpose:**
+#' In the CallsPerNight edit log, we need consistent datetime formatting
+#' regardless of how Excel formatted the original strings. This function
+#' ensures all datetimes display as 24-hour format without seconds.
+#'
+#' **Format:**
+#' - Date: MM/DD/YYYY (US format, matches template format)
+#' - Time: HH:MM (24-hour, no seconds for readability)
+#' - Example: "10/24/2025 18:00"
+#'
+#' **NA handling:**
+#' Returns "<blank>" for NA datetimes to clearly indicate missing values
+#' in the edit log.
+#'
+#' **Design note:**
+#' The dt_string parameter is included for consistency with calling pattern
+#' but is not used. We format from the parsed datetime to ensure consistency.
+#'
+#' @section CONTRACT:
+#' - Returns character string in format "MM/DD/YYYY HH:MM"
+#' - Returns "<blank>" for NA input
+#' - Always 24-hour format (never AM/PM)
+#' - Never includes seconds
+#' - Zero-padded (e.g., "08:00" not "8:00")
+#'
+#' @section DOES NOT:
+#' - Include AM/PM indicators (always 24-hour)
+#' - Include seconds (omitted for readability)
+#' - Use original string format (formats from parsed datetime)
+#' - Perform timezone conversions (uses datetime as-is)
+#' - Validate if datetime is "reasonable"
+#'
+#' @examples
+#' \dontrun{
+#' # Normal datetime
+#' dt <- parse_datetime_safe("10/24/2025 6:00:00 PM")
+#' format_datetime_for_log(dt, "10/24/2025 6:00:00 PM")
+#' # [1] "10/24/2025 18:00"
+#'
+#' # Morning time
+#' dt <- parse_datetime_safe("10/24/2025 7:30:00 AM")
+#' format_datetime_for_log(dt, "10/24/2025 7:30:00 AM")
+#' # [1] "10/24/2025 07:30"
+#'
+#' # NA datetime
+#' format_datetime_for_log(NA, "")
+#' # [1] "<blank>"
+#'
+#' # Usage in Workflow 04 edit log:
+#' for (i in seq_len(nrow(edit_log))) {
+#'   row <- edit_log[i, ]
+#'   cat(sprintf("      Original: %s\n",
+#'     format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)
+#'   ))
+#'   cat(sprintf("      Edited:   %s\n",
+#'     format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
+#'   ))
+#' }
+#' }
+#'
+#' @export
+format_datetime_for_log <- function(dt_parsed, dt_string) {
+  
+  # Handle NA input - return clear indicator
+  if (is.na(dt_parsed)) {
+    return("<blank>")
+  }
+  
+  # Format as: MM/DD/YYYY HH:MM (24-hour, no seconds, consistent)
+  return(format(dt_parsed, "%m/%d/%Y %H:%M"))
+}
+
+
+# ------------------------------------------------------------------------------
+# Generate CallsPerNight Template
+# ------------------------------------------------------------------------------
+
+#' Generate CallsPerNight Template
+#'
+#' @description
+#' Creates a Detector x Night grid spanning the entire recording period,
+#' pre-fills uniform recording times if provided, and merges call counts
+#' from master data. Generates Excel-ready template for manual editing.
+#'
+#' @param master_data Data frame with Detector, Night, and detection data.
+#'   Must contain columns: Detector, Night. Expects one row per detection event.
+#' @param start_date Character string "YYYY-MM-DD" for project start date.
+#' @param end_date Character string "YYYY-MM-DD" for project end date.
+#' @param uniform_start Character "HH:MM:SS" or NULL. If provided, applies
+#'   this start time to all detector-nights.
+#' @param uniform_end Character "HH:MM:SS" or NULL. If provided, applies
+#'   this end time to all detector-nights.
+#' @param schedule_file Data frame with detector-specific schedules, or NULL.
+#'   Must contain columns: Detector, StartTime, EndTime.
+#'
+#' @return Data frame (tibble) with columns:
+#'   - Detector: Character, detector name
+#'   - Night: Date, study night
+#'   - CallsPerNight: Integer, count of calls (0 if none detected)
+#'   - StartTime: Character "HH:MM:SS", recording start time
+#'   - EndTime: Character "HH:MM:SS", recording end time
+#'   - RecordingHours: Numeric, duration in hours (handles overnight)
+#'   - Warning: Character, flags nights with 0 calls
+#'
+#' @details
+#' **Template Generation Process:**
+#' 1. Creates complete grid: every detector x every night in date range
+#' 2. Applies schedule (uniform times or detector-specific)
+#' 3. Calculates RecordingHours using calculate_recording_hours()
+#' 4. Merges call counts from master_data
+#' 5. Fills missing nights with CallsPerNight = 0
+#' 6. Adds warning for 0-call nights
+#' 
+#' **Overnight Recordings:**
+#' Automatically handled by calculate_recording_hours().
+#' Example: 20:00 -> 08:00 = 12 hours (crosses midnight)
+#' 
+#' **Missing Data:**
+#' Nights without detections appear as CallsPerNight = 0 (not NA).
+#' This ensures complete time series for analysis.
+#'
+#' @section CONTRACT:
+#' - Creates row for EVERY detector x EVERY night in date range
+#' - Nights without calls appear as CallsPerNight = 0 (never missing)
+#' - RecordingHours handles overnight spans correctly
+#' - Preserves all input data (non-destructive operation)
+#' - Returns tibble with consistent column order
+#' - Warning column flags nights with CallsPerNight = 0
+#' - Sorts output by Detector, then Night
+#'
+#' @section DOES NOT:
+#' - Modify master_data input (non-destructive)
+#' - Validate data quality (use validation/ module)
+#' - Remove NoID calls (done in workflow script)
+#' - Save files to disk (caller's responsibility)
+#' - Handle multiple detectors at same location
+#' - Perform statistical analysis
+#' - Generate plots or visualizations
+#'
+#' @examples
+#' \dontrun{
+#' # Generate template with uniform schedule
+#' template <- generate_calls_per_night_template(
+#'   master_data = kpro_master,
+#'   start_date = "2024-05-01",
+#'   end_date = "2024-08-31",
+#'   uniform_start = "20:00:00",
+#'   uniform_end = "08:00:00"
+#' )
+#' 
+#' # Check structure
+#' head(template)
+#' #   Detector Night      CallsPerNight StartTime EndTime RecordingHours
+#' #   SMO      2024-05-01 150           20:00:00  08:00:00 12.0
+#' #   SMO      2024-05-02 200           20:00:00  08:00:00 12.0
+#' 
+#' # Generate template with custom schedule
+#' schedule <- data.frame(
+#'   Detector = c("SMO", "LPE"),
+#'   StartTime = c("20:00:00", "18:00:00"),
+#'   EndTime = c("08:00:00", "07:00:00")
+#' )
+#' 
+#' template <- generate_calls_per_night_template(
+#'   master_data = kpro_master,
+#'   start_date = "2024-05-01",
+#'   end_date = "2024-08-31",
+#'   schedule_file = schedule
+#' )
+#' }
+#'
+#' @export
+generate_calls_per_night_template <- function(master_data,
+                                              start_date,
+                                              end_date,
+                                              uniform_start = NULL,
+                                              uniform_end = NULL,
+                                              schedule_file = NULL) {
+  
+  # -------------------------
+  # Input validation
+  # -------------------------
+  
+  if (!is.data.frame(master_data)) {
+    stop(sprintf(
+      "master_data must be a data frame.\n  Received: %s\n  Did you forget to load kpro_master from Workflow 02?",
+      paste(class(master_data), collapse = ", ")
+    ))
+  }
+  
+  if (!is.character(start_date) || !is.character(end_date)) {
+    stop(sprintf(
+      "start_date and end_date must be character strings in format 'YYYY-MM-DD'.\n  Received: start_date = %s (%s), end_date = %s (%s)\n  Example: '2024-05-01'",
+      start_date, class(start_date)[1],
+      end_date, class(end_date)[1]
+    ))
+  }
+  
+  if (!all(c("Detector", "Night") %in% names(master_data))) {
+    stop(sprintf(
+      "master_data must contain columns 'Detector' and 'Night'.\n  Found columns: %s\n  Did you run Stage 3.2 (Calculate Study Nights)?",
+      paste(names(master_data), collapse = ", ")
+    ))
+  }
+  
+  # -------------------------
+  # Create template grid
+  # -------------------------
+  
+  detectors <- sort(unique(master_data$Detector))
+  nights <- seq.Date(as.Date(start_date), as.Date(end_date), by = "day")
+  template <- expand.grid(Detector = detectors, Night = nights, stringsAsFactors = FALSE) %>% 
+    as_tibble()
+  
+  # -------------------------
+  # Apply schedule
+  # -------------------------
+  
+  template <- apply_schedule(template, schedule_file, uniform_start, uniform_end)
+  
+  # -------------------------
+  # Calculate recording hours
+  # -------------------------
+  
+  template <- template %>% 
+    mutate(RecordingHours = mapply(calculate_recording_hours, StartTime, EndTime))
+  
+  # -------------------------
+  # Merge call counts
+  # -------------------------
+  
+  calls_per_night <- master_data %>% 
+    count(Detector, Night, name = "CallsPerNight")
+  
+  template <- template %>%
+    left_join(calls_per_night, by = c("Detector", "Night")) %>%
+    mutate(
+      CallsPerNight = replace_na(CallsPerNight, 0),
+      Warning = if_else(CallsPerNight == 0, 
+                        "No calls detected - confirm equipment status", 
+                        NA_character_)
+    )
+  
+  template
+}
+
+# ------------------------------------------------------------------------------
+# Apply Schedule to Template
+# ------------------------------------------------------------------------------
+
+#' Apply Schedule to Template
+#'
+#' @description
+#' Adds start and end times to a template based on schedule file or
+#' uniform hours across all detectors.
+#'
+#' @param template Data frame with detectors and nights.
+#'   Must contain columns: Detector, Night.
+#' @param schedule_file Optional data frame with detector-specific schedules.
+#'   Must contain columns: Detector, StartTime, EndTime. If NULL, uses uniform times.
+#' @param uniform_start Optional character "HH:MM:SS" for uniform start time.
+#'   Required if schedule_file is NULL.
+#' @param uniform_end Optional character "HH:MM:SS" for uniform end time.
+#'   Required if schedule_file is NULL.
+#'
+#' @return Template data frame with StartTime and EndTime columns added.
+#'
+#' @details
+#' **Two modes of operation:**
+#' 
+#' 1. **Uniform schedule (schedule_file = NULL):**
+#'    - Applies same StartTime and EndTime to all detector-nights
+#'    - Requires uniform_start and uniform_end parameters
+#'    - Common for studies with consistent recording protocol
+#' 
+#' 2. **Detector-specific schedule (schedule_file provided):**
+#'    - Joins schedule_file by Detector
+#'    - Allows different times for different detectors
+#'    - Useful for staggered deployments or location-specific protocols
+#'
+#' @section CONTRACT:
+#' - Adds StartTime and EndTime columns to template
+#' - Preserves all rows in template (left join)
+#' - Either schedule_file OR uniform times must be provided
+#' - Validates schedule_file structure if provided
+#' - Returns tibble with same row count as input
+#'
+#' @section DOES NOT:
+#' - Modify template input (non-destructive)
+#' - Calculate recording hours (use calculate_recording_hours)
+#' - Validate time formats (HH:MM:SS)
+#' - Handle missing schedule data (will create NA values)
+#' - Remove rows with missing times
+#'
+#' @examples
+#' \dontrun{
+#' # Create template
+#' template <- expand.grid(
+#'   Detector = c("SMO", "LPE"),
+#'   Night = seq.Date(as.Date("2024-05-01"), as.Date("2024-05-03"), by = "day")
+#' )
+#' 
+#' # Apply uniform schedule
+#' template_uniform <- apply_schedule(
+#'   template, 
+#'   uniform_start = "20:00:00", 
+#'   uniform_end = "08:00:00"
+#' )
+#' 
+#' # Apply detector-specific schedule
+#' schedule <- data.frame(
+#'   Detector = c("SMO", "LPE"),
+#'   StartTime = c("20:00:00", "18:00:00"),
+#'   EndTime = c("08:00:00", "07:00:00")
+#' )
+#' 
+#' template_custom <- apply_schedule(template, schedule_file = schedule)
+#' }
+#'
+#' @export
+apply_schedule <- function(template, 
+                           schedule_file = NULL, 
+                           uniform_start = NULL, 
+                           uniform_end = NULL) {
+  
+  # -------------------------
+  # Input validation
+  # -------------------------
+  
+  if (!is.data.frame(template)) {
+    stop(sprintf(
+      "template must be a data frame.\n  Received: %s",
+      paste(class(template), collapse = ", ")
+    ))
+  }
+  
+  if (!all(c("Detector", "Night") %in% names(template))) {
+    stop(sprintf(
+      "template must contain columns: Detector, Night\n  Found columns: %s",
+      paste(names(template), collapse = ", ")
+    ))
+  }
+  
+  # -------------------------
+  # Apply schedule
+  # -------------------------
+  
+  if (!is.null(schedule_file)) {
+    # Detector-specific schedule mode
+    required_cols <- c("Detector", "StartTime", "EndTime")
+    
+    if (!all(required_cols %in% names(schedule_file))) {
+      stop(sprintf(
+        "schedule_file must contain columns: Detector, StartTime, EndTime\n  Found columns: %s\n  Please check your schedule file structure.",
+        paste(names(schedule_file), collapse = ", ")
+      ))
+    }
+    
+    template <- template %>% 
+      left_join(schedule_file, by = "Detector")
+    
+  } else {
+    # Uniform schedule mode
+    if (is.null(uniform_start) || is.null(uniform_end)) {
+      stop(sprintf(
+        "Uniform StartTime and EndTime must be provided when schedule_file is NULL.\n  Received: uniform_start = %s, uniform_end = %s\n  Please provide both in 'HH:MM:SS' format (e.g., '20:00:00')",
+        ifelse(is.null(uniform_start), "NULL", uniform_start),
+        ifelse(is.null(uniform_end), "NULL", uniform_end)
+      ))
+    }
+    
+    template <- template %>% 
+      mutate(
+        StartTime = uniform_start, 
+        EndTime = uniform_end
+      )
+  }
+  
+  template
+}
+
+# ------------------------------------------------------------------------------
+# Save CallsPerNight with Versioning
+# ------------------------------------------------------------------------------
+
+#' Save CallsPerNight Data Frame with Versioning
+#'
+#' @description
+#' Saves a calls_per_night data frame to a CSV file, automatically
+#' versioning the filename to prevent overwriting previous versions.
+#' Uses auto-incrementing version numbers (v1, v2, v3, ...).
+#'
+#' @param data Data frame containing calls per night data.
+#'   Typically output from Workflow 03 final stage.
+#' @param base_name Character. Base name for the output file. 
+#'   Default is "CallsPerNight_final".
+#' @param output_dir Character. Directory to save the file. 
+#'   Default is project outputs directory (via here::here()).
+#'
+#' @return Character. Full file path of the saved CSV.
+#'
+#' @details
+#' **Versioning Logic:**
+#' - Scans output_dir for existing files matching pattern: base_name_v#.csv
+#' - Finds highest version number
+#' - Increments by 1
+#' - Saves new file with next version number
+#' 
+#' **Example progression:**
+#' - First save: CallsPerNight_final_v1.csv
+#' - Second save: CallsPerNight_final_v2.csv
+#' - Third save: CallsPerNight_final_v3.csv
+#' 
+#' **Directory Creation:**
+#' If output_dir doesn't exist, creates it automatically.
+#'
+#' @section CONTRACT:
+#' - Never overwrites existing files (always increments version)
+#' - Creates output directory if missing
+#' - Returns full path to saved file
+#' - Logs save operation with message
+#' - Uses consistent filename pattern: basename_vN.csv
+#'
+#' @section DOES NOT:
+#' - Validate data structure (caller's responsibility)
+#' - Remove old versions (keeps all versions)
+#' - Compress files
+#' - Write to formats other than CSV
+#' - Add timestamps to filename (uses version numbers only)
+#'
+#' @examples
+#' \dontrun{
+#' # Save to default location (outputs/)
+#' file_path <- save_callspernight_with_version(calls_per_night_final)
+#' # Saves to: outputs/CallsPerNight_final_v1.csv
+#' 
+#' # Save with custom name
+#' file_path <- save_callspernight_with_version(
+#'   data = calls_per_night_final,
+#'   base_name = "Study2024_CallsPerNight"
+#' )
+#' # Saves to: outputs/Study2024_CallsPerNight_v1.csv
+#' 
+#' # Save to custom directory
+#' file_path <- save_callspernight_with_version(
+#'   data = calls_per_night_final,
+#'   output_dir = here::here("results", "final")
+#' )
+#' # Saves to: results/final/CallsPerNight_final_v1.csv
+#' }
+#'
+#' @export
+save_callspernight_with_version <- function(data, 
+                                            base_name = "CallsPerNight_final", 
+                                            output_dir = here::here("outputs")) {
+  
+  # -------------------------
+  # Input validation
+  # -------------------------
+  
+  if (!is.data.frame(data)) {
+    stop(sprintf(
+      "data must be a data frame.\n  Received: %s\n  Did you pass the correct object?",
+      paste(class(data), collapse = ", ")
+    ))
+  }
+  
+  if (!is.character(base_name) || length(base_name) != 1) {
+    stop(sprintf(
+      "base_name must be a single character string.\n  Received: %s (length %d)",
+      class(base_name)[1], length(base_name)
+    ))
+  }
+  
+  if (!is.character(output_dir) || length(output_dir) != 1) {
+    stop(sprintf(
+      "output_dir must be a single character string.\n  Received: %s (length %d)",
+      class(output_dir)[1], length(output_dir)
+    ))
+  }
+  
+  # -------------------------
+  # Ensure output directory exists
+  # -------------------------
+  
+  if (!dir.exists(output_dir)) {
+    message(sprintf("Creating output directory: %s", output_dir))
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # -------------------------
+  # Determine next version number
+  # -------------------------
+  
+  existing_files <- list.files(
+    output_dir, 
+    pattern = paste0("^", base_name, "_v[0-9]+\\.csv$"), 
+    full.names = FALSE
+  )
+  
+  if (length(existing_files) == 0) {
+    next_version <- 1
+  } else {
+    versions <- stringr::str_extract(existing_files, "(?<=_v)\\d+")
+    next_version <- max(as.integer(versions), na.rm = TRUE) + 1
+  }
+  
+  # -------------------------
+  # Format DateTime columns for export
+  # -------------------------
+  
+  # Format DateTime columns to US-friendly format before saving
+  # This prevents ISO 8601 format (2025-10-06T04:14:08Z)
+  # and produces readable format (10/6/2025 4:14:08 AM)
+  if (exists("format_datetime_for_export")) {
+    data <- format_datetime_for_export(data)
+  }
+  
+  # -------------------------
+  # Build file path and save
+  # -------------------------
+  
+  file_path <- file.path(output_dir, paste0(base_name, "_v", next_version, ".csv"))
   readr::write_csv(data, file_path)
-  message("\u2713 Master file saved: ", file_path)
+  
+  message(sprintf("✓ CallsPerNight file saved: %s", basename(file_path)))
+  message(sprintf("  Full path: %s", file_path))
   
   return(file_path)
 }
+
+# ==============================================================================
+# END OF FILE
+# ==============================================================================

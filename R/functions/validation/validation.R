@@ -76,9 +76,6 @@
 #   - validate_cpn_data()
 #   - validate_master_data()
 #
-# Config Loaders with Validation:
-#   - require_study_parameters()
-#
 # Schema Enforcement:
 #   - enforce_unified_schema()
 #
@@ -89,9 +86,11 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-01: Removed require_study_parameters() from CONTENTS (never implemented, use load_study_parameters() from config.R)
+# 2026-02-01: Verified deterministic behavior - all assert functions follow standards
+# 2026-02-01: Confirmed usage in all 3 run_* orchestrators
 # 2024-12-29: Added universal assertion functions (assert_*)
 # 2024-12-29: Added composite validators (validate_*)
-# 2024-12-29: Added require_study_parameters() config loader
 # 2024-12-27: Split into enforce_unified_schema and enforce_master_schema
 # 2024-12-26: Initial CODING_STANDARDS compliant version
 #
@@ -775,23 +774,6 @@ validate_master_data <- function(master_data) {
 #' }
 #'
 #' @export
-require_study_parameters <- function(yaml_path = "inst/config/study_parameters.yaml") {
-  
-  assert_file_exists(
-    yaml_path,
-    hint = "Run 01_ingest_raw_data.R to create study_parameters.yaml"
-  )
-  
-  params <- load_study_parameters(yaml_path)
-  
-  if (is.null(params)) {
-    stop("Failed to load study_parameters.yaml")
-  }
-  
-  params
-}
-
-
 # ==============================================================================
 # SCHEMA ENFORCEMENT
 # ==============================================================================

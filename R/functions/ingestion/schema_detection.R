@@ -35,10 +35,9 @@
 #    - Only adds schema_version column
 #    - Input data frame structure preserved
 #
-# 5. Helper functions
+# 3. Schema summary functions
 #    - get_dominant_schema() returns single most common version
 #    - get_schema_summary() returns data frame of counts (with optional verbose)
-#    - validate_schema_detection() checks for "unknown" rows
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
@@ -62,12 +61,7 @@
 # Primary function:
 #   - detect_row_schema()         # Main workhorse - adds schema_version column
 #
-# Helper functions:
-#   - get_dominant_schema()       # Returns most common schema (for logging)
-#   - get_schema_summary()        # Returns counts as data frame (with verbose option)
-#   - validate_schema_detection() # Checks for unknown schemas
-#
-# SCHEMA VERSIONS RECOGNIZED
+# This module provides the following functions:
 # --------------------------
 #   v1_legacy_single_column   : Has 'alternates' column (semicolon-delimited)
 #   v2_transitional_4letter   : Has 'alternate_1', auto_id is 4 characters
@@ -87,9 +81,6 @@
 #
 # # Get dominant for logging
 # message(sprintf("Primary schema: %s", get_dominant_schema(df)))
-#
-# # Validate detection
-# if (!validate_schema_detection(df)) {
 #   warning("Some rows have unknown schema")
 # }
 #
@@ -368,48 +359,4 @@ get_schema_summary <- function(df, verbose = FALSE) {
   }
   
   schema_counts
-}
-
-
-# ------------------------------------------------------------------------------
-# Helper: Validate Schema Detection
-# ------------------------------------------------------------------------------
-#' Validate Schema Detection Results
-#'
-#' @description
-#' Checks for unknown schemas and returns TRUE/FALSE.
-#'
-#' @param df Data frame with schema_version column
-#'
-#' @return Logical: TRUE if all schemas detected, FALSE otherwise
-#'
-#' @section CONTRACT:
-#' - Returns TRUE if no unknown schemas
-#' - Returns FALSE and warns if unknown schemas found
-#' - Returns FALSE and warns if schema_version column missing
-#'
-#' @section DOES NOT:
-#' - Stop execution
-#' - Modify input data frame
-#'
-#' @export
-validate_schema_detection <- function(df) {
-  
-  if (!"schema_version" %in% names(df)) {
-    warning("schema_version column not found")
-    return(FALSE)
-  }
-  
-  unknown_count <- sum(df$schema_version == "unknown", na.rm = TRUE)
-  
-  if (unknown_count > 0) {
-    warning(sprintf(
-      "%s rows have unknown schema (%.1f%%)",
-      format(unknown_count, big.mark = ","),
-      100 * unknown_count / nrow(df)
-    ))
-    return(FALSE)
-  }
-  
-  TRUE
 }
