@@ -898,10 +898,12 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Origin: 05_summary_stats.R, Standards: 01_architecture_standards.md (structured returns)
   # Store WF05 results in return structure
+  # Note: GT table exports are not implemented in chunk 3 (simplified from legacy WF05)
+  # as the primary outputs are the RDS file and plots from WF06.
   result$workflow_05 <- list(
     all_summaries = all_summaries,
     summary_rds = summary_rds_path,
-    files_created = character(),  # GT table exports handled separately if needed
+    files_created = character(),  # GT table PNG/HTML exports skipped in chunk 3
     has_species = has_species,
     has_temporal = has_temporal,
     validation_report = validation_html_05
@@ -1197,9 +1199,14 @@ run_finalize_to_report <- function(kpro_master = NULL,
     )
   } else {
     if (verbose) {
+      # Use total_plots from validation if available, otherwise count from plots list
+      plot_count <- if (!is.null(rds_validation$total_plots)) {
+        rds_validation$total_plots
+      } else {
+        sum(sapply(all_plots_for_report, length))
+      }
       message(sprintf("  [OK] RDS validation passed: %d summaries, %d plots",
-                      length(all_summaries_for_report),
-                      rds_validation$total_plots %||% length(unlist(all_plots_for_report, recursive = FALSE))))
+                      length(all_summaries_for_report), plot_count))
     }
   }
   
