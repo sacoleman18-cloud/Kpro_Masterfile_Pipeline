@@ -816,6 +816,21 @@ plot_recording_effort_heatmap <- function(calls_per_night) {
     df_name = "calls_per_night"
   )
   
+  # Origin: 06_exploratory_plots.R, Standards: 04_data_standards.md §2.1 (NA handling)
+  # Handle edge case where Night contains only NA values (prevents "from must be finite")
+  valid_nights <- calls_per_night$Night[!is.na(calls_per_night$Night)]
+  if (length(valid_nights) == 0) {
+    warning("No valid Night values available for heatmap")
+    return(
+      ggplot() +
+        annotate("text", x = 0.5, y = 0.5,
+                 label = "No valid date data\nfor effort heatmap",
+                 size = 5, hjust = 0.5) +
+        theme_void() +
+        labs(title = "Recording Effort Heatmap")
+    )
+  }
+  
   # Create complete grid of all detector × night combinations
   all_nights <- seq(
     min(calls_per_night$Night),

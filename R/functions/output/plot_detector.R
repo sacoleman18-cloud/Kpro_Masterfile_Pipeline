@@ -574,12 +574,41 @@ plot_correlation_heatmap <- function(calls_per_night) {
     dplyr::select(Detector, Night, CallsPerNight) %>%
     tidyr::pivot_wider(names_from = Detector, values_from = CallsPerNight)
   
-  # Compute Pearson correlation matrix
-  cor_matrix <- cor(
-    wide %>% dplyr::select(-Night),
+  # Origin: 06_exploratory_plots.R, Standards: 04_data_standards.md §2.1 (NA handling)
+  # Check for detectors with zero variance (SD = 0) to avoid correlation warnings
+  detector_data <- wide %>% dplyr::select(-Night)
+  detector_sds <- sapply(detector_data, function(x) sd(x, na.rm = TRUE))
+  
+  zero_sd_detectors <- names(detector_sds[is.na(detector_sds) | detector_sds == 0])
+  if (length(zero_sd_detectors) > 0) {
+    warning(sprintf(
+      "Detector(s) with zero variance excluded from correlation: %s",
+      paste(zero_sd_detectors, collapse = ", ")
+    ))
+    # Remove constant-value detectors from correlation calculation
+    detector_data <- detector_data %>% 
+      dplyr::select(-dplyr::any_of(zero_sd_detectors))
+  }
+  
+  # Return empty plot if not enough detectors after filtering
+  if (ncol(detector_data) < 2) {
+    warning("Not enough detectors with variance for correlation matrix")
+    return(
+      ggplot() +
+        annotate("text", x = 0.5, y = 0.5, 
+                 label = "Insufficient data\nfor correlation matrix",
+                 size = 6, hjust = 0.5) +
+        theme_void() +
+        labs(title = "Correlation of Nightly Activity Between Detectors")
+    )
+  }
+  
+  # Compute Pearson correlation matrix with suppressWarnings for any remaining edge cases
+  cor_matrix <- suppressWarnings(cor(
+    detector_data,
     use = "pairwise.complete.obs",
     method = "pearson"
-  )
+  ))
   
   # Convert to long format for ggplot
   cor_df <- as.data.frame(as.table(cor_matrix))
