@@ -617,6 +617,35 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   log_message(sprintf("[WF04 Stage 5] Status classified, %d dead nights retained", dead_nights))
   
+  # Origin: 04_finalize_cpn.R ~L560+, Standards: 04_data_standards.md §4.3
+  
+  # Validate problematic call values before proceeding
+  problematic_calls <- calls_per_night_final %>%
+    dplyr::filter(CallsPerNight < 0 | CallsPerNight > 10000)
+  
+  if (nrow(problematic_calls) > 0) {
+    warning(sprintf(
+      "Found %d rows with suspicious call counts (negative or >10000). Check data quality.",
+      nrow(problematic_calls)
+    ))
+    
+    validation_context_04 <- log_validation_event(
+      validation_context_04,
+      event_type = "warning",
+      description = "Suspicious call values detected",
+      count = nrow(problematic_calls),
+      details = list(
+        negative_count = sum(problematic_calls$CallsPerNight < 0),
+        excessive_count = sum(problematic_calls$CallsPerNight > 10000)
+      )
+    )
+    
+    if (verbose) {
+      message(sprintf("  [!] Warning: %d rows with suspicious call values", 
+                      nrow(problematic_calls)))
+    }
+  }
+  
   # ---------------------------------------------------------------------------
   # Stage 6: Save Final CPN
   # ---------------------------------------------------------------------------
@@ -826,6 +855,17 @@ run_finalize_to_report <- function(kpro_master = NULL,
   timestamp_05 <- format(Sys.time(), "%Y%m%d")
   summary_rds_path <- here::here("results", "rds", sprintf("summary_data_%s.rds", timestamp_05))
   
+  # Origin: 05_summary_stats.R, Standards: 07_artifact_release_standards.md
+  # Add metadata element required by validate_rds_structure()
+  all_summaries$metadata <- list(
+    generated = Sys.time(),
+    study_name = study_params$study_parameters$study_name %||% "Unknown",
+    n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
+    n_nights = dplyr::n_distinct(calls_per_night_final$Night),
+    has_species = has_species,
+    has_temporal = has_temporal
+  )
+  
   assert_directory_exists(dirname(summary_rds_path), create = TRUE)
   saveRDS(all_summaries, summary_rds_path)
   
@@ -855,6 +895,21 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_05)))
   
   log_message("=== WORKFLOW 05: COMPLETE ===")
+  
+  # Origin: 05_summary_stats.R, Standards: 01_architecture_standards.md (structured returns)
+  # Store WF05 results in return structure
+  # Note: GT table exports are not implemented in chunk 3 (simplified from legacy WF05)
+  # as the primary outputs are the RDS file and plots from WF06.
+  result$workflow_05 <- list(
+    all_summaries = all_summaries,
+    summary_rds = summary_rds_path,
+    files_created = character(),  # GT table PNG/HTML exports skipped in chunk 3
+    has_species = has_species,
+    has_temporal = has_temporal,
+    validation_report = validation_html_05
+  )
+  
+  result$validation_html_paths <- c(result$validation_html_paths, validation_html_05)
   
   # ===========================================================================
   # WORKFLOW 06: EXPLORATORY PLOTS
@@ -1111,12 +1166,48 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("22", "Verify RDS Artifacts")
   
+  # Origin: 07_generate_report.R L284-323, Standards: 07_artifact_release_standards.md
+  # Use robust RDS discovery and validation like legacy workflow
+  
   if (!file.exists(summary_rds_path)) {
     stop("Summary RDS not found: ", summary_rds_path)
   }
   
   if (!file.exists(plots_rds_path)) {
     stop("Plots RDS not found: ", plots_rds_path)
+  }
+  
+  # Load and validate RDS structure for report compatibility
+  all_summaries_for_report <- readRDS(summary_rds_path)
+  all_plots_for_report <- readRDS(plots_rds_path)
+  
+  rds_validation <- tryCatch({
+    validate_rds_structure(all_summaries_for_report, all_plots_for_report)
+  }, error = function(e) {
+    list(valid = FALSE, errors = e$message)
+  })
+  
+  if (!rds_validation$valid) {
+    warning(sprintf("RDS structure validation warnings:\n  %s",
+                    paste(rds_validation$errors, collapse = "\n  ")))
+    
+    validation_context_07 <- log_validation_event(
+      validation_context_07,
+      event_type = "warning",
+      description = "RDS structure validation issues detected",
+      details = list(errors = rds_validation$errors)
+    )
+  } else {
+    if (verbose) {
+      # Use total_plots from validation if available, otherwise count from plots list
+      plot_count <- if (!is.null(rds_validation$total_plots)) {
+        rds_validation$total_plots
+      } else {
+        sum(sapply(all_plots_for_report, length))
+      }
+      message(sprintf("  [OK] RDS validation passed: %d summaries, %d plots",
+                      length(all_summaries_for_report), plot_count))
+    }
   }
   
   if (verbose) message("  [OK] All RDS artifacts verified")

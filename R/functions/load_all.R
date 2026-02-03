@@ -457,9 +457,9 @@ if (file.exists(here::here("R", "pipeline", "run_cpn_template.R"))) {
   source(here::here("R", "pipeline", "run_cpn_template.R"))
 }
 
-# if (file.exists(here::here("R", "pipeline", "run_finalize_to_report.R"))) {
-#   source(here::here("R", "pipeline", "run_finalize_to_report.R"))
-# }
+if (file.exists(here::here("R", "pipeline", "run_finalize_to_report.R"))) {
+  source(here::here("R", "pipeline", "run_finalize_to_report.R"))
+}
 
 
 # =============================================================================

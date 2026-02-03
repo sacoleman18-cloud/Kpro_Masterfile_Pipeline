@@ -120,11 +120,28 @@ plot_activity_over_time <- function(calls_per_night, show_points = FALSE) {
     df_name = "calls_per_night"
   )
   
-  n_detectors <- dplyr::n_distinct(calls_per_night$Detector)
+  # Origin: 06_exploratory_plots.R, Standards: 04_data_standards.md §2.1 (NA handling)
+  # Filter out NA values to prevent geom_line() missing value warnings
+  plot_data <- calls_per_night %>%
+    dplyr::filter(!is.na(CallsPerNight), !is.na(Night))
+  
+  if (nrow(plot_data) == 0) {
+    warning("No valid data available for activity over time plot")
+    return(
+      ggplot() +
+        annotate("text", x = 0.5, y = 0.5,
+                 label = "No valid data\nfor activity plot",
+                 size = 5, hjust = 0.5) +
+        theme_void() +
+        labs(title = "Bat Activity Over Time")
+    )
+  }
+  
+  n_detectors <- dplyr::n_distinct(plot_data$Detector)
   
   # Build base plot
   p <- ggplot(
-    calls_per_night,
+    plot_data,
     aes(x = Night, y = CallsPerNight, color = Detector)
   ) +
     geom_line(alpha = 0.8) +
@@ -451,8 +468,22 @@ plot_callsperhour_distribution <- function(calls_per_night,
   )
   
   # Remove NA and Inf values
+  # Origin: 06_exploratory_plots.R, Standards: 04_data_standards.md §2.1 (NA handling)
   plot_data <- calls_per_night %>%
     dplyr::filter(!is.na(CallsPerHour), is.finite(CallsPerHour))
+  
+  # Handle edge case where all data filtered out (prevents "from must be finite" error)
+  if (nrow(plot_data) == 0) {
+    warning("No finite CallsPerHour values available for histogram")
+    return(
+      ggplot() +
+        annotate("text", x = 0.5, y = 0.5,
+                 label = "No data available\n(all CallsPerHour values are NA or Inf)",
+                 size = 5, hjust = 0.5) +
+        theme_void() +
+        labs(title = "Distribution of Calls Per Hour")
+    )
+  }
   
   # Calculate summary statistics
   mean_cph <- mean(plot_data$CallsPerHour, na.rm = TRUE)
