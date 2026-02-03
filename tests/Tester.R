@@ -19,6 +19,11 @@ result2 <- run_cpn_template(
   verbose = TRUE
   )
 
+result56 <- run_finalize_to_report(
+  kpro_master = result2$kpro_master,
+  verbose = TRUE
+)
+
 # ==============================================================================
 # Test 2: Inspect the results
 # ==============================================================================

@@ -105,7 +105,8 @@
 #
 # CHANGELOG
 # ---------
-# 2026-02-01: MOVED get_schedule_config() to config.R (proper architectural placement)
+# 2026-02-01: Changed find_most_recent_file() to read off of timestamp
+#             - MOVED get_schedule_config() to config.R (proper architectural placement)
 #             - Configuration parsing belongs in config module, not utilities
 #             - Utilities should remain domain-agnostic with zero config knowledge
 #             - get_schedule_config() has domain knowledge (bat study defaults, YAML structure)
@@ -409,39 +410,135 @@ convert_empty_to_na <- function(df, columns) {
 # ==============================================================================
 
 
-#' Find Most Recent File Matching Pattern
+#' Find Most Recent File Matching Pattern (by Filename Timestamp)
 #'
 #' @description
-#' Searches directory for files matching a regex pattern and returns
-#' the most recently modified one. Essential for loading checkpoint files.
+#' Searches a directory for files matching a regex pattern and returns the
+#' file with the most recent timestamp embedded in its filename. Expects
+#' filenames with YYYYMMDD_HHMMSS timestamp at or near the end of the basename
+#' (before extension). Uses actual datetime parsing for robust sorting rather
+#' than lexicographic comparison.
+#' 
+#' This function is the foundation of the checkpoint discovery system. All
+#' orchestrating functions (run_ingest_standardize, run_cpn_template,
+#' run_finalize_to_report) rely on this to load the most recent outputs from
+#' previous pipeline stages. The timestamp MUST be embedded in the filename
+#' itself, not derived from file modification time, to ensure deterministic
+#' behavior across file systems and environments.
 #'
-#' @param directory Character. Directory to search.
-#' @param pattern Character. Regex pattern to match filenames.
-#' @param error_if_none Logical. Stop with error if no files found? Default: TRUE
-#' @param hint Character or NULL. Hint message if no files found.
+#' @param directory Character. Directory to search (not recursive).
+#' @param pattern Character. Regex pattern to match filenames. Applied to
+#'   basename only, not full path.
+#' @param error_if_none Logical. Stop with error if no files found? If FALSE,
+#'   returns NULL instead. Default: TRUE
+#' @param hint Character or NULL. Additional hint message to display in error
+#'   if no files found. Use to guide user on which workflow to run first.
+#'   Default: NULL
 #'
-#' @return Character. Full path to most recent matching file, or NULL if
+#' @return Character. Full path to file with most recent timestamp, or NULL if
 #'   none found and error_if_none = FALSE.
 #'
+#' @section Timestamp Extraction Logic:
+#' The function extracts timestamps from filenames using this pattern:
+#' \code{_(\\d{8}_\\d{6})(?:_.*?)?\\.\\w+$}
+#' 
+#' This matches:
+#' \itemize{
+#'   \item Underscore followed by YYYYMMDD_HHMMSS
+#'   \item Optional suffix after timestamp (e.g., _ORIGINAL, _EDIT_THIS)
+#'   \item File extension at end
+#' }
+#' 
+#' Examples of valid patterns:
+#' \itemize{
+#'   \item \code{02_kpro_master_20260201_180259.csv}
+#'   \item \code{03_CallsPerNight_Template_20260201_180259_ORIGINAL.csv}
+#'   \item \code{summary_statistics_20251230.xlsx}
+#' }
+#' 
+#' The extracted timestamp string (e.g., "20260201_180259") is parsed into
+#' a POSIXct datetime object using lubridate::ymd_hms() for proper chronological
+#' sorting. Files where timestamp parsing fails are excluded from consideration.
+#'
 #' @section CONTRACT:
-#' - Returns single file path (most recent by mtime)
-#' - Stops if no matches found and error_if_none = TRUE
-#' - Returns NULL if no matches and error_if_none = FALSE
-#' - Pattern matches filename only (not full path)
+#' - Returns single file path (most recent by parsed datetime)
+#' - Stops if no matches found AND error_if_none = TRUE
+#' - Returns NULL if no matches AND error_if_none = FALSE
+#' - Pattern matches filename only (basename, not full path)
+#' - Timestamp must be in format YYYYMMDD_HHMMSS (underscore-separated)
+#' - Timestamp position: end of basename, before extension, allows optional suffix
+#' - Uses lubridate::ymd_hms() for robust datetime parsing
+#' - Filters out files where timestamp extraction/parsing fails
+#' - All paths use forward slashes (cross-platform compatibility)
 #'
 #' @section DOES NOT:
-#' - Search subdirectories
+#' - Search subdirectories (non-recursive)
 #' - Validate file contents
-#' - Load the file
+#' - Load or read the file
+#' - Use file system modification time (only filename timestamps)
+#' - Cache results between calls
+#' - Modify any files
+#' - Create directories
+#' - Guarantee which file is selected if multiple have identical timestamps
+#'   (behavior undefined - use unique timestamps)
+#'
+#' @section Error Handling:
+#' Stops execution with informative error if:
+#' \itemize{
+#'   \item No files match pattern AND error_if_none = TRUE
+#'   \item No files have valid parseable timestamps AND error_if_none = TRUE
+#' }
+#' 
+#' Error messages include:
+#' \itemize{
+#'   \item Pattern that was searched for
+#'   \item Directory that was searched
+#'   \item Optional hint about which workflow to run
+#'   \item Expected timestamp format
+#' }
+#'
+#' @section Dependencies:
+#' \itemize{
+#'   \item lubridate::ymd_hms() - Parse timestamp strings to POSIXct
+#'   \item base::list.files() - Directory listing
+#'   \item base::basename() - Extract filename from path
+#'   \item base::sub() - Regex extraction
+#'   \item base::order() - Sort datetime objects
+#' }
 #'
 #' @examples
 #' \dontrun{
 #' # Find most recent master file
 #' master_file <- find_most_recent_file(
-#'   "outputs",
-#'   "^02_kpro_master_.*\\.csv$",
-#'   hint = "Run 02_standardize.R first"
+#'   directory = "outputs/checkpoints",
+#'   pattern = "^02_kpro_master_.*\\.csv$",
+#'   hint = "Run Chunk 1 (run_ingest_standardize) first"
 #' )
+#' 
+#' # Find most recent CPN template with suffix
+#' template_file <- find_most_recent_file(
+#'   directory = "outputs",
+#'   pattern = "^03_CallsPerNight_Template_ORIGINAL_.*\\.csv$"
+#' )
+#' 
+#' # Find with optional return NULL behavior
+#' summary_file <- find_most_recent_file(
+#'   directory = "results/tables",
+#'   pattern = "^summary_statistics_.*\\.xlsx$",
+#'   error_if_none = FALSE
+#' )
+#' if (is.null(summary_file)) {
+#'   message("No summary files found, skipping...")
+#' }
+#' 
+#' # Files that would match:
+#' # "02_kpro_master_20260201_180259.csv"      -> timestamp: 2026-02-01 18:02:59
+#' # "02_kpro_master_20260130_120000.csv"      -> timestamp: 2026-01-30 12:00:00
+#' # Returns: first one (most recent)
+#' 
+#' # "03_CPN_20260201_143022_ORIGINAL.csv"     -> timestamp: 2026-02-01 14:30:22
+#' # "03_CPN_20260201_143022_EDIT_THIS.csv"    -> timestamp: 2026-02-01 14:30:22
+#' # Returns: first one alphabetically (tie on timestamp)
 #' }
 #'
 #' @export
@@ -465,7 +562,7 @@ find_most_recent_file <- function(directory,
         ""
       }
       stop(sprintf(
-        "No files matching '%s' found in %s/%s",
+        "No files matching '%s' found in %s%s",
         pattern, directory, hint_msg
       ))
     } else {
@@ -473,9 +570,38 @@ find_most_recent_file <- function(directory,
     }
   }
   
-  # Sort by modification time (most recent first)
-  file_mtimes <- file.mtime(matching_files)
-  most_recent <- matching_files[order(file_mtimes, decreasing = TRUE)][1]
+  # Extract timestamps from end of filenames (before extension, allows suffix)
+  # Pattern: _(YYYYMMDD_HHMMSS) followed by optional _SUFFIX then .extension
+  basenames <- basename(matching_files)
+  timestamps <- sub(".*_(\\d{8}_\\d{6})(?:_.*?)?\\.\\w+$", "\\1", basenames)
+  
+  # Convert to POSIXct for proper datetime sorting
+  timestamps_dt <- lubridate::ymd_hms(timestamps, quiet = TRUE)
+  
+  # Filter out files where timestamp parsing failed
+  valid_idx <- !is.na(timestamps_dt)
+  
+  if (!any(valid_idx)) {
+    if (error_if_none) {
+      stop(sprintf(
+        paste0(
+          "No files with valid timestamps found matching '%s' in %s\n",
+          "  Expected format: ..._YYYYMMDD_HHMMSS.ext or ..._YYYYMMDD_HHMMSS_SUFFIX.ext"
+        ),
+        pattern, directory
+      ))
+    } else {
+      return(NULL)
+    }
+  }
+  
+  # Keep only valid timestamped files
+  matching_files <- matching_files[valid_idx]
+  timestamps_dt <- timestamps_dt[valid_idx]
+  
+  # Sort by actual datetime (descending - most recent first)
+  sorted_idx <- order(timestamps_dt, decreasing = TRUE)
+  most_recent <- matching_files[sorted_idx[1]]
   
   most_recent
 }

@@ -53,7 +53,7 @@
 #
 # CONTENTS
 # --------
-# - calculate_recording_hours()          # Recording duration calculation
+# - calculate_recording_hours()          # Recording duration calculation (vectorized)
 # - is.Date()                            # Type checker for Date objects
 # - parse_datetime_safe()                # Parse full datetime strings
 # - extract_time()                       # Extract time component from datetime
@@ -71,6 +71,15 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-02: MAJOR REWRITE - calculate_recording_hours() now fully vectorized
+#             - Handles both time-only ("HH:MM:SS") and full datetime formats
+#             - Auto-detects format per row (contains "/" = datetime, else time-only)
+#             - Tries multiple datetime formats (AM/PM, 24-hour, with/without seconds)
+#             - Supports Excel auto-formatting (handles format changes transparently)
+#             - Fully vectorized for dplyr::mutate() compatibility
+#             - Returns numeric vector instead of single value
+#             - Handles NA inputs gracefully (returns NA in result vector for failed rows)
+#             - Improves performance for large datasets (no loops required)
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
 # 2026-02-01: Confirmed usage in run_cpn_template.R (Chunk 2) and run_finalize_to_report.R (Chunk 3)
 # 2024-12-29: Added is.Date(), parse_datetime_safe(), extract_time()
@@ -95,22 +104,25 @@ HOURS_PER_DAY <- 24
 #' Computes the number of recording hours between a start and end time.
 #' Handles both time-only ("HH:MM:SS") and full datetime formats
 #' ("MM/DD/YYYY HH:MM:SS AM/PM"). Correctly handles overnight recordings.
+#' Fully vectorized for use with `dplyr::mutate()`.
 #'
-#' @param start_time Character. Either:
+#' @param start_time Character vector. Either:
 #'   - Time-only: "HH:MM:SS" (e.g., "20:00:00")
 #'   - Full datetime (multiple formats supported):
 #'     * "MM/DD/YYYY HH:MM:SS AM/PM" (e.g., "10/25/2025 8:00:00 PM")
 #'     * "MM/DD/YYYY HH:MM" (e.g., "10/4/2025 18:00") - Excel auto-format
 #'     * "M/D/YYYY HH:MM" (e.g., "10/4/2025 18:00") - Single-digit month/day
-#'   - NA (returns NA)
-#' @param end_time Character. Same format as start_time, or NA.
+#'   - NA (returns NA in corresponding position)
+#' @param end_time Character vector. Same format as start_time, or NA.
 #'
-#' @return Numeric duration in hours, or NA if either input is NA.
+#' @return Numeric vector of durations in hours (same length as input).
+#'   Returns NA for any row where either input is NA or parsing fails.
 #'
 #' @details
-#' **Format Detection:**
-#' - If input contains "/" -> parsed as full datetime
+#' **Format Detection (per row):**
+#' - If row contains "/" -> parsed as full datetime
 #' - Otherwise -> parsed as time-only (HH:MM:SS)
+#' - Detection happens independently for each row in the vector
 #' 
 #' **Supported Datetime Formats:**
 #' The function tries multiple formats in order:
@@ -146,13 +158,16 @@ HOURS_PER_DAY <- 24
 #' to proceed even when times haven't been entered yet).
 #'
 #' @section CONTRACT:
+#' - Fully vectorized - accepts and returns vectors (dplyr::mutate compatible)
+#' - Returns numeric vector of same length as input
 #' - Accepts time-only ("HH:MM:SS") OR full datetime (multiple formats)
 #' - Automatically tries multiple datetime formats (handles Excel formatting)
-#' - Returns NA if either input is NA (fails gracefully)
+#' - Returns NA for any row where either input is NA (fails gracefully per row)
 #' - Handles overnight recordings correctly (end < start for time-only)
 #' - Returns numeric hours (not negative values)
-#' - Detects format automatically (no explicit format parameter needed)
+#' - Detects format automatically per row (no explicit format parameter needed)
 #' - Uses 24-hour clock for time-only, either 12 or 24-hour for full datetime
+#' - Warns if any datetime rows fail parsing (logs row numbers)
 #'
 #' @section DOES NOT:
 #' - Require explicit format specification (auto-detects)
@@ -160,6 +175,8 @@ HOURS_PER_DAY <- 24
 #' - Validate clock correctness (assumes valid times)
 #' - Round to nearest hour (returns decimal hours)
 #' - Check if duration exceeds 24 hours
+#' - Stop execution on parse failures (returns NA for failed rows)
+#' - Require inputs of same length (recycles shorter vectors per R rules)
 #'
 #' @examples
 #' \dontrun{
@@ -169,6 +186,12 @@ HOURS_PER_DAY <- 24
 #' 
 #' calculate_recording_hours("06:00:00", "18:00:00")
 #' # [1] 12
+#' 
+#' # Vectorized usage (multiple rows)
+#' start_times <- c("20:00:00", "18:00:00", "06:00:00")
+#' end_times <- c("08:00:00", "07:00:00", "18:00:00")
+#' calculate_recording_hours(start_times, end_times)
+#' # [1] 12 13 12
 #' 
 #' # Full datetime - AM/PM format (Workflow 03 generated)
 #' calculate_recording_hours("10/25/2025 8:00:00 PM", "10/26/2025 6:00:00 AM")
@@ -181,86 +204,82 @@ HOURS_PER_DAY <- 24
 #' calculate_recording_hours("10/4/2025 18:00", "10/5/2025 7:00")
 #' # [1] 13
 #' 
-#' # NA handling
-#' calculate_recording_hours(NA, "08:00:00")
-#' # [1] NA
+#' # NA handling (vectorized)
+#' calculate_recording_hours(c("20:00:00", NA, "18:00:00"), 
+#'                          c("08:00:00", "06:00:00", "07:00:00"))
+#' # [1] 12 NA 13
+#' 
+#' # Usage in dplyr pipeline
+#' template %>%
+#'   mutate(RecordingHours = calculate_recording_hours(StartTime, EndTime))
 #' }
 #'
 #' @export
 calculate_recording_hours <- function(start_time, end_time) {
+  # Ensure inputs are character vectors
+  start_time <- as.character(start_time)
+  end_time   <- as.character(end_time)
   
-  # -------------------------
-  # Input validation
-  # -------------------------
+  n <- length(start_time)
+  result <- rep(NA_real_, n)
   
-  # Handle NA inputs (fail gracefully)
-  if (is.na(start_time) || is.na(end_time)) return(NA_real_)
+  # NA handling
+  na_mask <- is.na(start_time) | is.na(end_time)
+  if (all(na_mask)) return(result)
   
-  # Validate input types
-  if (!is.character(start_time) || !is.character(end_time)) {
-    stop(sprintf(
-      "start_time and end_time must be character strings or NA.\n  Received: start_time = %s (%s), end_time = %s (%s)\n  Expected formats:\n    Time-only: 'HH:MM:SS' (e.g., '20:00:00')\n    Full datetime: 'MM/DD/YYYY HH:MM:SS AM/PM' (e.g., '10/25/2025 8:00:00 PM')",
-      start_time, class(start_time)[1],
-      end_time, class(end_time)[1]
-    ))
+  # Detect datetime vs time-only (per row)
+  is_datetime <- grepl("/", start_time) & !na_mask
+  is_time_only <- !is_datetime & !na_mask
+  
+  # ---------------------------
+  # Process datetime rows
+  # ---------------------------
+  if (any(is_datetime)) {
+    dt_start <- rep(as.POSIXct(NA), n)
+    dt_end   <- rep(as.POSIXct(NA), n)
+    
+    # Multiple common datetime formats (vectorized)
+    formats <- c(
+      "%m/%d/%Y %I:%M:%S %p", # AM/PM with seconds
+      "%m/%d/%Y %I:%M %p",    # AM/PM no seconds
+      "%m/%d/%Y %H:%M:%S",    # 24h with seconds
+      "%m/%d/%Y %H:%M",       # 24h no seconds
+      "%m/%d/%Y %H:%M:%S %p"  # rare mixed format
+    )
+    
+    for (fmt in formats) {
+      idx <- is_datetime & is.na(dt_start)
+      if (!any(idx)) break
+      dt_start[idx] <- as.POSIXct(start_time[idx], format = fmt, tz = "UTC")
+      dt_end[idx]   <- as.POSIXct(end_time[idx], format = fmt, tz = "UTC")
+    }
+    
+    # Warn if any rows failed parsing
+    failed <- is_datetime & is.na(dt_start)
+    if (any(failed)) {
+      warning("Failed to parse datetime in rows: ", paste(which(failed), collapse = ", "))
+    }
+    
+    # Compute durations in hours
+    valid <- is_datetime & !failed
+    result[valid] <- as.numeric(difftime(dt_end[valid], dt_start[valid], units = "hours"))
   }
   
-  # -------------------------
-  # Format detection & computation
-  # -------------------------
-  
-  # Detect format: if contains "/" it's a full datetime, otherwise time-only
-  if (grepl("/", start_time)) {
-    # Full datetime format - try multiple formats Excel might produce
+  # ---------------------------
+  # Process time-only rows
+  # ---------------------------
+  if (any(is_time_only)) {
+    start_h <- as.numeric(hms::as_hms(start_time[is_time_only])) / 3600
+    end_h   <- as.numeric(hms::as_hms(end_time[is_time_only])) / 3600
     
-    # Try format 1: "MM/DD/YYYY HH:MM:SS AM/PM" (our intended format)
-    start_dt <- lubridate::mdy_hms(start_time, quiet = TRUE)
-    end_dt <- lubridate::mdy_hms(end_time, quiet = TRUE)
+    duration <- ifelse(end_h < start_h,
+                       (24 - start_h) + end_h,
+                       end_h - start_h)
     
-    # If that failed, try format 2: "MM/DD/YYYY HH:MM" (24-hour, no seconds - Excel auto-format)
-    if (is.na(start_dt)) {
-      start_dt <- lubridate::mdy_hm(start_time, quiet = TRUE)
-    }
-    if (is.na(end_dt)) {
-      end_dt <- lubridate::mdy_hm(end_time, quiet = TRUE)
-    }
-    
-    # If still failed, try format 3: "M/D/YYYY HH:MM" (single-digit month/day)
-    if (is.na(start_dt)) {
-      # lubridate::mdy_hm should handle this, but try explicit parse
-      start_dt <- as.POSIXct(start_time, format = "%m/%d/%Y %H:%M", tz = "UTC")
-    }
-    if (is.na(end_dt)) {
-      end_dt <- as.POSIXct(end_time, format = "%m/%d/%Y %H:%M", tz = "UTC")
-    }
-    
-    # Check if parsing succeeded
-    if (is.na(start_dt) || is.na(end_dt)) {
-      stop(sprintf(
-        "Failed to parse datetime strings.\n  start_time: '%s'\n  end_time: '%s'\n  Tried formats:\n    - 'MM/DD/YYYY HH:MM:SS AM/PM' (e.g., '10/25/2025 8:00:00 PM')\n    - 'MM/DD/YYYY HH:MM' (e.g., '10/4/2025 18:00')\n    - 'M/D/YYYY HH:MM' (e.g., '10/4/2025 18:00')\n  Hint: Excel may have auto-formatted your datetimes.",
-        start_time, end_time
-      ))
-    }
-    
-    # Calculate difference in hours
-    # This automatically handles overnight/multi-day spans
-    return(as.numeric(difftime(end_dt, start_dt, units = "hours")))
-    
-  } else {
-    # Time-only format: "HH:MM:SS"
-    # Parse using hms package
-    start_h <- as.numeric(hms::as_hms(start_time)) / SECONDS_PER_HOUR
-    end_h   <- as.numeric(hms::as_hms(end_time)) / SECONDS_PER_HOUR
-    
-    # Calculate duration (handle overnight)
-    if (end_h < start_h) {
-      # Overnight recording crosses midnight
-      (HOURS_PER_DAY - start_h) + end_h
-    } else {
-      # Same-day recording
-      end_h - start_h
-    }
+    result[is_time_only] <- duration
   }
+  
+  result
 }
 
 
@@ -277,7 +296,7 @@ calculate_recording_hours <- function(start_time, end_time) {
 #'
 #' @param x Object to check (any type)
 #'
-#' @return Logical: TRUE if x is a Date object, FALSE otherwise
+#' @return Logical scalar: TRUE if x inherits from Date class, FALSE otherwise
 #'
 #' @details
 #' **Purpose:**
@@ -293,12 +312,14 @@ calculate_recording_hours <- function(start_time, end_time) {
 #' - Returns FALSE for all other types (including POSIXct, POSIXlt)
 #' - Does not coerce or modify input
 #' - Never throws errors (returns FALSE for invalid input)
+#' - Returns single logical value (not vectorized)
 #'
 #' @section DOES NOT:
 #' - Check if x can be PARSED as a date string
 #' - Validate date correctness (e.g., Feb 30 would still be Date class)
 #' - Coerce to Date type
 #' - Distinguish between different Date subclasses
+#' - Work element-wise on vectors (checks the vector's class, not elements)
 #'
 #' @examples
 #' \dontrun{
@@ -324,8 +345,8 @@ calculate_recording_hours <- function(start_time, end_time) {
 #'
 #' # Usage in Workflow 04
 #' if (is.Date(template$Night)) {
-#'   # Already Date type, use as-is
-#'   template <- template %>% mutate(Night = as.Date(Night))
+#'   # Night column is already Date type, use as-is
+#'   template_ready <- template
 #' } else {
 #'   # Parse from string
 #'   template <- template %>% mutate(Night = parse_date_safe(Night))
@@ -346,10 +367,10 @@ is.Date <- function(x) {
 #' handling auto-formatting gracefully. Used for template comparison in
 #' Workflow 04.
 #'
-#' @param dt_string Character datetime string to parse, or NA
+#' @param dt_string Character scalar datetime string to parse, or NA
 #'
-#' @return POSIXct datetime object in UTC timezone, or NA if parsing fails
-#'   or input is NA
+#' @return POSIXct datetime object in UTC timezone, or NA (POSIXct) if 
+#'   parsing fails or input is NA
 #'
 #' @details
 #' **Purpose:**
@@ -388,6 +409,7 @@ is.Date <- function(x) {
 #' - Tries multiple formats automatically (no format parameter needed)
 #' - Handles Excel auto-formatting (AM/PM → 24-hour)
 #' - Never throws errors (silent NA return on failure)
+#' - Non-vectorized (processes single string at a time)
 #'
 #' @section DOES NOT:
 #' - Perform timezone conversions (always UTC output)
@@ -396,6 +418,7 @@ is.Date <- function(x) {
 #' - Log parsing failures (silent operation)
 #' - Require explicit format specification (auto-detects)
 #' - Throw errors on parse failures (returns NA instead)
+#' - Work on vectors (use sapply for vectorization)
 #'
 #' @examples
 #' \dontrun{
@@ -432,6 +455,10 @@ is.Date <- function(x) {
 #' # Time-only NOT supported
 #' parse_datetime_safe("18:00:00")
 #' # [1] NA (POSIXct) - use hms::as_hms() for time-only
+#'
+#' # Vectorization with sapply
+#' sapply(c("10/24/2025 6:00:00 PM", "10/24/2025 18:00"), parse_datetime_safe)
+#' # [1] "2025-10-24 18:00:00 UTC" "2025-10-24 18:00:00 UTC"
 #'
 #' # Usage in Workflow 04 template comparison
 #' template_orig <- template_orig %>%
@@ -493,7 +520,7 @@ parse_datetime_safe <- function(dt_string) {
 #' HH:MM:SS (24-hour format). Used for comparing recording times between
 #' original and edited templates when checking for manual edits in Workflow 04.
 #'
-#' @param datetime_str Character datetime string, or NA
+#' @param datetime_str Character scalar datetime string, or NA
 #'
 #' @return Character time string in format "HH:MM:SS" (24-hour, zero-padded),
 #'   or NA_character_ if parsing fails or input is NA
@@ -534,6 +561,7 @@ parse_datetime_safe <- function(dt_string) {
 #' - Uses parse_datetime_safe() for robust parsing
 #' - Always includes seconds in output (:00 if not present)
 #' - Always zero-padded (08:00:00 not 8:00:00)
+#' - Non-vectorized (processes single string at a time)
 #'
 #' @section DOES NOT:
 #' - Preserve original AM/PM or 24-hour format (always 24-hour output)
@@ -542,6 +570,7 @@ parse_datetime_safe <- function(dt_string) {
 #' - Validate if time is "reasonable" (e.g., 25:00:00 would be invalid input)
 #' - Round or truncate times (exact extraction)
 #' - Throw errors (returns NA_character_ on failure)
+#' - Work on vectors (use sapply for vectorization)
 #'
 #' @examples
 #' \dontrun{
@@ -571,6 +600,10 @@ parse_datetime_safe <- function(dt_string) {
 #' # Unparseable datetime
 #' extract_time("invalid")
 #' # [1] NA_character_
+#'
+#' # Vectorization with sapply
+#' sapply(c("10/24/2025 6:00:00 PM", "10/24/2025 18:00"), extract_time)
+#' # [1] "18:00:00" "18:00:00"
 #'
 #' # Usage in Workflow 04 template comparison:
 #' # Compare times between original and edited templates
@@ -618,7 +651,7 @@ extract_time <- function(datetime_str) {
 }
 
 
-' Parse Date Strings Safely
+#' Parse Date Strings Safely
 #'
 #' @description
 #' Parses date strings in multiple formats commonly produced by Excel or
@@ -627,7 +660,7 @@ extract_time <- function(datetime_str) {
 #'
 #' @param date_string Character date string to parse, Date object, or NA
 #'
-#' @return Date object, or NA if parsing fails or input is NA
+#' @return Date object, or NA (Date) if parsing fails or input is NA
 #'
 #' @details
 #' **Purpose:**
@@ -659,6 +692,7 @@ extract_time <- function(datetime_str) {
 #' - Tries multiple formats automatically (no format parameter needed)
 #' - Warns on parse failures (logs unparseable strings)
 #' - Never throws errors (returns NA on failure)
+#' - Non-vectorized (processes single value at a time)
 #'
 #' @section DOES NOT:
 #' - Parse datetime strings (use parse_datetime_safe for those)
@@ -666,6 +700,7 @@ extract_time <- function(datetime_str) {
 #' - Perform timezone conversions (Date has no timezone)
 #' - Require explicit format specification (auto-detects)
 #' - Throw errors on parse failures (warns and returns NA)
+#' - Work on vectors (use sapply for vectorization)
 #'
 #' @examples
 #' \dontrun{
@@ -700,6 +735,11 @@ extract_time <- function(datetime_str) {
 #' parse_date_safe("invalid")
 #' # Warning: Could not parse date: 'invalid'
 #' # [1] NA (Date)
+#'
+#' # Vectorization with sapply
+#' dates <- c("2024-10-15", "10/15/2024", "10-15-2024")
+#' sapply(dates, parse_date_safe) %>% as.Date(origin = "1970-01-01")
+#' # [1] "2024-10-15" "2024-10-15" "2024-10-15"
 #'
 #' # Usage in Workflow 04 template comparison:
 #' template <- template %>%
@@ -791,6 +831,7 @@ parse_date_safe <- function(date_string) {
 #' - Always 24-hour format (never AM/PM)
 #' - Never includes seconds
 #' - Zero-padded (e.g., "08:00" not "8:00")
+#' - Non-vectorized (processes single datetime at a time)
 #'
 #' @section DOES NOT:
 #' - Include AM/PM indicators (always 24-hour)
@@ -798,6 +839,7 @@ parse_date_safe <- function(date_string) {
 #' - Use original string format (formats from parsed datetime)
 #' - Perform timezone conversions (uses datetime as-is)
 #' - Validate if datetime is "reasonable"
+#' - Work on vectors (processes single value)
 #'
 #' @examples
 #' \dontrun{
@@ -856,11 +898,11 @@ format_datetime_for_log <- function(dt_parsed, dt_string) {
 #' @param start_date Character string "YYYY-MM-DD" for project start date.
 #' @param end_date Character string "YYYY-MM-DD" for project end date.
 #' @param uniform_start Character "HH:MM:SS" or NULL. If provided, applies
-#'   this start time to all detector-nights.
+#'   this start time to all detector-nights. Default: NULL.
 #' @param uniform_end Character "HH:MM:SS" or NULL. If provided, applies
-#'   this end time to all detector-nights.
+#'   this end time to all detector-nights. Default: NULL.
 #' @param schedule_file Data frame with detector-specific schedules, or NULL.
-#'   Must contain columns: Detector, StartTime, EndTime.
+#'   Must contain columns: Detector, StartTime, EndTime. Default: NULL.
 #'
 #' @return Data frame (tibble) with columns:
 #'   - Detector: Character, detector name
@@ -896,6 +938,7 @@ format_datetime_for_log <- function(dt_parsed, dt_string) {
 #' - Returns tibble with consistent column order
 #' - Warning column flags nights with CallsPerNight = 0
 #' - Sorts output by Detector, then Night
+#' - Either uniform_start/uniform_end OR schedule_file must be provided
 #'
 #' @section DOES NOT:
 #' - Modify master_data input (non-destructive)
@@ -905,6 +948,7 @@ format_datetime_for_log <- function(dt_parsed, dt_string) {
 #' - Handle multiple detectors at same location
 #' - Perform statistical analysis
 #' - Generate plots or visualizations
+#' - Sort by detector first (returns expand.grid order)
 #'
 #' @examples
 #' \dontrun{
@@ -992,7 +1036,7 @@ generate_calls_per_night_template <- function(master_data,
   # -------------------------
   
   template <- template %>% 
-    mutate(RecordingHours = mapply(calculate_recording_hours, StartTime, EndTime))
+    mutate(RecordingHours = calculate_recording_hours(StartTime, EndTime))
   
   # -------------------------
   # Merge call counts
@@ -1027,10 +1071,11 @@ generate_calls_per_night_template <- function(master_data,
 #'   Must contain columns: Detector, Night.
 #' @param schedule_file Optional data frame with detector-specific schedules.
 #'   Must contain columns: Detector, StartTime, EndTime. If NULL, uses uniform times.
+#'   Default: NULL.
 #' @param uniform_start Optional character "HH:MM:SS" for uniform start time.
-#'   Required if schedule_file is NULL.
+#'   Required if schedule_file is NULL. Default: NULL.
 #' @param uniform_end Optional character "HH:MM:SS" for uniform end time.
-#'   Required if schedule_file is NULL.
+#'   Required if schedule_file is NULL. Default: NULL.
 #'
 #' @return Template data frame with StartTime and EndTime columns added.
 #'
@@ -1053,13 +1098,15 @@ generate_calls_per_night_template <- function(master_data,
 #' - Either schedule_file OR uniform times must be provided
 #' - Validates schedule_file structure if provided
 #' - Returns tibble with same row count as input
+#' - Stops with error if neither schedule mode is properly configured
 #'
 #' @section DOES NOT:
-#' - Modify template input (non-destructive)
+#' - Modify template input (non-destructive operation via piping)
 #' - Calculate recording hours (use calculate_recording_hours)
-#' - Validate time formats (HH:MM:SS)
-#' - Handle missing schedule data (will create NA values)
+#' - Validate time formats (assumes "HH:MM:SS")
+#' - Handle missing schedule data gracefully (will create NA values)
 #' - Remove rows with missing times
+#' - Sort output (preserves input order)
 #'
 #' @examples
 #' \dontrun{
@@ -1162,9 +1209,9 @@ apply_schedule <- function(template,
 #' @param data Data frame containing calls per night data.
 #'   Typically output from Workflow 03 final stage.
 #' @param base_name Character. Base name for the output file. 
-#'   Default is "CallsPerNight_final".
+#'   Default: "CallsPerNight_final".
 #' @param output_dir Character. Directory to save the file. 
-#'   Default is project outputs directory (via here::here()).
+#'   Default: project outputs directory (via here::here()).
 #'
 #' @return Character. Full file path of the saved CSV.
 #'
@@ -1189,6 +1236,7 @@ apply_schedule <- function(template,
 #' - Returns full path to saved file
 #' - Logs save operation with message
 #' - Uses consistent filename pattern: basename_vN.csv
+#' - Formats DateTime columns for export if format_datetime_for_export exists
 #'
 #' @section DOES NOT:
 #' - Validate data structure (caller's responsibility)
@@ -1196,6 +1244,7 @@ apply_schedule <- function(template,
 #' - Compress files
 #' - Write to formats other than CSV
 #' - Add timestamps to filename (uses version numbers only)
+#' - Guarantee version numbers are contiguous (if files deleted manually)
 #'
 #' @examples
 #' \dontrun{

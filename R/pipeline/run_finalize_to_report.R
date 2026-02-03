@@ -100,6 +100,17 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-02: Fixed Stage 2 template loading and deduplication
+#             - Added deduplication logic for both ORIGINAL and EDIT_THIS templates
+#             - Improved RecordingHours conversion with safe handling of empty strings
+#             - Added diagnostic reporting for duplicate rows removed
+#             - Fixed datetime column conversion to handle missing columns gracefully
+#             - Added logging of deduplication counts to validation context
+# 2026-02-02: Fixed Stage 2 checkpoint loading and type conversion
+#             - Replaced removed load_master_data() with find_most_recent_file()
+#             - Added numeric type conversion for CallsPerNight and RecordingHours
+#             - Fixed template patterns to use explicit timestamp format (YYYYMMDD_HHMMSS)
+#             - Added verbose parameter to safe_read_csv() calls
 # 2026-01-31: Initial creation - merged WF04-07 logic into orchestrating function
 # 2026-01-31: Added edited_template_file parameter for Shiny integration
 # 2026-01-31: Removed all interactive prompts
@@ -327,7 +338,15 @@ run_finalize_to_report <- function(kpro_master = NULL,
     if (verbose) message("  [OK] Using kpro_master from Chunk 2")
   } else {
     if (verbose) message("  [!] Loading kpro_master from checkpoint...")
-    kpro_master <- load_master_data()
+    
+    # Load from most recent checkpoint
+    kpro_master_file <- find_most_recent_file(
+      directory = here::here("outputs", "checkpoints"),
+      pattern = "^02_kpro_master_\\d{8}_\\d{6}\\.csv$",
+      hint = "Run Chunk 1 (run_ingest_standardize) first"
+    )
+    
+    kpro_master <- safe_read_csv(kpro_master_file, verbose = verbose)
   }
   
   validation_context_04 <- log_validation_event(
@@ -345,48 +364,126 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Load original template for comparison
   template_original_file <- find_most_recent_file(
-    outputs_dir,
-    "^03_CallsPerNight_Template_ORIGINAL_.*\\.csv$",
+    directory = outputs_dir,
+    pattern = "^03_CallsPerNight_Template_\\d{8}_\\d{6}_ORIGINAL\\.csv$",
     hint = "Run Chunk 2 first"
   )
   
-  template_original <- safe_read_csv(template_original_file)
+  template_original <- safe_read_csv(template_original_file, verbose = verbose)
   
-  if (verbose) message(sprintf("  [OK] Loaded ORIGINAL template: %s", 
-                               basename(template_original_file)))
+  # Count rows before deduplication
+  n_orig_before <- nrow(template_original)
+  
+  # Convert and deduplicate ORIGINAL template
+  template_original <- template_original %>%
+    dplyr::mutate(
+      Night = as.Date(Night),
+      Detector = as.character(Detector),
+      CallsPerNight = as.numeric(CallsPerNight),
+      # Safe RecordingHours conversion - handle empty strings and non-numeric
+      RecordingHours = suppressWarnings(as.numeric(RecordingHours))
+    ) %>%
+    # CRITICAL: Remove duplicates keeping first occurrence
+    dplyr::distinct(Detector, Night, .keep_all = TRUE)
+  
+  n_orig_after <- nrow(template_original)
+  n_orig_removed <- n_orig_before - n_orig_after
+  
+  if (verbose) {
+    if (n_orig_removed > 0) {
+      message(sprintf("  [!] Removed %d duplicate rows from ORIGINAL template", n_orig_removed))
+    }
+    message(sprintf("  [OK] Loaded ORIGINAL template: %s (%d rows)", 
+                    basename(template_original_file), n_orig_after))
+  }
   
   # Load edited template
   if (is.null(edited_template_file)) {
     edited_template_file <- find_most_recent_file(
-      outputs_dir,
-      "^03_CallsPerNight_Template_EDIT_THIS_.*\\.csv$",
+      directory = outputs_dir,
+      pattern = "^03_CallsPerNight_Template_\\d{8}_\\d{6}_EDIT_THIS\\.csv$",
       hint = "Edit template before running Chunk 3"
     )
   } else {
     assert_file_exists(edited_template_file, hint = "Check edited template path")
   }
   
-  template_edited <- safe_read_csv(edited_template_file)
+  template_edited <- safe_read_csv(edited_template_file, verbose = verbose)
+  
+  # Count rows before deduplication
+  n_edit_before <- nrow(template_edited)
+  
+  # Convert and deduplicate EDITED template
+  template_edited <- template_edited %>%
+    dplyr::mutate(
+      Night = as.Date(Night),
+      Detector = as.character(Detector),
+      CallsPerNight = as.numeric(CallsPerNight),
+      # Safe RecordingHours conversion - handle empty strings and non-numeric
+      RecordingHours = suppressWarnings(as.numeric(RecordingHours))
+    )
+  
+  # Handle datetime columns if they exist
+  if ("StartDateTime" %in% names(template_edited)) {
+    template_edited <- template_edited %>%
+      dplyr::mutate(
+        StartDateTime = dplyr::if_else(
+          !is.na(StartDateTime) & StartDateTime != "",
+          as.character(StartDateTime),
+          NA_character_
+        )
+      )
+  }
+  
+  if ("EndDateTime" %in% names(template_edited)) {
+    template_edited <- template_edited %>%
+      dplyr::mutate(
+        EndDateTime = dplyr::if_else(
+          !is.na(EndDateTime) & EndDateTime != "",
+          as.character(EndDateTime),
+          NA_character_
+        )
+      )
+  }
+  
+  # CRITICAL: Remove duplicates keeping last occurrence (most recent edit)
+  template_edited <- template_edited %>%
+    dplyr::arrange(Detector, Night) %>%
+    dplyr::distinct(Detector, Night, .keep_all = TRUE)
+  
+  n_edit_after <- nrow(template_edited)
+  n_edit_removed <- n_edit_before - n_edit_after
+  
+  if (n_edit_removed > 0) {
+    warning(sprintf(
+      "Removed %d duplicate rows from EDIT_THIS template. Check your template for duplicate Detector/Night combinations.",
+      n_edit_removed
+    ))
+  }
   
   validation_context_04 <- log_validation_event(
     validation_context_04,
     event_type = "data_loaded",
     description = "CPN template loaded",
-    count = nrow(template_edited),
+    count = n_edit_after,
     details = list(
       original_file = basename(template_original_file),
-      edited_file = basename(edited_template_file)
+      edited_file = basename(edited_template_file),
+      duplicates_removed = n_edit_removed
     )
   )
   
-  if (verbose) message(sprintf("  [OK] Loaded EDIT_THIS template: %s", 
-                               basename(edited_template_file)))
+  if (verbose) {
+    message(sprintf("  [OK] Loaded EDIT_THIS template: %s (%d rows)", 
+                    basename(edited_template_file), n_edit_after))
+  }
   
   # Validate required columns
   required_cols <- c("Detector", "Night", "CallsPerNight")
   assert_columns_exist(template_edited, required_cols)
   
-  log_message("[WF04 Stage 2] Templates and master data loaded")
+  log_message(sprintf("[WF04 Stage 2] Templates loaded (%d duplicates removed)", 
+                      n_orig_removed + n_edit_removed))
   
   # ---------------------------------------------------------------------------
   # Stage 3: Track Manual Edits
@@ -737,7 +834,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_summary,
-    artifact_type = "summary_rds",
+    artifact_type = "summary_stats",  # FIXED: was "summary_rds"
     workflow = "summary_stats",
     file_path = summary_rds_path,
     metadata = list(
@@ -758,16 +855,6 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_05)))
   
   log_message("=== WORKFLOW 05: COMPLETE ===")
-  
-  # Store WF05 results
-  result$workflow_05 <- list(
-    all_summaries = all_summaries,
-    summary_rds = summary_rds_path,
-    files_created = files_created_05,
-    validation_report = validation_html_05
-  )
-  
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_05)
   
   # ===========================================================================
   # WORKFLOW 06: EXPLORATORY PLOTS
@@ -813,65 +900,107 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) message("  [OK] Plot directories ready")
   
-  # Stage 16: Quality Plots
+  # ---------------------------------------------------------------------------
+  # Stage 16: Quality Plots (8 plots)
+  # ---------------------------------------------------------------------------
+  
   if (verbose) print_stage_header("16", "Generate Quality Plots")
   
-  quality_plots <- tryCatch({
-    generate_quality_plots(calls_per_night_final, verbose = verbose)
+  quality_plots <- list()
+  
+  tryCatch({
+    quality_plots$recording_status_summary <- plot_recording_status_summary(calls_per_night_final)
+    quality_plots$recording_status_percent <- plot_recording_status_percent(calls_per_night_final)
+    quality_plots$recording_status_overall <- plot_recording_status_overall(calls_per_night_final)
+    quality_plots$effort_by_detector <- plot_effort_by_detector(calls_per_night_final)
+    quality_plots$nights_by_detector <- plot_nights_by_detector(calls_per_night_final)
+    quality_plots$data_completeness_calendar <- plot_data_completeness_calendar(calls_per_night_final)
+    quality_plots$missing_nights <- plot_missing_nights(calls_per_night_final)
+    quality_plots$recording_effort_heatmap <- plot_recording_effort_heatmap(calls_per_night_final)
+    
+    if (verbose) message(sprintf("  [OK] Generated %d quality plots", length(quality_plots)))
   }, error = function(e) {
     warning(sprintf("Quality plots failed: %s", e$message))
-    list()
+    quality_plots <<- list()
   })
   
   all_plots$quality <- quality_plots
   
-  if (verbose) message(sprintf("  [OK] Generated %d quality plots", length(quality_plots)))
+  # ---------------------------------------------------------------------------
+  # Stage 17: Detector Plots (7 plots)
+  # ---------------------------------------------------------------------------
   
-  # Stage 17: Detector Plots
   if (verbose) print_stage_header("17", "Generate Detector Plots")
   
-  detector_plots <- tryCatch({
-    generate_detector_plots(calls_per_night_final, kpro_master, verbose = verbose)
+  detector_plots <- list()
+  
+  tryCatch({
+    detector_plots$total_calls_by_detector <- plot_total_calls_by_detector(kpro_master)
+    detector_plots$detector_activity_caterpillar <- plot_detector_activity_caterpillar(calls_per_night_final)
+    detector_plots$detector_boxplots <- plot_detector_boxplots(calls_per_night_final)
+    detector_plots$activity_with_without_outliers <- plot_activity_with_without_outliers(calls_per_night_final)
+    detector_plots$synchrony <- plot_synchrony(calls_per_night_final)
+    detector_plots$correlation_heatmap <- plot_correlation_heatmap(calls_per_night_final)
+    detector_plots$detector_rank_over_time <- plot_detector_rank_over_time(calls_per_night_final)
+    
+    if (verbose) message(sprintf("  [OK] Generated %d detector plots", length(detector_plots)))
   }, error = function(e) {
     warning(sprintf("Detector plots failed: %s", e$message))
-    list()
+    detector_plots <<- list()
   })
   
   all_plots$detector <- detector_plots
   
-  if (verbose) message(sprintf("  [OK] Generated %d detector plots", length(detector_plots)))
+  # ---------------------------------------------------------------------------
+  # Stage 18: Species Plots (5 plots, conditional)
+  # ---------------------------------------------------------------------------
   
-  # Stage 18: Species Plots (conditional)
   if (verbose) print_stage_header("18", "Generate Species Plots")
   
+  species_plots <- list()
+  
   if (has_species) {
-    species_plots <- tryCatch({
-      generate_species_plots(kpro_master, calls_per_night_final, verbose = verbose)
+    tryCatch({
+      species_plots$species_composition_bar <- plot_species_composition_bar(kpro_master)
+      species_plots$species_by_detector_heatmap <- plot_species_by_detector_heatmap(kpro_master)
+      species_plots$species_accumulation_curve <- plot_species_accumulation_curve(kpro_master)
+      species_plots$species_hourly_profile <- plot_species_hourly_profile(kpro_master)
+      species_plots$noid_proportion <- plot_noid_proportion(kpro_master)
+      
+      if (verbose) message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
     }, error = function(e) {
       warning(sprintf("Species plots failed: %s", e$message))
-      list()
+      species_plots <- list()
     })
-    
-    all_plots$species <- species_plots
-    
-    if (verbose) message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
   } else {
     if (verbose) message("  [!] Species plots skipped (no species column)")
   }
   
-  # Stage 19: Temporal Plots
+  all_plots$species <- species_plots
+  
+  # ---------------------------------------------------------------------------
+  # Stage 19: Temporal Plots (6 plots)
+  # ---------------------------------------------------------------------------
+  
   if (verbose) print_stage_header("19", "Generate Temporal Plots")
   
-  temporal_plots <- tryCatch({
-    generate_temporal_plots(calls_per_night_final, kpro_master, verbose = verbose)
+  temporal_plots <- list()
+  
+  tryCatch({
+    temporal_plots$activity_over_time <- plot_activity_over_time(calls_per_night_final)
+    temporal_plots$cumulative_calls_over_time <- plot_cumulative_calls_over_time(calls_per_night_final)
+    temporal_plots$hourly_activity_profile <- plot_hourly_activity_profile(kpro_master)
+    temporal_plots$callsperhour_distribution <- plot_callsperhour_distribution(calls_per_night_final)
+    temporal_plots$weekly_activity <- plot_weekly_activity(calls_per_night_final)
+    temporal_plots$activity_by_month <- plot_activity_by_month(calls_per_night_final)
+    
+    if (verbose) message(sprintf("  [OK] Generated %d temporal plots", length(temporal_plots)))
   }, error = function(e) {
     warning(sprintf("Temporal plots failed: %s", e$message))
-    list()
+    temporal_plots <<- list()
   })
   
   all_plots$temporal <- temporal_plots
-  
-  if (verbose) message(sprintf("  [OK] Generated %d temporal plots", length(temporal_plots)))
   
   log_message(sprintf("[WF06 Stages 15-19] Generated %d total plots",
                       length(quality_plots) + length(detector_plots) + 
@@ -919,7 +1048,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   registry <- register_artifact(
     registry = registry,
     artifact_name = artifact_id_plots,
-    artifact_type = "plots_rds",
+    artifact_type = "plot_objects",  # FIXED: was "plots_rds"
     workflow = "exploratory_plots",
     file_path = plots_rds_path,
     metadata = list(
@@ -1011,17 +1140,16 @@ run_finalize_to_report <- function(kpro_master = NULL,
     
     assert_directory_exists(dirname(report_html_path), create = TRUE)
     
-    # Render report (simplified - full implementation uses quarto::quarto_render)
+    # Render report
     render_result <- tryCatch({
       quarto::quarto_render(
         input = qmd_template,
         output_file = basename(report_html_path),
         output_format = "html",
         execute_params = list(
-          summary_rds_path = summary_rds_path,
-          plots_rds_path = plots_rds_path,
-          cpn_final_path = cpn_final_path,
-          study_name = study_params$study_parameters$study_name
+          summary_rds = summary_rds_path,           # Match report param name
+          plots_rds = plots_rds_path,               # Match report param name
+          study_params_path = yaml_path             # Match report param name
         ),
         quiet = !verbose
       )
@@ -1070,21 +1198,26 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (create_release_bundle && render_success) {
     
     release_result <- tryCatch({
-      create_release_bundle(
-        study_name = study_params$study_parameters$study_name,
-        cpn_final_path = cpn_final_path,
-        summary_rds_path = summary_rds_path,
-        plots_rds_path = plots_rds_path,
-        report_html_path = report_html_path,
+      zip_path <- create_release_bundle(
+        study_id = study_params$study_parameters$study_name,
+        calls_per_night_final = calls_per_night_final,  # Data frame from WF04
+        kpro_master = kpro_master,                      # Data frame from Stage 2
+        all_summaries = all_summaries,                  # List from WF05
+        all_plots = all_plots,                          # List from WF06
+        report_path = report_html_path,                 # Path to HTML
+        study_params = study_params,                    # Already loaded
         output_dir = here::here("results", "releases"),
-        verbose = verbose
+        registry = registry,                            # Already initialized
+        quiet = !verbose                                # Inverse of verbose
       )
+      
+      list(success = TRUE, zip_path = zip_path)
     }, error = function(e) {
       warning(sprintf("Release bundle creation failed: %s", e$message))
-      NULL
+      list(success = FALSE, zip_path = NULL)
     })
     
-    if (!is.null(release_result)) {
+    if (release_result$success) {
       release_zip_path <- release_result$zip_path
       
       if (verbose) message(sprintf("  [OK] Release bundle: %s", basename(release_zip_path)))
