@@ -156,6 +156,13 @@ cat("Missing DATETIME_CST:", sum(is.na(kpro$DATETIME_CST)), "\n")
 cat("Unique species:", paste(unique(kpro$species), collapse = ", "), "\n")
 ```
 
+## Validation Reporting (current)
+
+- Validation reports are generated for each workflow stage and stored under `results/validation/`.
+- Use `init_stage_validation()` to initialize contexts, `log_validation_event()` during execution,
+  and `complete_stage_validation()` to finalize HTML reports.
+- `validation_reporting.R` centralizes the validation helpers used by orchestrating functions.
+
 **Notes:**
 
 - These checks help ensure that all files were read correctly and merged consistently.  

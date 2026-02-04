@@ -5,6 +5,16 @@ All notable changes to the KPro Masterfile Pipeline will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-02-04
+
+### Changed
+- Standardized `run_finalize_to_report.R` to use shared helpers:
+  `print_stage_banner()`, `init_stage_validation()`, `complete_stage_validation()`,
+  `save_and_register_rds()`, `store_stage_results()`, `find_most_recent_checkpoint()`,
+  and `load_cpn_template()`.
+- Updated documentation headers and inventories to reflect helper adoption and
+  pipeline layer positioning.
+
 ## [2.1.0] - 2026-01-31
 
 ### Added

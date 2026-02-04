@@ -58,6 +58,10 @@
 - [ ] Artifacts registered (if applicable)
 - [ ] Tested end-to-end with sample data
 - [ ] **Structured return updated** (for orchestrating functions)
+- [ ] Standard helpers used where available:
+  - `print_stage_banner()`, `init_stage_validation()`, `complete_stage_validation()`
+  - `save_and_register_rds()`, `store_stage_results()`
+  - `find_most_recent_checkpoint()`, `load_cpn_template()`
 
 ### 1.5 Before Committing Code
 

@@ -547,8 +547,8 @@ find_most_recent_checkpoint <- function(checkpoint_type,
   # Define patterns for each checkpoint type
   patterns <- list(
     kpro_master = "^02_kpro_master_\\d{8}_\\d{6}\\.csv$",
-    cpn_original = "^CallsPerNight_ORIGINAL_\\d{8}_\\d{6}\\.csv$",
-    cpn_edit = "^CallsPerNight_EDIT_THIS_\\d{8}_\\d{6}\\.csv$",
+    cpn_original = "^(?:03_)?CallsPerNight(?:_Template)?_\\d{8}_\\d{6}_ORIGINAL\\.csv$",
+    cpn_edit = "^(?:03_)?CallsPerNight(?:_Template)?_\\d{8}_\\d{6}_EDIT_THIS\\.csv$",
     summary_rds = "^summary_data_\\d{8}\\.rds$",
     plots_rds = "^plot_objects_\\d{8}\\.rds$"
   )
