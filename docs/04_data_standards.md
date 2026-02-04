@@ -65,6 +65,14 @@ if (any(is.na(df$detector_id))) {
 - [OK] Document how NAs are handled
 - [X] NEVER silently remove NAs without logging
 
+### 2. DATA SOURCING & CHECKPOINTS
+
+- Prefer `find_most_recent_checkpoint()` (for supported patterns) instead of manual file searches.
+- Use `safe_read_csv()` with explicit `na` parameters.
+- Validate required columns with `assert_columns_exist()`.
+- Log file source and row counts.
+- Load CPN templates with `load_cpn_template()` to enforce deduplication and typed Night/RecordingHours (and log deduplication if validation context provided).
+
 ---
 
 ## 3. DATE/TIME HANDLING

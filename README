@@ -218,3 +218,10 @@ You are free to:
 - Share the code with attribution  
 
 **Note:** This license does **not** provide any warranty. Use the code at your own risk.
+# Example: run Chunk 3 end-to-end (Finalize → Report)
+#
+# result <- run_finalize_to_report(verbose = TRUE)
+# View main deliverables:
+#   result$report_release$report_html
+#   result$report_release$release_zip
+#   result$validation_html_paths

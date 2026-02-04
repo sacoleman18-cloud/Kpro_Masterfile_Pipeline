@@ -118,6 +118,8 @@ Orchestrating functions (chunk functions for Shiny integration) require a specia
 #   - Silent by default (verbose = FALSE)
 #   - No interactive prompts
 #   - Returns structured list
+#   - Uses shared helpers (banners, validation init/finalize, checkpoint/template loaders,
+#     RDS save/register, stage result storage) where applicable
 #   - Validation HTML always rendered
 #
 # DOES NOT:
