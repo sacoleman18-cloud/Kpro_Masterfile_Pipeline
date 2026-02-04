@@ -79,5 +79,5 @@
 **Links:** files above.
 
 ## Additional Suggestions
-- Consider adding a dedicated “Validation & Artifact Helper Standards” doc to consolidate expectations for validation HTML generation, artifact hashing/registration, and checkpoint discovery across workflows.
-- Add a short “Pipeline Orchestration Patterns” appendix snippet pointing to shared helpers to reduce drift when new chunks/workflows are added.
+- Added: `docs/10_validation_artifact_standards.md` consolidates validation HTML, artifact save/register, checkpoint discovery, template loading, banners, and stage result storage.
+- Consider a short “Pipeline Orchestration Patterns” appendix snippet pointing to shared helpers to reduce drift when new chunks/workflows are added.
