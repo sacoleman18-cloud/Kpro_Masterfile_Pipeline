@@ -302,7 +302,6 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # ===========================================================================
   
   print_stage_banner("FINALIZE CPN", verbose = verbose)
-  validation_context_finalize_cpn <- init_stage_validation("finalize_cpn", study_params)
   
   # ---------------------------------------------------------------------------
   # Stage 1: Load Configuration
@@ -313,7 +312,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   assert_file_exists(yaml_path, hint = "Configure study parameters first.")
   study_params <- load_study_parameters(yaml_path)
   
-  validation_context_finalize_cpn$study_name <- study_params$study_parameters$study_name
+  validation_context_finalize_cpn <- init_stage_validation("finalize_cpn", study_params)
   
   if (verbose) message("  [OK] Loaded study_parameters.yaml")
   
