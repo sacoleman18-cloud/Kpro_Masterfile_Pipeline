@@ -38,8 +38,8 @@ The coding standards are organized into focused modules for targeted reference:
 | `06_quarto_reporting_standards.md` | Quarto integration, reports, manifest | Working with Quarto, generating reports |
 | `07_artifact_release_standards.md` | Artifact registry, release bundles | Registering outputs, creating release packages |
 | `08_development_standards.md` | Git, testing, dependencies, YAML config | Version control, writing tests, managing packages |
-| `09_appendices.md` | Templates, inventories, checklists, quick reference | Looking up templates, function lists, checklists |
 | `10_validation_artifact_standards.md` | Validation contexts, artifact helpers, checkpoint/template loaders | Using validation HTML helpers, save/register RDS, and checkpoint/template discovery |
+| `09_appendices.md` | Templates, inventories, checklists, quick reference | Looking up templates, function lists, checklists |
 
 ---
 

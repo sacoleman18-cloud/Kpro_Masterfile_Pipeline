@@ -150,6 +150,14 @@ run_my_chunk <- function() {
 }
 ```
 
+### 1.10 Workflow Orchestration Patterns
+
+- Use `store_stage_results()` for result assembly and attach validation reports via that helper.
+- Use `complete_stage_validation()` for validation HTML generation; avoid direct calls to
+  `finalize_validation_report()` inside orchestrators.
+- Maintain a shared `registry` when saving RDS artifacts; prefer `save_and_register_rds()` over
+  manual save + register patterns.
+
 **Required return elements for orchestrating functions:**
 1. **Primary data** - The main tibble/data frame
 2. **Metadata** - Row counts, filter counts, configuration used

@@ -106,6 +106,11 @@ print_stage_header("2.1", "Load Configuration")
 +-----------------------------------------------------------------+
 ```
 
+### 3.3 Stage Banners
+
+- Use `print_stage_banner()` for major section banners in orchestrators; gate with `verbose`.
+- Keep `print_stage_header()` for numbered sub-stages within a section.
+
 ### 3.2 Workflow Summary Function
 
 Use `print_workflow_summary()` for workflow/chunk completion messages:

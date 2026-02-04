@@ -94,6 +94,10 @@ project_root/
 - [X] NEVER reference parent directories (`../`)
 - [X] NEVER commit user data to version control
 - [X] NEVER put analysis outputs in `outputs/` (use `results/`)
+- [OK] Orchestrators must use shared helpers:
+  `print_stage_banner()`, `init_stage_validation()/complete_stage_validation()`,
+  `save_and_register_rds()`, `store_stage_results()`,
+  `find_most_recent_checkpoint()`, `load_cpn_template()`
 
 ---
 
