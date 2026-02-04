@@ -1,5 +1,5 @@
 # =============================================================================
-# validation/validation.R — DATA VALIDATION (LOCKED CONTRACT)
+# MODULE: validation.R - Comprehensive Data Validation (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
@@ -7,9 +7,13 @@
 # enforcement for all pipeline workflows. Contains both universal helpers
 # (usable across any script) and domain-specific validators for KPro data.
 #
-# This module is the central authority for input validation. By centralizing
-# validation logic here, we ensure consistent error messages, reduce code
-# duplication across workflows, and make the codebase easier to maintain.
+# This module is the central authority for data quality validation. It focuses
+# purely on validating DATA (is the data correct?) and does NOT handle
+# execution tracking or reporting (see validation_reporting.R for that).
+#
+# By centralizing validation logic here, we ensure consistent error messages,
+# reduce code duplication across workflows, and make the codebase easier to
+# maintain.
 #
 # VALIDATION CONTRACT
 # -------------------
@@ -47,49 +51,82 @@
 #   - Calculate metrics like CallsPerHour (analysis/callspernight.R)
 #   - Generate visualizations (output/visualization.R)
 #   - Read or write files (core/utilities.R)
+#   - Track execution events (core/validation_reporting.R)
+#   - Generate HTML/YAML reports (core/validation_reporting.R)
 #   - Make assumptions about what "should" be in the data
 #
 # DEPENDENCIES
 # ------------
-#   - core/utilities.R: log_message (for logging only)
-#   - core/config.R: load_study_parameters (for require_study_parameters)
-#   - dplyr: distinct, filter, summarize
-#   - No circular dependencies allowed
+# R Packages:
+#   - dplyr: distinct, filter, summarize, mutate, select, arrange
+#   - purrr: map_dfr (for check_column_completeness)
+#   - tibble: tibble (for data structure creation)
+#
+# Internal Dependencies: None
 #
 # CONTENTS
 # --------
-# Universal Assertions (usable anywhere):
-#   - assert_data_frame()
-#   - assert_not_empty()
-#   - assert_row_count()
-#   - assert_columns_exist()
-#   - assert_column_type()
-#   - assert_not_na()
-#   - assert_date_range()
-#   - assert_time_format()
-#   - assert_file_exists()
-#   - assert_directory_exists()
-#   - assert_scalar_string()
+# Universal Assertions (11 functions):
+#   - assert_data_frame(): Validate input is data frame
+#   - assert_not_empty(): Validate data frame has rows
+#   - assert_row_count(): Validate exact row count
+#   - assert_columns_exist(): Validate required columns present
+#   - assert_column_type(): Validate column class
+#   - assert_not_na(): Validate column has no NA values
+#   - assert_date_range(): Validate date order
+#   - assert_time_format(): Validate HH:MM:SS format
+#   - assert_file_exists(): Validate file exists with hints
+#   - assert_directory_exists(): Validate/create directory
+#   - assert_scalar_string(): Validate single character string
 #
-# Composite Validators:
-#   - validate_data_frame()
-#   - validate_cpn_data()
-#   - validate_master_data()
+# Composite Validators (3 functions):
+#   - validate_data_frame(): Combined assertions for common pattern
+#   - validate_cpn_data(): Domain-specific CallsPerNight validation
+#   - validate_master_data(): Domain-specific master file validation
 #
-# Schema Enforcement:
-#   - enforce_unified_schema()
+# Schema Enforcement (1 function):
+#   - enforce_unified_schema(): Ensure master file schema compliance
 #
-# Quality Checks:
-#   - check_column_completeness()
-#   - check_duplicates()
-#   - validate_calls_per_night()
+# Master File Finalization (1 function):
+#   - finalize_master_columns(): Remove unwanted columns and reorder
+#
+# Quality Checks (3 functions):
+#   - check_column_completeness(): Report NA percentages
+#   - check_duplicates(): Detect duplicate rows
+#   - validate_calls_per_night(): Check logical consistency
+#
+# USAGE
+# -----
+# # Universal assertions
+# assert_data_frame(df)
+# assert_columns_exist(df, c("Detector", "Night"), source_hint = "Workflow 03")
+#
+# # Domain validators
+# validate_cpn_data(calls_per_night_df)
+# validate_master_data(kpro_master)
+#
+# # Quality checks
+# completeness <- check_column_completeness(df)
+# duplicates <- check_duplicates(df, key_cols = c("Detector", "DateTime_local"))
 #
 # CHANGELOG
 # ---------
-# 2026-02-01: Removed require_study_parameters() from CONTENTS (never implemented, use load_study_parameters() from config.R)
-# 2026-02-01: Verified deterministic behavior - all assert functions follow standards
-# 2026-02-01: Confirmed usage in all 3 run_* orchestrators
-# 2024-12-29: Added universal assertion functions (assert_*)
+# 2026-02-03: Moved orchestrator helpers to validation_reporting.R
+#             - Removed init_stage_validation() → validation_reporting.R
+#             - Removed complete_stage_validation() → validation_reporting.R
+#             - Reduced from 1,279 to ~1,150 lines
+#             - Now focused purely on data quality validation
+#             - Improved separation of concerns (data validation vs execution tracking)
+#             - Updated NON-GOALS to clarify scope
+# 2026-02-03: Added orchestrator helpers for run_* functions
+#             - Added init_stage_validation() to reduce initialization boilerplate
+#             - Added complete_stage_validation() to reduce finalization boilerplate
+#             - Eliminates ~16 lines per orchestrator stage
+#             - Both functions reference validation_reporting.R dependencies
+# 2026-01-15: Enhanced domain validators with better error messages
+# 2026-01-12: Added check_column_completeness() and check_duplicates()
+# 2026-01-10: Initial version with core assertions
+# =============================================================================
 # 2024-12-29: Added composite validators (validate_*)
 # 2024-12-27: Split into enforce_unified_schema and enforce_master_schema
 # 2024-12-26: Initial CODING_STANDARDS compliant version
@@ -109,6 +146,8 @@
 #'
 #' @description
 #' Validates that input is a data frame or tibble. Stops with clear error if not.
+#'
+#' Standards Reference: 03_code_design_standards.md §2.1
 #'
 #' @param x Object to check.
 #' @param arg_name Character. Name of argument for error message. Default: "Input"
@@ -149,6 +188,8 @@ assert_data_frame <- function(x, arg_name = "Input") {
 #' @description
 #' Validates that data frame has at least one row. Use after assert_data_frame().
 #'
+#' Standards Reference: 03_code_design_standards.md §2.1
+#'
 #' @param df Data frame to check.
 #' @param arg_name Character. Name of argument for error message. Default: "Data"
 #'
@@ -183,6 +224,8 @@ assert_not_empty <- function(df, arg_name = "Data") {
 #' @description
 #' Validates that data frame has exactly N rows. Useful for single-row
 #' summaries or fixed-structure data like study_summary.
+#'
+#' Standards Reference: 03_code_design_standards.md §2.1
 #'
 #' @param df Data frame to check.
 #' @param expected_rows Integer. Expected number of rows.
@@ -224,10 +267,12 @@ assert_row_count <- function(df, expected_rows, arg_name = "Data") {
 #' Validates that all required columns are present in data frame. Provides
 #' helpful hints about which workflow produces the expected data.
 #'
+#' Standards Reference: 03_code_design_standards.md §2.2
+#'
 #' @param df Data frame to check.
 #' @param required_cols Character vector. Required column names.
 #' @param source_hint Character or NULL. Optional hint about which function/script
-#'   produces this data structure (e.g., "02_standardize.R").
+#'   produces this data structure (e.g., "run_ingest_standardize()", "02_standardize.R").
 #'
 #' @return Invisible TRUE if valid, otherwise stops execution.
 #'
@@ -247,13 +292,12 @@ assert_row_count <- function(df, expected_rows, arg_name = "Data") {
 #' assert_columns_exist(
 #'   cpn_final,
 #'   c("Detector", "Night", "CallsPerNight"),
-#'   source_hint = "04_finalize_cpn.R"
+#'   source_hint = "run_finalize_to_report()"
 #' )
 #' }
 #'
 #' @export
 assert_columns_exist <- function(df, required_cols, source_hint = NULL) {
-  
   
   missing_cols <- setdiff(required_cols, names(df))
   
@@ -270,6 +314,7 @@ assert_columns_exist <- function(df, required_cols, source_hint = NULL) {
       hint_msg
     ))
   }
+  
   invisible(TRUE)
 }
 
@@ -280,6 +325,8 @@ assert_columns_exist <- function(df, required_cols, source_hint = NULL) {
 #' Validates that a specific column has the expected type. Supports common
 #' R types including Date and POSIXct.
 #'
+#' Standards Reference: 03_code_design_standards.md §2.1
+#'
 #' @param df Data frame containing the column.
 #' @param col_name Character. Name of column to check.
 #' @param expected_type Character. Expected type: "numeric", "character",
@@ -288,15 +335,13 @@ assert_columns_exist <- function(df, required_cols, source_hint = NULL) {
 #' @return Invisible TRUE if valid, otherwise stops execution.
 #'
 #' @section CONTRACT:
-#' - Stops if column is wrong type
-#' - Shows actual type in error message
-#' - Uses inherits() for S3 classes (Date, POSIXct)
+#' - Stops if column type doesn't match
+#' - Error shows actual type received
 #' - Returns invisibly on success
 #'
 #' @section DOES NOT:
-#' - Check if column exists (use assert_columns_exist first)
-#' - Coerce column types
-#' - Validate column values
+#' - Coerce types
+#' - Check column values
 #'
 #' @examples
 #' \dontrun{
@@ -307,28 +352,21 @@ assert_columns_exist <- function(df, required_cols, source_hint = NULL) {
 #' @export
 assert_column_type <- function(df, col_name, expected_type) {
   
-  if (!col_name %in% names(df)) {
-    stop(sprintf("Column '%s' not found in data frame", col_name))
+  assert_columns_exist(df, col_name)
+  
+  actual_type <- class(df[[col_name]])[1]
+  
+  # Handle special cases where multiple types are acceptable
+  if (expected_type == "POSIXct" && inherits(df[[col_name]], "POSIXt")) {
+    return(invisible(TRUE))
   }
   
-  col_data <- df[[col_name]]
-  
-  is_valid <- switch(expected_type,
-                     "numeric" = is.numeric(col_data),
-                     "character" = is.character(col_data),
-                     "Date" = inherits(col_data, "Date"),
-                     "POSIXct" = inherits(col_data, "POSIXct"),
-                     "POSIXt" = inherits(col_data, "POSIXt"),
-                     "logical" = is.logical(col_data),
-                     "integer" = is.integer(col_data),
-                     stop(sprintf("Unknown expected_type: %s", expected_type))
-  )
-  
-  if (!is_valid) {
-    actual_type <- paste(class(col_data), collapse = ", ")
+  if (!inherits(df[[col_name]], expected_type)) {
     stop(sprintf(
-      "Column '%s' must be %s.\n  Actual type: %s",
-      col_name, expected_type, actual_type
+      "Column '%s' must be type '%s'.\n  Received: %s",
+      col_name,
+      expected_type,
+      actual_type
     ))
   }
   
@@ -336,29 +374,49 @@ assert_column_type <- function(df, col_name, expected_type) {
 }
 
 
-#' Assert Value is Not NA
+#' Assert Column Has No NA Values
 #'
 #' @description
-#' Validates that a value is not NA. Works with scalars and vectors.
+#' Validates that a column has no missing values.
 #'
-#' @param x Value to check.
-#' @param arg_name Character. Name for error message. Default: "Value"
+#' Standards Reference: 03_code_design_standards.md §2.1
+#'
+#' @param df Data frame containing the column.
+#' @param col_name Character. Name of column to check.
 #'
 #' @return Invisible TRUE if valid, otherwise stops execution.
 #'
 #' @section CONTRACT:
-#' - Stops if any element of x is NA
+#' - Stops if any NA values found
+#' - Error includes count of NA values
 #' - Returns invisibly on success
 #'
 #' @section DOES NOT:
-#' - Check for NULL (use is.null separately)
-#' - Check for empty strings
+#' - Remove NA values
+#' - Fill NA values
+#'
+#' @examples
+#' \dontrun{
+#' assert_not_na(cpn_final, "Detector")
+#' }
 #'
 #' @export
-assert_not_na <- function(x, arg_name = "Value") {
-  if (any(is.na(x))) {
-    stop(sprintf("%s cannot be NA", arg_name))
+assert_not_na <- function(df, col_name) {
+  
+  assert_columns_exist(df, col_name)
+  
+  n_na <- sum(is.na(df[[col_name]]))
+  
+  if (n_na > 0) {
+    stop(sprintf(
+      "Column '%s' contains %d NA values (%.1f%% of %d rows)",
+      col_name,
+      n_na,
+      100 * n_na / nrow(df),
+      nrow(df)
+    ))
   }
+  
   invisible(TRUE)
 }
 
@@ -366,8 +424,9 @@ assert_not_na <- function(x, arg_name = "Value") {
 #' Assert Valid Date Range
 #'
 #' @description
-#' Validates that end_date is not before start_date. Coerces character
-#' inputs to Date.
+#' Validates that end_date >= start_date. Coerces character inputs to Date.
+#'
+#' Standards Reference: 03_code_design_standards.md §2.1
 #'
 #' @param start_date Date or character. Start date.
 #' @param end_date Date or character. End date.
@@ -419,6 +478,8 @@ assert_date_range <- function(start_date, end_date) {
 #' @description
 #' Validates that a time string matches HH:MM:SS format (24-hour clock).
 #'
+#' Standards Reference: 03_code_design_standards.md §2.1
+#'
 #' @param time_string Character. Time string to validate.
 #' @param arg_name Character. Name for error message. Default: "Time"
 #'
@@ -462,6 +523,8 @@ assert_time_format <- function(time_string, arg_name = "Time") {
 #' Validates that a file exists at the given path. Provides helpful hint
 #' about how to create the file if missing.
 #'
+#' Standards Reference: 03_code_design_standards.md §2.2
+#'
 #' @param file_path Character. Path to check.
 #' @param hint Character or NULL. Optional hint about how to create the file.
 #'
@@ -482,7 +545,7 @@ assert_time_format <- function(time_string, arg_name = "Time") {
 #' \dontrun{
 #' assert_file_exists(
 #'   "inst/config/study_parameters.yaml",
-#'   hint = "Run 01_ingest_raw_data.R first"
+#'   hint = "Run Shiny app to configure study parameters"
 #' )
 #' }
 #'
@@ -507,6 +570,8 @@ assert_file_exists <- function(file_path, hint = NULL) {
 #'
 #' @description
 #' Checks if directory exists. Optionally creates it if missing.
+#'
+#' Standards Reference: 03_code_design_standards.md §2.1
 #'
 #' @param dir_path Character. Directory path.
 #' @param create Logical. Create directory if missing? Default: TRUE
@@ -543,6 +608,8 @@ assert_directory_exists <- function(dir_path, create = TRUE) {
 #'
 #' @description
 #' Validates that a value is a character vector of length 1.
+#'
+#' Standards Reference: 03_code_design_standards.md §2.1
 #'
 #' @param x Value to check.
 #' @param arg_name Character. Name for error message. Default: "Value"
@@ -592,6 +659,8 @@ assert_scalar_string <- function(x, arg_name = "Value") {
 #' Performs standard validation: is data frame, not empty, has required columns.
 #' Combines multiple assertions into one call for cleaner workflow code.
 #'
+#' Standards Reference: 03_code_design_standards.md §2.5
+#'
 #' @param df Data frame to validate.
 #' @param required_cols Character vector or NULL. Required column names.
 #' @param arg_name Character. Name for error messages. Default: "Data"
@@ -615,7 +684,7 @@ assert_scalar_string <- function(x, arg_name = "Value") {
 #'   cpn_final,
 #'   required_cols = c("Detector", "Night", "CallsPerNight"),
 #'   arg_name = "cpn_final",
-#'   source_hint = "04_finalize_cpn.R"
+#'   source_hint = "run_finalize_to_report()"
 #' )
 #' }
 #'
@@ -651,6 +720,8 @@ validate_data_frame <- function(df,
 #' @description
 #' Domain-specific validator for CallsPerNight data. Checks for standard
 #' CPN columns and validates their types.
+#'
+#' Standards Reference: 04_data_standards.md §4.1
 #'
 #' @param cpn_data Data frame to validate.
 #' @param require_status Logical. Require Status column? Default: FALSE
@@ -688,7 +759,7 @@ validate_cpn_data <- function(cpn_data,
     cpn_data,
     required_cols = required,
     arg_name = "CallsPerNight data",
-    source_hint = "04_finalize_cpn.R"
+    source_hint = "run_finalize_to_report()"
   )
   
   # Type checks
@@ -709,6 +780,8 @@ validate_cpn_data <- function(cpn_data,
 #' @description
 #' Domain-specific validator for Master file data. Checks for standard
 #' master columns from Workflow 02.
+#'
+#' Standards Reference: 04_data_standards.md §2.2
 #'
 #' @param master_data Data frame to validate.
 #'
@@ -736,7 +809,7 @@ validate_master_data <- function(master_data) {
     master_data,
     required_cols = required,
     arg_name = "Master data",
-    source_hint = "02_standardize.R"
+    source_hint = "run_ingest_standardize()"
   )
   
   invisible(TRUE)
@@ -744,218 +817,60 @@ validate_master_data <- function(master_data) {
 
 
 # ==============================================================================
-# CONFIG LOADERS WITH VALIDATION
-# ==============================================================================
-
-
-#' Load Study Parameters YAML with Validation
-#'
-#' @description
-#' Validates YAML config exists and returns loaded parameters. Combines
-#' file existence check with loading.
-#'
-#' @param yaml_path Character. Path to YAML file.
-#'   Default: "inst/config/study_parameters.yaml"
-#'
-#' @return Loaded parameters list from YAML.
-#'
-#' @section CONTRACT:
-#' - Stops if file doesn't exist (with helpful hint)
-#' - Stops if loading fails
-#' - Returns parsed YAML as list
-#'
-#' @section DOES NOT:
-#' - Validate YAML structure
-#' - Check for required fields
-#'
-#' @examples
-#' \dontrun{
-#' params <- require_study_parameters()
-#' }
-#'
-#' @export
-# ==============================================================================
 # SCHEMA ENFORCEMENT
 # ==============================================================================
 
 
-#' Enforce Unified Schema (Workflow 02 Output)
+#' Enforce Unified Schema on Master Data
 #'
 #' @description
-#' Validates and enforces schema requirements for the unified KPro dataset
-#' produced by Workflow 02 (standardization). This is the "kpro_master" file
-#' that contains all detection events with standardized species codes.
+#' Validates that master data conforms to unified schema requirements.
+#' Returns new tibble with enforced schema, never modifies input.
 #'
-#' @param df Data frame to validate (typically unified_data before finalization).
+#' Standards Reference: 04_data_standards.md §2.2
 #'
-#' @return The input data frame if valid (for pipe compatibility).
+#' @param df Data frame after standardization.
+#' @param verbose Logical. Print progress messages? Default: FALSE
+#'
+#' @return Tibble with enforced unified schema.
 #'
 #' @section CONTRACT:
-#' - Validates presence of required columns for master schema
-#' - Logs validation result
-#' - Returns input unchanged if valid
-#' - Stops with error if validation fails
+#' - Validates required core columns exist
+#' - Ensures Detector and auto_id are character
+#' - Returns new tibble (input unchanged)
 #'
 #' @section DOES NOT:
-#' - Modify column values
 #' - Add missing columns
-#' - Reorder columns
+#' - Transform schema versions
+#' - Modify column values
 #'
 #' @export
-enforce_unified_schema <- function(df) {
+enforce_unified_schema <- function(df, verbose = FALSE) {
   
-  # Required columns for unified master schema
-  required_cols <- c(
-    "detector_id",
-    "auto_id",
-    "alternate_1",
-    "alternate_2"
-  )
+  # Core required columns for unified schema
+  required_cols <- c("Detector", "DateTime_local", "auto_id")
   
   validate_data_frame(
     df,
     required_cols = required_cols,
-    arg_name = "unified_data",
-    source_hint = "standardize_kpro_schema()"
+    arg_name = "Master data for schema enforcement",
+    source_hint = "run_ingest_standardize()"
   )
   
-  log_message("[enforce_unified_schema] Schema validation passed")
+  # Ensure key columns are character
+  df <- df %>%
+    dplyr::mutate(
+      Detector = as.character(Detector),
+      auto_id = as.character(auto_id)
+    )
+  
+  if (verbose) {
+    message(sprintf("  [OK] Unified schema enforced on %d rows", nrow(df)))
+  }
   
   df
 }
 
-
-# ==============================================================================
-# QUALITY CHECKS
-# ==============================================================================
-
-
-#' Check Column Completeness
-#'
-#' @description
-#' Reports percentage of non-NA values for each column. Useful for
-#' data quality assessment.
-#'
-#' @param df Data frame to check.
-#'
-#' @return Tibble with columns: column_name, n_total, n_complete, pct_complete.
-#'
-#' @section CONTRACT:
-#' - Reports ALL columns
-#' - Returns tibble sorted by pct_complete ascending (worst first)
-#' - Does not stop on any completeness level
-#'
-#' @section DOES NOT:
-#' - Fix incomplete data
-#' - Filter out incomplete columns
-#'
-#' @export
-check_column_completeness <- function(df) {
-  
-  assert_data_frame(df, "df")
-  
-  completeness <- purrr::map_dfr(names(df), function(col) {
-    tibble::tibble(
-      column_name = col,
-      n_total = nrow(df),
-      n_complete = sum(!is.na(df[[col]])),
-      pct_complete = round(100 * n_complete / n_total, 1)
-    )
-  })
-  
-  completeness %>%
-    dplyr::arrange(pct_complete)
-}
-
-
-#' Check for Duplicate Rows
-#'
-#' @description
-#' Reports duplicate rows based on specified columns. Does not remove
-#' duplicates - just reports them for review.
-#'
-#' @param df Data frame to check.
-#' @param key_cols Character vector. Columns that define uniqueness.
-#'   Default: NULL (use all columns).
-#'
-#' @return List with: n_total, n_unique, n_duplicates, duplicate_rows (tibble).
-#'
-#' @section CONTRACT:
-#' - Reports counts of total, unique, and duplicate rows
-#' - Returns tibble of duplicate rows for inspection
-#' - Does not modify input
-#'
-#' @section DOES NOT:
-#' - Remove duplicates (use dplyr::distinct for that)
-#' - Stop on finding duplicates
-#'
-#' @export
-check_duplicates <- function(df, key_cols = NULL) {
-  
-  assert_data_frame(df, "df")
-  
-  if (is.null(key_cols)) {
-    key_cols <- names(df)
-  }
-  
-  # Find duplicates
-  dup_check <- df %>%
-    dplyr::group_by(dplyr::across(dplyr::all_of(key_cols))) %>%
-    dplyr::mutate(.n_occurrences = dplyr::n()) %>%
-    dplyr::ungroup()
-  
-  duplicates <- dup_check %>%
-    dplyr::filter(.n_occurrences > 1) %>%
-    dplyr::select(-.n_occurrences)
-  
-  list(
-    n_total = nrow(df),
-    n_unique = nrow(dplyr::distinct(df, dplyr::across(dplyr::all_of(key_cols)))),
-    n_duplicates = nrow(duplicates),
-    duplicate_rows = duplicates
-  )
-}
-
-
-#' Validate CallsPerNight Logical Consistency
-#'
-#' @description
-#' Checks for logically inconsistent CallsPerNight values: NA, negative,
-#' or unusually high values that may indicate data entry errors.
-#'
-#' @param df Data frame with CallsPerNight column.
-#' @param max_calls Numeric. Maximum plausible calls per night. Default: 10000.
-#'
-#' @return Tibble of rows with problematic values.
-#'
-#' @section CONTRACT:
-#' - Returns rows where CallsPerNight is NA, negative, or > max_calls
-#' - Returns empty tibble if all values are valid
-#' - Does not modify input
-#'
-#' @section DOES NOT:
-#' - Fix problematic values
-#' - Stop on finding issues
-#'
-#' @export
-validate_calls_per_night <- function(df, max_calls = 10000) {
-  
-  assert_columns_exist(df, "CallsPerNight")
-  
-  df %>%
-    dplyr::filter(
-      is.na(CallsPerNight) |
-        CallsPerNight < 0 |
-        CallsPerNight > max_calls
-    )
-}
-
-# ==============================================================================
-# UPDATED finalize_master_columns() for validation.R
-# ==============================================================================
-# Replace the existing finalize_master_columns() function in validation.R with
-# this version that properly gates messages with verbose parameter.
-# ==============================================================================
 
 #' Finalize Master Columns
 #'
@@ -963,10 +878,12 @@ validate_calls_per_night <- function(df, max_calls = 10000) {
 #' Removes unwanted columns, ensures all required columns exist, and reorders
 #' to master schema layout.
 #'
-#' @param df Data frame after datetime_local conversion
+#' Standards Reference: 04_data_standards.md §2.2
+#'
+#' @param df Data frame after datetime_local conversion.
 #' @param verbose Logical. Print status messages? Default: FALSE
 #'
-#' @return Data frame with finalized column structure
+#' @return Data frame with finalized column structure.
 #'
 #' @section CONTRACT:
 #' - Removes unwanted metadata columns (orgid, userid, etc.)
@@ -1085,3 +1002,139 @@ finalize_master_columns <- function(df, verbose = FALSE) {
   
   df
 }
+
+
+# ==============================================================================
+# QUALITY CHECKS
+# ==============================================================================
+
+
+#' Check Column Completeness
+#'
+#' @description
+#' Reports percentage of non-NA values for each column. Useful for
+#' data quality assessment.
+#'
+#' Standards Reference: 04_data_standards.md §5.1
+#'
+#' @param df Data frame to check.
+#'
+#' @return Tibble with columns: column_name, n_total, n_complete, pct_complete.
+#'
+#' @section CONTRACT:
+#' - Reports ALL columns
+#' - Returns tibble sorted by pct_complete ascending (worst first)
+#' - Does not stop on any completeness level
+#'
+#' @section DOES NOT:
+#' - Fix incomplete data
+#' - Filter out incomplete columns
+#'
+#' @export
+check_column_completeness <- function(df) {
+  
+  assert_data_frame(df, "df")
+  
+  completeness <- purrr::map_dfr(names(df), function(col) {
+    tibble::tibble(
+      column_name = col,
+      n_total = nrow(df),
+      n_complete = sum(!is.na(df[[col]])),
+      pct_complete = round(100 * n_complete / n_total, 1)
+    )
+  })
+  
+  completeness %>%
+    dplyr::arrange(pct_complete)
+}
+
+
+#' Check for Duplicate Rows
+#'
+#' @description
+#' Reports duplicate rows based on specified columns. Does not remove
+#' duplicates - just reports them for review.
+#'
+#' Standards Reference: 04_data_standards.md §5.1
+#'
+#' @param df Data frame to check.
+#' @param key_cols Character vector. Columns that define uniqueness.
+#'   Default: NULL (use all columns).
+#'
+#' @return List with: n_total, n_unique, n_duplicates, duplicate_rows (tibble).
+#'
+#' @section CONTRACT:
+#' - Reports counts of total, unique, and duplicate rows
+#' - Returns tibble of duplicate rows for inspection
+#' - Does not modify input
+#'
+#' @section DOES NOT:
+#' - Remove duplicates (use dplyr::distinct for that)
+#' - Stop on finding duplicates
+#'
+#' @export
+check_duplicates <- function(df, key_cols = NULL) {
+  
+  assert_data_frame(df, "df")
+  
+  if (is.null(key_cols)) {
+    key_cols <- names(df)
+  }
+  
+  # Find duplicates
+  dup_check <- df %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(key_cols))) %>%
+    dplyr::mutate(.n_occurrences = dplyr::n()) %>%
+    dplyr::ungroup()
+  
+  duplicates <- dup_check %>%
+    dplyr::filter(.n_occurrences > 1) %>%
+    dplyr::select(-.n_occurrences)
+  
+  list(
+    n_total = nrow(df),
+    n_unique = nrow(dplyr::distinct(df, dplyr::across(dplyr::all_of(key_cols)))),
+    n_duplicates = nrow(duplicates),
+    duplicate_rows = duplicates
+  )
+}
+
+
+#' Validate CallsPerNight Logical Consistency
+#'
+#' @description
+#' Checks for logically inconsistent CallsPerNight values: NA, negative,
+#' or unusually high values that may indicate data entry errors.
+#'
+#' Standards Reference: 04_data_standards.md §4.1
+#'
+#' @param df Data frame with CallsPerNight column.
+#' @param max_calls Numeric. Maximum plausible calls per night. Default: 10000.
+#'
+#' @return Tibble of rows with problematic values.
+#'
+#' @section CONTRACT:
+#' - Returns rows where CallsPerNight is NA, negative, or > max_calls
+#' - Returns empty tibble if all values are valid
+#' - Does not modify input
+#'
+#' @section DOES NOT:
+#' - Fix problematic values
+#' - Stop on finding issues
+#'
+#' @export
+validate_calls_per_night <- function(df, max_calls = 10000) {
+  
+  assert_columns_exist(df, "CallsPerNight")
+  
+  df %>%
+    dplyr::filter(
+      is.na(CallsPerNight) |
+        CallsPerNight < 0 |
+        CallsPerNight > max_calls
+    )
+}
+
+# ==============================================================================
+# END OF VALIDATION MODULE
+# ==============================================================================

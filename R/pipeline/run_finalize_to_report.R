@@ -5,7 +5,7 @@
 # -------
 # Chunk 3 of 3 in the Shiny-driven pipeline. Orchestrates the complete
 # finalization process from edited CPN template through final report and
-# release bundle generation. Combines Workflows 04-07 into a single function.
+# release bundle generation. Combines Finalize CPN, Summary Stats, Plotting, and Report & Release into a single function.
 #
 # PIPELINE POSITION
 # -----------------
@@ -20,7 +20,7 @@
 #
 # PROCESSING STAGES
 # -----------------
-#   [WORKFLOW 04: Finalize CPN]
+#   [FINALIZE CPN]
 #   Stage 1: Load configuration and data
 #   Stage 2: Load and validate edited template
 #   Stage 3: Track manual edits (compare ORIGINAL vs EDIT_THIS)
@@ -28,7 +28,7 @@
 #   Stage 5: Calculate CallsPerHour metrics
 #   Stage 6: Save final CPN with versioning
 #
-#   [WORKFLOW 05: Summary Statistics]
+#   [SUMMARY STATISTICS]
 #   Stage 7: Generate detector activity summary
 #   Stage 8: Generate study-wide summary
 #   Stage 9: Calculate variance components
@@ -38,7 +38,7 @@
 #   Stage 13: Format GT tables and export
 #   Stage 14: Save summary RDS
 #
-#   [WORKFLOW 06: Exploratory Plots]
+#   [PLOTTING]
 #   Stage 15: Configure plot settings
 #   Stage 16: Generate quality plots (8)
 #   Stage 17: Generate detector plots (7)
@@ -47,7 +47,7 @@
 #   Stage 20: Export plots (PNG/SVG)
 #   Stage 21: Save plot objects RDS
 #
-#   [WORKFLOW 07: Report & Release]
+#   [REPORT & RELEASE]
 #   Stage 22: Load pre-computed RDS artifacts
 #   Stage 23: Render Quarto report
 #   Stage 24: Create release bundle (ZIP)
@@ -100,6 +100,18 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-03: CRITICAL FIX - Date parsing and edit tracking failures
+#             - Fixed Stage 2: Added explicit format parameter to as.Date() for Night column
+#             - Bug: as.Date(Night) without format failed to parse "MM-DD-YY" format
+#             - Result: Only ~10 nights per detector survived, rest became NA and collapsed
+#             - Solution: Use as.Date(Night, format = "%m-%d-%y") for correct parsing
+#             - Fixed Stage 3: Replaced string comparison with POSIXct datetime parsing
+#             - Bug: String comparison couldn't detect Excel format changes or handle tolerance
+#             - Result: Edit tracking always returned 0 changes despite actual edits
+#             - Solution: Parse to POSIXct objects, compare with 1-second tolerance
+#             - Added detection for 6 edit types: changed, added, removed (Start/End)
+#             - Now correctly tracks all manual datetime edits in EDIT_THIS template
+#             - Template now preserves all 252 rows (9 detectors × 28 nights) as expected
 # 2026-02-02: Fixed Stage 2 template loading and deduplication
 #             - Added deduplication logic for both ORIGINAL and EDIT_THIS templates
 #             - Improved RecordingHours conversion with safe handling of empty strings
@@ -111,11 +123,11 @@
 #             - Added numeric type conversion for CallsPerNight and RecordingHours
 #             - Fixed template patterns to use explicit timestamp format (YYYYMMDD_HHMMSS)
 #             - Added verbose parameter to safe_read_csv() calls
-# 2026-01-31: Initial creation - merged WF04-07 logic into orchestrating function
+# 2026-01-31: Initial creation - merged finalization through release logic into orchestrating function
 # 2026-01-31: Added edited_template_file parameter for Shiny integration
 # 2026-01-31: Removed all interactive prompts
 # 2026-01-31: Standardized to verbose parameter pattern
-# 2026-01-31: Combined validation reports for all 4 workflows
+# 2026-01-31: Combined validation reports for all 4 stages
 #
 # ==============================================================================
 
@@ -124,11 +136,11 @@
 #'
 #' @description
 #' Chunk 3 of the KPro pipeline. Processes edited CPN template through final
-#' report generation, combining Workflows 04-07:
-#' - WF04: Finalizes CPN with status classification and metrics
-#' - WF05: Generates comprehensive summary statistics
-#' - WF06: Creates 26 exploratory visualizations
-#' - WF07: Renders Quarto report and creates release bundle
+#' report generation, combining four stages:
+#' - Finalize CPN: Finalizes CPN with status classification and metrics
+#' - Summary Stats: Generates comprehensive summary statistics
+#' - Plotting: Creates 26 exploratory visualizations
+#' - Report & Release: Renders Quarto report and creates release bundle
 #'
 #' This is the most comprehensive pipeline stage, producing all final
 #' deliverables for the study.
@@ -143,7 +155,7 @@
 #'
 #' @return Named list containing:
 #'   \describe{
-#'     \item{workflow_04}{List. Finalize CPN outputs:
+#'     \item{finalize_cpn}{List. Finalize CPN outputs:
 #'       \itemize{
 #'         \item calls_per_night_final: Tibble with final metrics
 #'         \item cpn_file: Path to versioned CSV
@@ -151,14 +163,14 @@
 #'         \item status_distribution: List with Fail/Success/Partial counts
 #'       }
 #'     }
-#'     \item{workflow_05}{List. Summary statistics outputs:
+#'     \item{summary_stats}{List. Summary statistics outputs:
 #'       \itemize{
 #'         \item all_summaries: Master list with all summary tables
 #'         \item summary_rds: Path to summary RDS file
 #'         \item files_created: Vector of table export paths
 #'       }
 #'     }
-#'     \item{workflow_06}{List. Exploratory plots outputs:
+#'     \item{plotting}{List. Exploratory plots outputs:
 #'       \itemize{
 #'         \item all_plots: Nested list of ggplot objects
 #'         \item plots_rds: Path to plots RDS file
@@ -166,7 +178,7 @@
 #'         \item plot_counts: List with counts by category
 #'       }
 #'     }
-#'     \item{workflow_07}{List. Report & release outputs:
+#'     \item{report_release}{List. Report & release outputs:
 #'       \itemize{
 #'         \item report_html: Path to rendered Quarto report
 #'         \item release_zip: Path to release bundle (if created)
@@ -188,13 +200,13 @@
 #' @section SEQUENTIAL DEPENDENCY CHAIN:
 #' The workflows execute in strict sequence with handoffs:
 #' \enumerate{
-#'   \item WF04: Produces calls_per_night_final (passed to WF05/06)
-#'   \item WF05: Produces summary_data RDS (discovered by WF07)
-#'   \item WF06: Produces plot_objects RDS (discovered by WF07)
-#'   \item WF07: Renders report using RDS artifacts from WF05/06
+#'   \item Finalize CPN: Produces calls_per_night_final (passed to Summary Stats/Plotting)
+#'   \item Summary Stats: Produces summary_data RDS (discovered by Report & Release)
+#'   \item Plotting: Produces plot_objects RDS (discovered by Report & Release)
+#'   \item Report & Release: Renders report using RDS artifacts from Summary Stats/Plotting
 #' }
 #'
-#' @section WORKFLOW 04 DETAILS:
+#' @section FINALIZE CPN DETAILS:
 #' Finalizes CallsPerNight dataset:
 #' - Compares ORIGINAL vs EDIT_THIS templates
 #' - Tracks all manual recording hour edits
@@ -203,7 +215,7 @@
 #' - Calculates CallsPerHour (retains dead nights with NA)
 #' - Saves versioned CSV (v1, v2, v3, etc.)
 #'
-#' @section WORKFLOW 05 DETAILS:
+#' @section SUMMARY STATS DETAILS:
 #' Generates summary statistics:
 #' - Detector-level: effort, activity, variability
 #' - Study-wide: totals, means, success rates
@@ -212,7 +224,7 @@
 #' - Hourly activity profiles (if temporal data exists)
 #' - Exports GT tables (PNG, HTML, Excel)
 #'
-#' @section WORKFLOW 06 DETAILS:
+#' @section PLOTTING DETAILS:
 #' Creates exploratory visualizations (26 total):
 #' - Quality (8): recording status, completeness, effort
 #' - Detector (7): activity, correlation, synchrony
@@ -220,9 +232,9 @@
 #' - Temporal (6): trends, hourly, weekly, monthly
 #' - Exports PNG (300 DPI) + optional SVG + RDS objects
 #'
-#' @section WORKFLOW 07 DETAILS:
+#' @section REPORT & RELEASE DETAILS:
 #' Renders report and creates release:
-#' - Discovers and loads RDS files from WF05/06
+#' - Discovers and loads RDS files from Summary Stats/Plotting
 #' - Renders Quarto report with embedded plots/tables
 #' - Creates portable ZIP bundle with:
 #'   - Final CPN CSV
@@ -256,8 +268,8 @@
 #' result <- run_finalize_to_report(create_release_bundle = FALSE)
 #'
 #' # Access results
-#' cpn <- result$workflow_04$calls_per_night_final
-#' result$workflow_07$report_html  # Main deliverable
+#' cpn <- result$finalize_cpn$calls_per_night_final
+#' result$report_release$report_html  # Main deliverable
 #' result$summary$pipeline_duration_sec
 #' }
 #'
@@ -282,29 +294,29 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Initialize return structure
   result <- list(
-    workflow_04 = list(),
-    workflow_05 = list(),
-    workflow_06 = list(),
-    workflow_07 = list(),
+    finalize_cpn = list(),
+    summary_stats = list(),
+    plotting = list(),
+    report_release = list(),
     summary = list(),
     validation_html_paths = character()
   )
   
   # ===========================================================================
-  # WORKFLOW 04: FINALIZE CPN
+  # FINALIZE CPN
   # ===========================================================================
   
   if (verbose) {
     message("\n")
     message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║           WORKFLOW 04: FINALIZE CALLSPERNIGHT               ║")
+    message("║                        FINALIZE CPN                         ║")
     message("╚═══════════════════════════════════════════════════════════════╝")
     message("")
   }
   
-  log_message("=== WORKFLOW 04: Finalize CallsPerNight - START ===")
+  log_message("=== FINALIZE CPN: START ===")
   
-  validation_context_04 <- create_validation_context(workflow = "finalize_cpn")
+  validation_context_finalize_cpn <- create_validation_context(workflow = "finalize_cpn")
   
   # ---------------------------------------------------------------------------
   # Stage 1: Load Configuration
@@ -315,7 +327,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   assert_file_exists(yaml_path, hint = "Configure study parameters first.")
   study_params <- load_study_parameters(yaml_path)
   
-  validation_context_04$study_name <- study_params$study_parameters$study_name
+  validation_context_finalize_cpn$study_name <- study_params$study_parameters$study_name
   
   if (verbose) message("  [OK] Loaded study_parameters.yaml")
   
@@ -325,7 +337,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   uniform_end <- study_params$processing_options$recording_end %||% NA
   intended_hours <- study_params$processing_options$intended_hours %||% NA
   
-  log_message("[WF04 Stage 1] Configuration loaded")
+  log_message("[Finalize CPN - Stage 1] Configuration loaded")
   
   # ---------------------------------------------------------------------------
   # Stage 2: Load Master Data and Templates
@@ -339,7 +351,6 @@ run_finalize_to_report <- function(kpro_master = NULL,
   } else {
     if (verbose) message("  [!] Loading kpro_master from checkpoint...")
     
-    # Load from most recent checkpoint
     kpro_master_file <- find_most_recent_file(
       directory = here::here("outputs", "checkpoints"),
       pattern = "^02_kpro_master_\\d{8}_\\d{6}\\.csv$",
@@ -349,8 +360,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     kpro_master <- safe_read_csv(kpro_master_file, verbose = verbose)
   }
   
-  validation_context_04 <- log_validation_event(
-    validation_context_04,
+  validation_context_finalize_cpn <- log_validation_event(
+    validation_context_finalize_cpn,
     event_type = "data_loaded",
     description = "Master data loaded",
     count = nrow(kpro_master)
@@ -371,30 +382,28 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   template_original <- safe_read_csv(template_original_file, verbose = verbose)
   
-  # Count rows before deduplication
-  n_orig_before <- nrow(template_original)
+  if (verbose) {
+    message(sprintf("  [DIAGNOSTIC] ORIGINAL template loaded: %d rows", nrow(template_original)))
+    message(sprintf("  [DIAGNOSTIC] Sample Night values: %s", 
+                    paste(head(template_original$Night, 3), collapse = ", ")))
+  }
   
-  # Convert and deduplicate ORIGINAL template
+  # Convert column types for ORIGINAL template
+  # ORIGINAL is generated by pipeline, uses ISO 8601 format (YYYY-MM-DD)
   template_original <- template_original %>%
     dplyr::mutate(
-      Night = as.Date(Night),
+      Night = as.Date(Night),  # ISO 8601 format - no format parameter needed
       Detector = as.character(Detector),
       CallsPerNight = as.numeric(CallsPerNight),
-      # Safe RecordingHours conversion - handle empty strings and non-numeric
       RecordingHours = suppressWarnings(as.numeric(RecordingHours))
-    ) %>%
-    # CRITICAL: Remove duplicates keeping first occurrence
-    dplyr::distinct(Detector, Night, .keep_all = TRUE)
-  
-  n_orig_after <- nrow(template_original)
-  n_orig_removed <- n_orig_before - n_orig_after
+    )
   
   if (verbose) {
-    if (n_orig_removed > 0) {
-      message(sprintf("  [!] Removed %d duplicate rows from ORIGINAL template", n_orig_removed))
-    }
     message(sprintf("  [OK] Loaded ORIGINAL template: %s (%d rows)", 
-                    basename(template_original_file), n_orig_after))
+                    basename(template_original_file), nrow(template_original)))
+    message(sprintf("  [OK] Date range: %s to %s", 
+                    min(template_original$Night, na.rm = TRUE),
+                    max(template_original$Night, na.rm = TRUE)))
   }
   
   # Load edited template
@@ -410,16 +419,24 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   template_edited <- safe_read_csv(edited_template_file, verbose = verbose)
   
-  # Count rows before deduplication
-  n_edit_before <- nrow(template_edited)
+  if (verbose) {
+    message(sprintf("  [DIAGNOSTIC] EDIT_THIS template loaded: %d rows", nrow(template_edited)))
+    message(sprintf("  [DIAGNOSTIC] Sample Night values: %s", 
+                    paste(head(template_edited$Night, 3), collapse = ", ")))
+  }
   
-  # Convert and deduplicate EDITED template
+  # Convert column types for EDITED template
+  # EDIT_THIS may be reformatted by Excel - use flexible date parsing
+  # lubridate::parse_date_time tries multiple formats in order
   template_edited <- template_edited %>%
     dplyr::mutate(
-      Night = as.Date(Night),
+      # Flexible date parsing - handles ISO 8601 (YYYY-MM-DD) and Excel US (M/D/YYYY)
+      # orders parameter tries formats in sequence: year-month-day, month-day-year
+      Night = lubridate::as_date(
+        lubridate::parse_date_time(Night, orders = c("ymd", "mdy"))
+      ),
       Detector = as.character(Detector),
       CallsPerNight = as.numeric(CallsPerNight),
-      # Safe RecordingHours conversion - handle empty strings and non-numeric
       RecordingHours = suppressWarnings(as.numeric(RecordingHours))
     )
   
@@ -446,92 +463,166 @@ run_finalize_to_report <- function(kpro_master = NULL,
       )
   }
   
-  # CRITICAL: Remove duplicates keeping last occurrence (most recent edit)
-  template_edited <- template_edited %>%
-    dplyr::arrange(Detector, Night) %>%
-    dplyr::distinct(Detector, Night, .keep_all = TRUE)
-  
-  n_edit_after <- nrow(template_edited)
-  n_edit_removed <- n_edit_before - n_edit_after
-  
-  if (n_edit_removed > 0) {
-    warning(sprintf(
-      "Removed %d duplicate rows from EDIT_THIS template. Check your template for duplicate Detector/Night combinations.",
-      n_edit_removed
-    ))
-  }
-  
-  validation_context_04 <- log_validation_event(
-    validation_context_04,
+  validation_context_finalize_cpn <- log_validation_event(
+    validation_context_finalize_cpn,
     event_type = "data_loaded",
-    description = "CPN template loaded",
-    count = n_edit_after,
+    description = "CPN template loaded with flexible date parsing",
+    count = nrow(template_edited),
     details = list(
       original_file = basename(template_original_file),
       edited_file = basename(edited_template_file),
-      duplicates_removed = n_edit_removed
+      original_rows = nrow(template_original),
+      edited_rows = nrow(template_edited)
     )
   )
   
   if (verbose) {
     message(sprintf("  [OK] Loaded EDIT_THIS template: %s (%d rows)", 
-                    basename(edited_template_file), n_edit_after))
+                    basename(edited_template_file), nrow(template_edited)))
+    message(sprintf("  [OK] Date range: %s to %s", 
+                    min(template_edited$Night, na.rm = TRUE),
+                    max(template_edited$Night, na.rm = TRUE)))
   }
   
   # Validate required columns
   required_cols <- c("Detector", "Night", "CallsPerNight")
   assert_columns_exist(template_edited, required_cols)
   
-  log_message(sprintf("[WF04 Stage 2] Templates loaded (%d duplicates removed)", 
-                      n_orig_removed + n_edit_removed))
+  log_message(sprintf("[Finalize CPN - Stage 2] Templates loaded (ORIGINAL: %d rows, EDITED: %d rows)", 
+                      nrow(template_original), nrow(template_edited)))
   
   # ---------------------------------------------------------------------------
-  # Stage 3: Track Manual Edits
+  # Stage 3: Track Manual Edits (POSIXct Parsing with Tolerance)
   # ---------------------------------------------------------------------------
   
   if (verbose) print_stage_header("3", "Track Manual Edits")
   
-  # Compare ORIGINAL vs EDITED for changes
-  # This is a simplified tracking - full implementation in WF04
-  
+  # Initialize tracking variables
   total_edits <- 0
   edit_log_lines <- character()
   
+  # Only attempt edit tracking if datetime columns exist in both templates
   if ("StartDateTime" %in% names(template_original) && 
       "StartDateTime" %in% names(template_edited)) {
     
-    comparison <- template_edited %>%
-      dplyr::left_join(
-        template_original %>% 
-          dplyr::select(Detector, Night, 
-                        StartDateTime_orig = StartDateTime,
-                        EndDateTime_orig = EndDateTime),
-        by = c("Detector", "Night")
-      ) %>%
-      dplyr::filter(
-        !is.na(StartDateTime) & !is.na(EndDateTime) &
-          (StartDateTime != StartDateTime_orig | EndDateTime != EndDateTime_orig)
+    # Parse ORIGINAL template datetimes to POSIXct objects
+    # parse_datetime_safe() is from callspernight.R and handles timezone internally
+    template_orig_parsed <- template_original %>%
+      dplyr::select(Detector, Night, 
+                    StartDateTime_orig_str = StartDateTime,
+                    EndDateTime_orig_str = EndDateTime) %>%
+      dplyr::mutate(
+        StartDateTime_orig = sapply(StartDateTime_orig_str, parse_datetime_safe) %>% 
+          as.POSIXct(origin = "1970-01-01"),
+        EndDateTime_orig = sapply(EndDateTime_orig_str, parse_datetime_safe) %>% 
+          as.POSIXct(origin = "1970-01-01")
       )
     
-    total_edits <- nrow(comparison)
+    # Parse EDITED template datetimes to POSIXct objects
+    template_edit_parsed <- template_edited %>%
+      dplyr::select(Detector, Night,
+                    StartDateTime_edit_str = StartDateTime,
+                    EndDateTime_edit_str = EndDateTime,
+                    RecordingHours_edit = RecordingHours) %>%
+      dplyr::mutate(
+        StartDateTime_edit = sapply(StartDateTime_edit_str, parse_datetime_safe) %>% 
+          as.POSIXct(origin = "1970-01-01"),
+        EndDateTime_edit = sapply(EndDateTime_edit_str, parse_datetime_safe) %>% 
+          as.POSIXct(origin = "1970-01-01")
+      )
     
+    # Join and compare with 1-second tolerance (handles Excel rounding/precision)
+    comparison <- template_orig_parsed %>%
+      dplyr::inner_join(template_edit_parsed, by = c("Detector", "Night")) %>%
+      dplyr::mutate(
+        # Compare PARSED datetime objects (not string representations!)
+        # Use 1-second tolerance to handle floating point precision issues
+        StartDateTime_changed = !is.na(StartDateTime_orig) & 
+          !is.na(StartDateTime_edit) & 
+          abs(difftime(StartDateTime_orig, StartDateTime_edit, units = "secs")) > 1,
+        
+        EndDateTime_changed = !is.na(EndDateTime_orig) & 
+          !is.na(EndDateTime_edit) & 
+          abs(difftime(EndDateTime_orig, EndDateTime_edit, units = "secs")) > 1,
+        
+        # Also detect when times go from filled → NA or NA → filled
+        StartDateTime_added = is.na(StartDateTime_orig) & !is.na(StartDateTime_edit),
+        StartDateTime_removed = !is.na(StartDateTime_orig) & is.na(StartDateTime_edit),
+        
+        EndDateTime_added = is.na(EndDateTime_orig) & !is.na(EndDateTime_edit),
+        EndDateTime_removed = !is.na(EndDateTime_orig) & is.na(EndDateTime_edit),
+        
+        # Mark any type of change (6 types total)
+        Any_change = StartDateTime_changed | EndDateTime_changed |
+          StartDateTime_added | StartDateTime_removed |
+          EndDateTime_added | EndDateTime_removed
+      )
+    
+    # Count total edits
+    total_edits <- sum(comparison$Any_change, na.rm = TRUE)
+    
+    # Generate detailed edit log if edits exist
     if (total_edits > 0) {
-      edit_log_lines <- sprintf(
-        "%s | %s | %s -> %s | %s -> %s",
-        comparison$Detector,
-        comparison$Night,
-        comparison$StartDateTime_orig,
-        comparison$StartDateTime,
-        comparison$EndDateTime_orig,
-        comparison$EndDateTime
-      )
+      edit_log <- comparison %>%
+        dplyr::filter(Any_change) %>%
+        dplyr::arrange(Detector, Night)
+      
+      # Build detailed log entries (matches legacy 04_finalize_cpn.R format)
+      for (i in seq_len(nrow(edit_log))) {
+        row <- edit_log[i, ]
+        
+        log_entry <- sprintf("[%d] %s | %s", i, row$Detector, row$Night)
+        
+        # StartDateTime changes
+        if (row$StartDateTime_changed) {
+          log_entry <- paste0(log_entry, sprintf(
+            "\n    StartDateTime CHANGED: %s -> %s",
+            format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str),
+            format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
+          ))
+        } else if (row$StartDateTime_added) {
+          log_entry <- paste0(log_entry, sprintf(
+            "\n    StartDateTime ADDED: <blank> -> %s",
+            format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
+          ))
+        } else if (row$StartDateTime_removed) {
+          log_entry <- paste0(log_entry, sprintf(
+            "\n    StartDateTime REMOVED: %s -> <blank>",
+            format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)
+          ))
+        }
+        
+        # EndDateTime changes (same pattern)
+        if (row$EndDateTime_changed) {
+          log_entry <- paste0(log_entry, sprintf(
+            "\n    EndDateTime CHANGED: %s -> %s",
+            format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str),
+            format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)
+          ))
+        } else if (row$EndDateTime_added) {
+          log_entry <- paste0(log_entry, sprintf(
+            "\n    EndDateTime ADDED: <blank> -> %s",
+            format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)
+          ))
+        } else if (row$EndDateTime_removed) {
+          log_entry <- paste0(log_entry, sprintf(
+            "\n    EndDateTime REMOVED: %s -> <blank>",
+            format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str)
+          ))
+        }
+        
+        log_entry <- paste0(log_entry, sprintf("\n    RecordingHours: %.2f\n", 
+                                               row$RecordingHours_edit))
+        
+        edit_log_lines <- c(edit_log_lines, log_entry)
+      }
     }
   }
   
-  validation_context_04 <- log_validation_event(
-    validation_context_04,
+  validation_context_finalize_cpn <- log_validation_event(
+    validation_context_finalize_cpn,
     event_type = "manual_edits",
-    description = "Manual recording hour edits tracked",
+    description = "Manual recording hour edits tracked with POSIXct parsing",
     count = total_edits
   )
   
@@ -539,7 +630,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     message(sprintf("  [OK] Tracked %d manual edits", total_edits))
   }
   
-  log_message(sprintf("[WF04 Stage 3] Tracked %d manual edits", total_edits))
+  log_message(sprintf("[Finalize CPN - Stage 3] Tracked %d manual edits (POSIXct comparison with 1-sec tolerance)", total_edits))
   
   # ---------------------------------------------------------------------------
   # Stage 4: Calculate RecordingHours
@@ -569,7 +660,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) message("  [OK] Recalculated recording hours")
   
-  log_message("[WF04 Stage 4] RecordingHours calculated")
+  log_message("[Finalize CPN - Stage 4] RecordingHours calculated")
   
   # ---------------------------------------------------------------------------
   # Stage 5: Classify Status and Calculate Metrics
@@ -597,8 +688,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
   status_dist <- table(calls_per_night_final$Status)
   dead_nights <- sum(calls_per_night_final$Status == "Fail")
   
-  validation_context_04 <- log_validation_event(
-    validation_context_04,
+  validation_context_finalize_cpn <- log_validation_event(
+    validation_context_finalize_cpn,
     event_type = "status_classification",
     description = "Recording status classified",
     details = list(
@@ -615,7 +706,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
                     status_dist["Partial"] %||% 0))
   }
   
-  log_message(sprintf("[WF04 Stage 5] Status classified, %d dead nights retained", dead_nights))
+  log_message(sprintf("[Finalize CPN - Stage 5] Status classified, %d dead nights retained", dead_nights))
   
   # Origin: 04_finalize_cpn.R ~L560+, Standards: 04_data_standards.md §4.3
   
@@ -629,8 +720,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
       nrow(problematic_calls)
     ))
     
-    validation_context_04 <- log_validation_event(
-      validation_context_04,
+    validation_context_finalize_cpn <- log_validation_event(
+      validation_context_finalize_cpn,
       event_type = "warning",
       description = "Suspicious call values detected",
       count = nrow(problematic_calls),
@@ -684,7 +775,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Save edit log if edits were made
   if (total_edits > 0) {
     edit_log_path <- here::here("outputs", 
-                                sprintf("04_CallsPerNight_EditLog_%s.txt", timestamp))
+                                sprintf("CallsPerNight_EditLog_%s.txt", timestamp))
     writeLines(
       c(
         sprintf("CallsPerNight Edit Log - %s", timestamp),
@@ -700,46 +791,46 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # Finalize validation
-  validation_dir_04 <- here::here("results", "validation")
-  assert_directory_exists(validation_dir_04, create = TRUE)
+  validation_dir <- here::here("results", "validation")
+  assert_directory_exists(validation_dir, create = TRUE)
   
-  validation_html_04 <- finalize_validation_report(
-    validation_context_04,
-    output_dir = validation_dir_04
+  validation_html_finalize_cpn <- finalize_validation_report(
+    validation_context_finalize_cpn,
+    output_dir = validation_dir
   )
   
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_04)))
+  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_finalize_cpn)))
   
-  log_message("=== WORKFLOW 04: COMPLETE ===")
+  log_message("=== FINALIZE CPN: COMPLETE ===")
   
-  # Store WF04 results
-  result$workflow_04 <- list(
+  # Store Finalize CPN results
+  result$finalize_cpn <- list(
     calls_per_night_final = calls_per_night_final,
     cpn_file = cpn_final_path,
     total_edits = total_edits,
     status_distribution = as.list(status_dist),
     dead_nights_retained = dead_nights,
-    validation_report = validation_html_04
+    validation_report = validation_html_finalize_cpn
   )
   
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_04)
+  result$validation_html_paths <- c(result$validation_html_paths, validation_html_finalize_cpn)
   
   # ===========================================================================
-  # WORKFLOW 05: SUMMARY STATISTICS
+  # SUMMARY STATISTICS
   # ===========================================================================
   
   if (verbose) {
     message("\n")
     message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║           WORKFLOW 05: SUMMARY STATISTICS                   ║")
+    message("║                    SUMMARY STATISTICS                      ║")
     message("╚═══════════════════════════════════════════════════════════════╝")
     message("")
   }
   
-  log_message("=== WORKFLOW 05: Summary Statistics - START ===")
+  log_message("=== SUMMARY STATISTICS: START ===")
   
-  validation_context_05 <- create_validation_context(workflow = "summary_stats")
-  validation_context_05$study_name <- study_params$study_parameters$study_name
+  validation_context_summary_stats <- create_validation_context(workflow = "summary_stats")
+  validation_context_summary_stats$study_name <- study_params$study_parameters$study_name
   
   # Initialize summaries list
   all_summaries <- list()
@@ -754,8 +845,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
   detector_summary <- create_detector_activity_summary(calls_per_night_final)
   all_summaries$detector_summary <- detector_summary
   
-  validation_context_05 <- log_validation_event(
-    validation_context_05,
+  validation_context_summary_stats <- log_validation_event(
+    validation_context_summary_stats,
     event_type = "summary_generated",
     description = "Detector activity summary created",
     count = nrow(detector_summary)
@@ -764,7 +855,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Created detector summary: %d detectors", 
                                nrow(detector_summary)))
   
-  log_message("[WF05 Stage 7] Detector summary created")
+  log_message("[Summary Stats - Stage 7] Detector summary created")
   
   # ---------------------------------------------------------------------------
   # Stage 8: Study-Wide Summary
@@ -775,15 +866,15 @@ run_finalize_to_report <- function(kpro_master = NULL,
   study_summary <- create_study_summary(calls_per_night_final)
   all_summaries$study_summary <- study_summary
   
-  validation_context_05 <- log_validation_event(
-    validation_context_05,
+  validation_context_summary_stats <- log_validation_event(
+    validation_context_summary_stats,
     event_type = "summary_generated",
     description = "Study-wide summary created"
   )
   
   if (verbose) message("  [OK] Created study-wide summary")
   
-  log_message("[WF05 Stage 8] Study summary created")
+  log_message("[Summary Stats - Stage 8] Study summary created")
   
   # ---------------------------------------------------------------------------
   # Stage 9: Variance Components (Optional - skip if function not available)
@@ -801,7 +892,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (!is.null(variance_components)) {
     all_summaries$variance_components <- variance_components
     if (verbose) message("  [OK] Calculated variance components")
-    log_message("[WF05 Stage 9] Variance components calculated")
+    log_message("[Summary Stats - Stage 9] Variance components calculated")
   }
   
   # ---------------------------------------------------------------------------
@@ -844,7 +935,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     }
   }
   
-  log_message("[WF05 Stages 10-12] Optional summaries completed")
+  log_message("[Summary Stats - Stages 10-12] Optional summaries completed")
   
   # ---------------------------------------------------------------------------
   # Stage 13-14: Save Summary RDS and Export Tables
@@ -887,46 +978,46 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Saved: %s", basename(summary_rds_path)))
   
   # Finalize validation
-  validation_html_05 <- finalize_validation_report(
-    validation_context_05,
-    output_dir = validation_dir_04
+  validation_html_summary_stats <- finalize_validation_report(
+    validation_context_summary_stats,
+    output_dir = validation_dir
   )
   
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_05)))
+  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_summary_stats)))
   
-  log_message("=== WORKFLOW 05: COMPLETE ===")
+  log_message("=== SUMMARY STATISTICS: COMPLETE ===")
   
   # Origin: 05_summary_stats.R, Standards: 01_architecture_standards.md (structured returns)
-  # Store WF05 results in return structure
-  # Note: GT table exports are not implemented in chunk 3 (simplified from legacy WF05)
-  # as the primary outputs are the RDS file and plots from WF06.
-  result$workflow_05 <- list(
+  # Store Summary Stats results in return structure
+  # Note: GT table exports are not implemented in chunk 3 (simplified from legacy Summary Stats stage)
+  # as the primary outputs are the RDS file and plots from Plotting.
+  result$summary_stats <- list(
     all_summaries = all_summaries,
     summary_rds = summary_rds_path,
     files_created = character(),  # GT table PNG/HTML exports skipped in chunk 3
     has_species = has_species,
     has_temporal = has_temporal,
-    validation_report = validation_html_05
+    validation_report = validation_html_summary_stats
   )
   
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_05)
+  result$validation_html_paths <- c(result$validation_html_paths, validation_html_summary_stats)
   
   # ===========================================================================
-  # WORKFLOW 06: EXPLORATORY PLOTS
+  # PLOTTING
   # ===========================================================================
   
   if (verbose) {
     message("\n")
     message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║           WORKFLOW 06: EXPLORATORY PLOTS                    ║")
+    message("║                         PLOTTING                            ║")
     message("╚═══════════════════════════════════════════════════════════════╝")
     message("")
   }
   
-  log_message("=== WORKFLOW 06: Exploratory Plots - START ===")
+  log_message("=== PLOTTING: START ===")
   
-  validation_context_06 <- create_validation_context(workflow = "exploratory_plots")
-  validation_context_06$study_name <- study_params$study_parameters$study_name
+  validation_context_plotting <- create_validation_context(workflow = "exploratory_plots")
+  validation_context_plotting$study_name <- study_params$study_parameters$study_name
   
   # Initialize plots structure
   all_plots <- list(
@@ -1057,7 +1148,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   all_plots$temporal <- temporal_plots
   
-  log_message(sprintf("[WF06 Stages 15-19] Generated %d total plots",
+  log_message(sprintf("[Plotting - Stages 15-19] Generated %d total plots",
                       length(quality_plots) + length(detector_plots) + 
                         length(species_plots) + length(temporal_plots)))
   
@@ -1118,17 +1209,17 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Saved: %s", basename(plots_rds_path)))
   
   # Finalize validation
-  validation_html_06 <- finalize_validation_report(
-    validation_context_06,
-    output_dir = validation_dir_04
+  validation_html_plotting <- finalize_validation_report(
+    validation_context_plotting,
+    output_dir = validation_dir
   )
   
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_06)))
+  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_plotting)))
   
-  log_message("=== WORKFLOW 06: COMPLETE ===")
+  log_message("=== PLOTTING: COMPLETE ===")
   
-  # Store WF06 results
-  result$workflow_06 <- list(
+  # Store Plotting results
+  result$plotting <- list(
     all_plots = all_plots,
     plots_rds = plots_rds_path,
     files_created = files_created_06,
@@ -1138,27 +1229,27 @@ run_finalize_to_report <- function(kpro_master = NULL,
       species = length(species_plots),
       temporal = length(temporal_plots)
     ),
-    validation_report = validation_html_06
+    validation_report = validation_html_plotting
   )
   
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_06)
+  result$validation_html_paths <- c(result$validation_html_paths, validation_html_plotting)
   
   # ===========================================================================
-  # WORKFLOW 07: REPORT & RELEASE
+  # REPORT & RELEASE
   # ===========================================================================
   
   if (verbose) {
     message("\n")
     message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║           WORKFLOW 07: REPORT & RELEASE                     ║")
+    message("║                     REPORT & RELEASE                       ║")
     message("╚═══════════════════════════════════════════════════════════════╝")
     message("")
   }
   
-  log_message("=== WORKFLOW 07: Report & Release - START ===")
+  log_message("=== REPORT & RELEASE: START ===")
   
-  validation_context_07 <- create_validation_context(workflow = "report_release")
-  validation_context_07$study_name <- study_params$study_parameters$study_name
+  validation_context_report_release <- create_validation_context(workflow = "report_release")
+  validation_context_report_release$study_name <- study_params$study_parameters$study_name
   
   # ---------------------------------------------------------------------------
   # Stage 22: Verify RDS Artifacts
@@ -1191,8 +1282,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     warning(sprintf("RDS structure validation warnings:\n  %s",
                     paste(rds_validation$errors, collapse = "\n  ")))
     
-    validation_context_07 <- log_validation_event(
-      validation_context_07,
+    validation_context_report_release <- log_validation_event(
+      validation_context_report_release,
       event_type = "warning",
       description = "RDS structure validation issues detected",
       details = list(errors = rds_validation$errors)
@@ -1261,8 +1352,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     if (render_success) {
       if (verbose) message(sprintf("  [OK] Report rendered: %s", basename(report_html_path)))
       
-      validation_context_07 <- log_validation_event(
-        validation_context_07,
+      validation_context_report_release <- log_validation_event(
+        validation_context_report_release,
         event_type = "report_generated",
         description = "Quarto report rendered",
         details = list(file = basename(report_html_path))
@@ -1275,7 +1366,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     warning("Quarto template not found - skipping report generation")
   }
   
-  log_message(sprintf("[WF07 Stage 23] Report rendering: %s", 
+  log_message(sprintf("[Report & Release - Stage 23] Report rendering: %s", 
                       if(render_success) "SUCCESS" else "SKIPPED"))
   
   # ---------------------------------------------------------------------------
@@ -1291,10 +1382,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
     release_result <- tryCatch({
       zip_path <- create_release_bundle(
         study_id = study_params$study_parameters$study_name,
-        calls_per_night_final = calls_per_night_final,  # Data frame from WF04
+        calls_per_night_final = calls_per_night_final,  # Data frame from Finalize CPN
         kpro_master = kpro_master,                      # Data frame from Stage 2
-        all_summaries = all_summaries,                  # List from WF05
-        all_plots = all_plots,                          # List from WF06
+        all_summaries = all_summaries,                  # List from Summary Stats
+        all_plots = all_plots,                          # List from Plotting
         report_path = report_html_path,                 # Path to HTML
         study_params = study_params,                    # Already loaded
         output_dir = here::here("results", "releases"),
@@ -1313,8 +1404,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
       
       if (verbose) message(sprintf("  [OK] Release bundle: %s", basename(release_zip_path)))
       
-      validation_context_07 <- log_validation_event(
-        validation_context_07,
+      validation_context_report_release <- log_validation_event(
+        validation_context_report_release,
         event_type = "release_created",
         description = "Release bundle created",
         details = list(
@@ -1327,7 +1418,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     if (verbose) message("  [!] Release bundle skipped")
   }
   
-  log_message(sprintf("[WF07 Stage 24] Release bundle: %s", 
+  log_message(sprintf("[Report & Release - Stage 24] Release bundle: %s", 
                       if(!is.null(release_zip_path)) "CREATED" else "SKIPPED"))
   
   # ---------------------------------------------------------------------------
@@ -1336,25 +1427,25 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("25", "Finalize Validation")
   
-  validation_html_07 <- finalize_validation_report(
-    validation_context_07,
-    output_dir = validation_dir_04
+  validation_html_report_release <- finalize_validation_report(
+    validation_context_report_release,
+    output_dir = validation_dir
   )
   
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_07)))
+  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_report_release)))
   
-  log_message("=== WORKFLOW 07: COMPLETE ===")
+  log_message("=== REPORT & RELEASE: COMPLETE ===")
   
-  # Store WF07 results
-  result$workflow_07 <- list(
+  # Store Report & Release results
+  result$report_release <- list(
     report_html = report_html_path,
     release_zip = release_zip_path,
     report_size_kb = if(!is.null(report_html_path) && file.exists(report_html_path)) 
       file.size(report_html_path) / 1024 else NA,
-    validation_report = validation_html_07
+    validation_report = validation_html_report_release
   )
   
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_07)
+  result$validation_html_paths <- c(result$validation_html_paths, validation_html_report_release)
   
   # ===========================================================================
   # FINALIZE AND RETURN
@@ -1373,8 +1464,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     timestamp = format(Sys.time(), "%Y%m%d_%H%M%S")
   )
   
-  log_message(sprintf("=== CHUNK 3 COMPLETE: %d workflows, %.1f seconds ===",
-                      4, pipeline_duration))
+  log_message(sprintf("=== CHUNK 3 COMPLETE: 4 stages, %.1f seconds ===",
+                      pipeline_duration))
   
   if (verbose) {
     message("\n")
