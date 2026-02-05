@@ -1,5 +1,5 @@
 # =============================================================================
-# analysis/summarization.R — SUMMARY STATISTICS (LOCKED CONTRACT)
+# MODULE: summarization.R - SUMMARY STATISTICS (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
@@ -52,8 +52,8 @@
 #   - dplyr: group_by, summarize, across, n, n_distinct
 #   - tidyr: pivot_wider (for species summaries)
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Detector-Level Summaries:
 #   - create_detector_activity_summary()   # Comprehensive per-detector metrics
 #   - calculate_coefficient_of_variation() # CV per detector
@@ -73,8 +73,8 @@
 # File I/O:
 #   - save_master_with_timestamp()         # Save with timestamp in filename
 #
-# USAGE EXAMPLE
-# -------------
+# USAGE
+# -----
 # # After loading CallsPerNight final data
 # cpn_final <- load_cpn_final()
 #
@@ -89,6 +89,11 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Updated header to match 02_documentation_standards.md
+#             - Changed "analysis/summarization.R" to "MODULE: summarization.R"
+#             - Fixed em-dash to hyphen in header
+#             - Renamed "CONTENTS" section to "FUNCTIONS PROVIDED"
+#             - Renamed "USAGE EXAMPLE" section to "USAGE"
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
 # 2026-02-01: Confirmed usage in run_finalize_to_report.R (Chunk 3, Workflow 05)
 # 2024-12-29: Added new summary functions for Workflow 05
