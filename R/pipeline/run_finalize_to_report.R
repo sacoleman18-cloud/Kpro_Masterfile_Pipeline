@@ -361,7 +361,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (length(missing_columns) > 0) {
     stop(sprintf(
-      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream workflows (Chunk 1 & 2).\n  Please verify that run_ingest_standardize() and run_cpn_template() completed successfully.",
+      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream workflows:\n  - DateTime_local & Hour_local: created by run_ingest_standardize() (Workflow 02)\n  - species: created by run_cpn_template() (Workflow 03)\n  Please verify that both upstream workflows completed successfully.",
       paste(missing_columns, collapse = ", ")
     ))
   }
@@ -884,7 +884,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   species_summary <- tryCatch({
     create_species_summary_by_detector(kpro_master, calls_per_night_final)
   }, error = function(e) {
-    stop(sprintf("Failed to create species summary: %s", e$message))
+    stop(sprintf(
+      "Failed to create species composition summary.\n  Species column was validated in Stage 2, but summary generation failed.\n  Original error: %s\n  Check that kpro_master has valid species data.",
+      e$message
+    ))
   })
   
   all_summaries$species_summary <- species_summary
@@ -901,7 +904,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   species_accumulation <- tryCatch({
     create_species_accumulation_summary(kpro_master, calls_per_night_final)
   }, error = function(e) {
-    stop(sprintf("Failed to create species accumulation: %s", e$message))
+    stop(sprintf(
+      "Failed to create species accumulation summary.\n  Species column was validated in Stage 2, but accumulation calculation failed.\n  Original error: %s\n  Check that kpro_master has valid species and date data.",
+      e$message
+    ))
   })
   
   all_summaries$species_accumulation <- species_accumulation
@@ -918,7 +924,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   hourly_summary <- tryCatch({
     create_hourly_activity_summary(kpro_master, calls_per_night_final)
   }, error = function(e) {
-    stop(sprintf("Failed to create hourly activity summary: %s", e$message))
+    stop(sprintf(
+      "Failed to create hourly activity summary.\n  Temporal columns (Hour_local, DateTime_local) were validated in Stage 2, but summary generation failed.\n  Original error: %s\n  Check that kpro_master has valid temporal data.",
+      e$message
+    ))
   })
   
   all_summaries$hourly_summary <- hourly_summary
@@ -1145,7 +1154,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
     
     message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
   }, error = function(e) {
-    stop(sprintf("Species plots failed: %s", e$message))
+    stop(sprintf(
+      "Failed to generate species plots.\n  Species column was validated in Stage 2, but plot generation failed.\n  Original error: %s\n  Check that kpro_master has valid species data for visualization.",
+      e$message
+    ))
   })
   
   all_plots$species <- species_plots
