@@ -1,8 +1,8 @@
 # ==============================================================================
 # ARTIFACT & RELEASE STANDARDS
 # ==============================================================================
-# VERSION: 2.3
-# LAST UPDATED: 2026-01-31
+# VERSION: 2.4
+# LAST UPDATED: 2026-02-05
 # PURPOSE: Artifact registry, tracking, and release bundle creation
 # ==============================================================================
 
@@ -64,6 +64,8 @@ last_modified_utc: '2026-01-19T20:34:17Z'
 
 ### 1.4 Registry Functions
 
+**Core Module:** `R/functions/core/artifacts.R`
+
 **Initialization:**
 ```r
 # Load existing or create new registry
@@ -87,6 +89,20 @@ registry <- register_artifact(
       remove_noid = FALSE
     )
   )
+)
+```
+
+**Atomic RDS Save + Register (Recommended):**
+```r
+# Best practice: saves RDS and registers in one atomic operation
+registry <- save_and_register_rds(
+  object = summary_data,
+  file_path = here("results", "rds", "summary_data.rds"),
+  artifact_type = "summary_stats",
+  workflow = "05",
+  registry = registry,
+  metadata = list(n_summaries = 8, has_species = TRUE),
+  verbose = verbose
 )
 ```
 
@@ -448,44 +464,56 @@ validate_rds_structure(rds_files$plot_objects, required = c("quality", "detector
 ### 4.1 Artifact Module (`R/functions/core/artifacts.R`)
 
 **Registry Management:**
-- `init_artifact_registry()`: Create or load artifact registry
-- `register_artifact()`: Add artifact with metadata and hash
-- `get_artifact()`: Retrieve artifact by name
-- `list_artifacts()`: List all artifacts (optionally filtered by type)
-- `get_latest_artifact()`: Get most recent artifact by type
+- `init_artifact_registry()` - Create or load artifact registry
+- `register_artifact()` - Add artifact with metadata and hash
+- `get_artifact()` - Retrieve artifact by name
+- `list_artifacts()` - List all artifacts (optionally filtered by type)
+- `get_latest_artifact()` - Get most recent artifact by type
 
 **Hashing:**
-- `hash_file()`: Compute SHA256 hash of file
-- `hash_dataframe()`: Compute hash of data frame contents
-- `verify_artifact()`: Check if artifact matches registered hash
+- `hash_file()` - Compute SHA256 hash of file
+- `hash_dataframe()` - Compute hash of data frame contents
+- `verify_artifact()` - Check if artifact matches registered hash
 
-**Validation Tracking:**
-- `create_validation_context()`: Initialize validation tracking for chunk/workflow
-- `log_validation_event()`: Record validation event with details
-- `finalize_validation_report()`: Generate HTML/YAML validation report
+**RDS Management:**
+- `save_and_register_rds()` - Atomic RDS save + register (recommended for orchestrators)
 
 **RDS Discovery:**
-- `discover_pipeline_rds()`: Find summary_data and plot_objects RDS files
-- `validate_rds_structure()`: Validate loaded RDS objects have required elements
+- `discover_pipeline_rds()` - Find summary_data and plot_objects RDS files
+- `validate_rds_structure()` - Validate loaded RDS objects have required elements
 
-### 4.2 Release Module (`R/functions/core/release.R`)
+### 4.2 Validation Reporting Module (`R/functions/validation/validation_reporting.R`)
+
+**Note:** Validation tracking functions moved to separate module for separation of concerns.
+
+**Validation Context:**
+- `create_validation_context()` - Initialize validation tracking for chunk/workflow
+- `log_validation_event()` - Record validation event with details
+- `finalize_validation_report()` - Generate HTML/YAML validation report
+- `generate_validation_html()` - Generate HTML from context
+
+**Helper Wrappers (Recommended):**
+- `init_stage_validation()` - Convenience wrapper for context initialization
+- `complete_stage_validation()` - Convenience wrapper for report finalization
+
+### 4.3 Release Module (`R/functions/core/release.R`)
 
 **Bundle Creation:**
-- `create_release_bundle()`: Create portable zip with all outputs
-- `validate_release_inputs()`: Validate CPN and master data before bundling
-- `generate_manifest()`: Create manifest.yaml with provenance
+- `create_release_bundle()` - Create portable zip with all outputs
+- `validate_release_inputs()` - Validate CPN and master data before bundling
+- `generate_manifest()` - Create manifest.yaml with provenance
 
-### 4.3 Validation Module (`R/functions/validation/validation.R`)
+### 4.4 Validation Module (`R/functions/validation/validation.R`)
 
 **Centralized Assertions:**
-- `assert_data_frame()`: Assert object is data frame
-- `assert_not_empty()`: Assert data frame has rows
-- `assert_columns_exist()`: Assert required columns exist (with helpful hints)
-- `assert_file_exists()`: Assert file exists (with creation hints)
-- `assert_directory_exists()`: Assert/create directory
-- `assert_scalar_string()`: Assert single string value
-- `assert_date_range()`: Assert valid date range
-- `assert_column_type()`: Assert column has expected class
+- `assert_data_frame()` - Assert object is data frame
+- `assert_not_empty()` - Assert data frame has rows
+- `assert_columns_exist()` - Assert required columns exist (with helpful hints)
+- `assert_file_exists()` - Assert file exists (with creation hints)
+- `assert_directory_exists()` - Assert/create directory
+- `assert_scalar_string()` - Assert single string value
+- `assert_date_range()` - Assert valid date range
+- `assert_column_type()` - Assert column has expected class
 
 ---
 
