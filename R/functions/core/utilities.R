@@ -61,8 +61,8 @@
 #   - dplyr: mutate, across, all_of
 #   - base R: file operations
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Directory Management:
 #   - ensure_dir_exists()
 #
@@ -107,6 +107,11 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION & BUG FIX - Standards compliance improvements
+#             - Renamed "CONTENTS" section to "FUNCTIONS PROVIDED"
+#             - Fixed load_most_recent_checkpoint() to properly sort by timestamp
+#             - Added timestamp extraction and datetime sorting (matches find_most_recent_file pattern)
+#             - Prevents incorrect file selection in unsorted directories
 # 2026-02-04: MODULE SPLIT - Reduced file size for LLM compatibility
 #             - Moved logging functions to core/logging.R (2 functions)
 #             - Moved console formatting to core/console.R (4 functions)
@@ -550,8 +555,26 @@ load_most_recent_checkpoint <- function(pattern) {
     ))
   }
   
-  # Get most recent (last in sorted list)
-  most_recent <- files[length(files)]
+  # Extract timestamps from filenames for proper sorting
+  basenames <- basename(files)
+  timestamps <- sub(".*_(\\d{8}_\\d{6})(?:_.*?)?\\.\\w+$", "\\1", basenames)
+  timestamps_dt <- lubridate::ymd_hms(timestamps, quiet = TRUE)
+  
+  # Filter out files where timestamp parsing failed
+  valid_idx <- !is.na(timestamps_dt)
+  
+  if (!any(valid_idx)) {
+    stop(sprintf(
+      "No files with valid timestamps found matching pattern: %s\n  Expected format: ..._YYYYMMDD_HHMMSS.ext",
+      pattern
+    ))
+  }
+  
+  # Keep only valid timestamped files and sort by datetime
+  files <- files[valid_idx]
+  timestamps_dt <- timestamps_dt[valid_idx]
+  sorted_idx <- order(timestamps_dt, decreasing = TRUE)
+  most_recent <- files[sorted_idx[1]]
   
   safe_read_csv(most_recent)
 }
