@@ -108,7 +108,43 @@ run_ingest_standardize <- function(verbose = FALSE) {
 
 All console formatting functions are provided in `console.R` (split from utilities.R on 2026-02-04 for modularity).
 
-### 3.1 Stage Header Function
+### 3.1 Stage Banner Function (Orchestrators Only)
+
+For major stages within orchestrator functions (run_* files), use `print_stage_banner()` to mark key workflow transitions with a prominent double-line box:
+
+```r
+print_stage_banner("INGEST & STANDARDIZE", verbose = verbose)
+print_stage_banner("CPN TEMPLATE GENERATION", verbose = verbose)
+print_stage_banner("FINALIZE CPN", verbose = verbose)
+print_stage_banner("SUMMARY STATISTICS", verbose = verbose)
+print_stage_banner("PLOTTING", verbose = verbose)
+print_stage_banner("REPORT & RELEASE", verbose = verbose)
+```
+
+**Output:**
+```
++==================================================================+
+||                  INGEST & STANDARDIZE                         ||
++==================================================================+
+```
+
+**Key characteristics:**
+- **Double-line box** for visual prominence (uses `+==...==+` and `||...||`)
+- **Verbose gating required** - Must use `verbose = verbose` parameter
+- **Orchestrator use only** - For run_ingest_standardize(), run_cpn_template(), run_finalize_to_report()
+- **Stage names**: Use ALL CAPS with descriptive names (not numbered)
+
+**When to use:**
+- At the start of each orchestrator function (after log_message)
+- Between major workflow segments within an orchestrator
+- For multi-stage orchestrators (e.g., Chunk 3 has 4 banners: FINALIZE CPN, SUMMARY STATISTICS, PLOTTING, REPORT & RELEASE)
+
+**Do NOT use:**
+- In legacy workflow scripts (use print_stage_header instead)
+- For numbered stages within a workflow (use print_stage_header)
+- Without verbose gating (required for Shiny compatibility)
+
+### 3.2 Stage Header Function (Numbered Stages)
 
 Replace manual ASCII box drawing with the standardized `print_stage_header()` function:
 
@@ -131,7 +167,7 @@ print_stage_header("2.1", "Load Configuration")
 +-----------------------------------------------------------------+
 ```
 
-### 3.2 Workflow Summary Function
+### 3.3 Workflow Summary Function
 
 Use `print_workflow_summary()` for workflow/chunk completion messages:
 
@@ -158,7 +194,7 @@ print_workflow_summary(
   - Validation: validation_ingest_20260131_002136.html
 ```
 
-### 3.3 Pipeline Complete Function
+### 3.4 Pipeline Complete Function
 
 Use `print_pipeline_complete()` only at the end of Chunk 3 / Workflow 07:
 
@@ -179,7 +215,7 @@ print_pipeline_complete(
 )
 ```
 
-### 3.4 Box Character Reference
+### 3.5 Box Character Reference
 
 The formatting functions use these box-drawing characters:
 
@@ -197,12 +233,15 @@ Vertical: ||                    Vertical: ||
 Bot-left: +    Horizontal: =    Bot-right: +
 ```
 
-### 3.5 Verbose Gating for Shiny Compatibility
+### 3.6 Verbose Gating for Shiny Compatibility
 
 All console output functions should be gated by `verbose` parameter when called from orchestrating functions:
 
 ```r
 run_ingest_standardize <- function(verbose = FALSE) {
+  
+  # Stage banners: GATED (orchestrators only)
+  print_stage_banner("INGEST & STANDARDIZE", verbose = verbose)
   
   # Stage headers: GATED
   if (verbose) print_stage_header("1", "Load Configuration")
@@ -238,6 +277,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
 
 | Output | Function | Gate? | Rationale |
 |--------|----------|-------|-----------|
+| Stage banners | `print_stage_banner()` | [OK] Yes | Visual noise in Shiny |
 | Stage headers | `print_stage_header()` | [OK] Yes | Visual noise in Shiny |
 | Progress | `message()` | [OK] Yes | Visual noise in Shiny |
 | Summaries | `print_workflow_summary()` | [OK] Yes | Visual noise in Shiny |
@@ -245,7 +285,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
 | Warnings | `warning()` | [X] Never | User must see issues |
 | Errors | `stop()` | [X] Never | Must halt execution |
 
-### 3.6 Chunk vs Workflow Terminology
+### 3.7 Chunk vs Workflow Terminology
 
 When logging from orchestrating functions, use "Chunk" terminology:
 
@@ -411,6 +451,7 @@ Console and logging functions are organized into separate modules for clarity:
 
 **`R/functions/core/console.R`:**
 - `center_text()` - Center text within fixed width (internal helper)
+- `print_stage_banner()` - Print prominent stage banner (orchestrators only)
 - `print_stage_header()` - Print formatted stage header box
 - `print_workflow_summary()` - Print workflow/chunk completion summary
 - `print_pipeline_complete()` - Print pipeline completion with next steps
@@ -422,6 +463,17 @@ Console and logging functions are organized into separate modules for clarity:
 ### 8.2 Console Formatting Functions (in console.R)
 
 ```r
+#' Print Stage Banner (Orchestrators)
+#'
+#' @param stage_name Character. Stage name (e.g., "INGEST & STANDARDIZE")
+#' @param verbose Logical. Print banner to console? (default: FALSE)
+#' @param width Integer. Box width (default: 65)
+#'
+#' @return NULL (called for side effect)
+print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
+  # Implementation details in console.R
+}
+
 #' Print Stage Header
 #'
 #' @param stage_num Character. Stage number (e.g., "2.1")
@@ -430,7 +482,7 @@ Console and logging functions are organized into separate modules for clarity:
 #'
 #' @return NULL (called for side effect)
 print_stage_header <- function(stage_num, title, width = 65) {
-  # Implementation details in utilities.R
+  # Implementation details in console.R
 }
 
 #' Print Workflow Summary
@@ -442,7 +494,7 @@ print_stage_header <- function(stage_num, title, width = 65) {
 #'
 #' @return NULL (called for side effect)
 print_workflow_summary <- function(workflow, title, items, width = 65) {
-  # Implementation details in utilities.R
+  # Implementation details in console.R
 }
 
 #' Print Pipeline Complete Summary
@@ -454,7 +506,7 @@ print_workflow_summary <- function(workflow, title, items, width = 65) {
 #'
 #' @return NULL (called for side effect)
 print_pipeline_complete <- function(outputs, next_steps, report_path, width = 65) {
-  # Implementation details in utilities.R
+  # Implementation details in console.R
 }
 ```
 
@@ -470,6 +522,9 @@ run_my_chunk <- function(verbose = FALSE) {
   
   # File logging always
   log_message("=== CHUNK N: Chunk Name - START ===")
+  
+  # Stage banner (orchestrators only)
+  print_stage_banner("CHUNK NAME", verbose = verbose)
   
   # Console output gated
   if (verbose) print_stage_header("1", "Load Configuration")
@@ -532,6 +587,7 @@ tryCatch({
 
 | In Orchestrating Functions | Gate with `if (verbose)`? |
 |---------------------------|---------------------------|
+| `print_stage_banner()` | [OK] Yes (with parameter) |
 | `print_stage_header()` | [OK] Yes |
 | `message()` | [OK] Yes |
 | `print_workflow_summary()` | [OK] Yes |
