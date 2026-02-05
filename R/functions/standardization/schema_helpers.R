@@ -92,12 +92,13 @@
 #
 # CHANGELOG
 # ---------
-# 2026-02-05: MODULE REORGANIZATION - Renamed and moved to standardization/
+# 2026-02-05: MODULE REORGANIZATION & STANDARDS - Complete module refactor
 #             - Renamed from schema_detection.R to schema_helpers.R
 #             - Moved from ingestion/ to standardization/ folder
 #             - Schema detection is a transformation/standardization activity
-#             - Updated MODULE header format and section naming
+#             - Updated MODULE header format (proper dashes and prefix)
 #             - Fixed CONTENTS → FUNCTIONS PROVIDED per documentation standards
+#             - Updated USAGE examples to match actual function signatures
 # 2026-01-30: Refactored to use centralized assert_* functions from validation.R
 # 2026-01-30: Consolidated summarize_schema_distribution into get_schema_summary
 # 2026-01-26: Added verbose parameter to detect_row_schema() (default: FALSE)

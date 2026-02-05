@@ -1,6 +1,6 @@
-# ==============================================================================
-# ingestion.R - PRIMARY INGESTION (LOCKED CONTRACT)
-# ==============================================================================
+# =============================================================================
+# MODULE: ingestion.R - PRIMARY INGESTION (LOCKED CONTRACT)
+# =============================================================================
 # PURPOSE
 # -------
 # File discovery, reading, and intro-standardization. Provides two primary
@@ -70,6 +70,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION & STANDARDS - Fixed header format
+#             - Updated header to MODULE: format per documentation standards
+#             - Fixed CONTENTS → FUNCTIONS PROVIDED per documentation standards
+#             - Updated schema_helpers.R reference (moved to standardization/)
 # 2026-02-05: DEPENDENCIES UPDATE - Updated schema_helpers.R reference
 #             - Changed core/schema_detection.R to standardization/schema_helpers.R
 #             - Reflects module reorganization (schema detection moved to standardization)
