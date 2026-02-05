@@ -1,12 +1,16 @@
 # =============================================================================
-# MODULE: utilities.R - Foundational Utilities (ZERO DEPENDENCIES)
+# core/utilities.R - FOUNDATIONAL UTILITIES (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
-# Foundational utilities with ZERO internal dependencies. All other modules
-# depend on this file. Must be loaded first. Provides logging, safe I/O,
-# checkpoint management, file discovery, console formatting, and orchestrator
-# helper functions. Updated to reduce code redundancy in orchestrating functions.
+# Foundational utilities with ZERO internal dependencies on domain logic.
+# Provides safe I/O, checkpoint management, file discovery, path generation,
+# and orchestrator helper functions.
+#
+# NOTE: Logging and console formatting have been split into separate modules:
+#   - core/logging.R: log_message(), initialize_pipeline_log()
+#   - core/console.R: center_text(), print_stage_header(), 
+#                     print_workflow_summary(), print_pipeline_complete()
 #
 # This module is the bedrock of the pipeline. By having zero dependencies on
 # other project modules, it can be safely sourced first and provides the
@@ -19,126 +23,102 @@
 # 1. Zero internal dependencies
 #    - This file imports ONLY external packages (base R, readr, lubridate, here)
 #    - MUST NOT source or depend on any other project files
+#    - May CALL functions from logging.R and console.R (but doesn't source them)
 #
-# 2. Logging
-#    - All log functions write to logs/ directory
-#    - Timestamps use ISO 8601 format
-#    - Auto-creates directories as needed
-#
-# 3. File I/O
+# 2. File I/O
 #    - safe_read_csv() ALWAYS returns tibble or NULL (never errors)
 #    - All columns read as character by default (preserves original data)
 #
-# 4. Checkpoint Management
-#    - Standard pattern for loading from memory or file
-#    - find_most_recent_file() for locating latest outputs
-#    - Workflow-specific loaders for common data types
+# 3. File Discovery
+#    - find_most_recent_file() uses filename timestamps, not mtime
+#    - Deterministic behavior across file systems
 #
-# 5. Console Formatting
-#    - Consistent stage headers, banners, and summaries
-#    - All formatting respects verbose parameter
+# 4. Path Generation
+#    - Timestamped paths for audit trail
+#    - Versioned paths for incremental saves
+#    - Consistent naming conventions
 #
-# 6. Path Generation
-#    - All paths use here::here()
-#    - Timestamped output paths with configurable precision
+# 5. Orchestrator Utilities
+#    - setup_pipeline_context() consolidates YAML + validation setup
+#    - load_most_recent_checkpoint() replaces legacy checkpoint loaders
+#    - generate_timestamped_filename() provides consistent naming
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
-#   - Depend on validation.R, config.R, or any other internal modules
-#   - Perform data transformations
-#   - Enforce schemas
-#   - Make API calls
+#   - Perform any data transformations specific to KPro data
+#   - Contain domain logic (bat data, schemas, detectors)
+#   - Depend on any other project module (only external packages)
+#   - Contain console formatting (use console.R)
+#   - Contain file logging (use logging.R)
 #
 # DEPENDENCIES
 # ------------
-# R Packages:
-#   - base: File operations, string manipulation
+# External only:
 #   - readr: read_csv
 #   - lubridate: ymd_hms
 #   - here: here
-#   - dplyr: tibble, n_distinct, filter, bind_rows
+#   - dplyr: mutate, across, all_of
+#   - base R: file operations
 #
-# Internal Dependencies:
-#   NONE - This is Layer 1
+# CONTENTS
+# --------
+# Directory Management:
+#   - ensure_dir_exists()
 #
-# FUNCTIONS PROVIDED
-# ------------------
-# Directory Management (1 function):
-#   - ensure_dir_exists(): Create directory if missing
+# Safe I/O:
+#   - safe_read_csv()
+#   - convert_empty_to_na()
 #
-# Logging (2 functions):
-#   - log_message(): Append message to pipeline log
-#   - initialize_pipeline_log(): Start new log section
+# File Discovery:
+#   - find_most_recent_file()
 #
-# Safe I/O (2 functions):
-#   - safe_read_csv(): Read CSV with error handling
-#   - convert_empty_to_na(): Convert empty strings to NA
+# Orchestrator Utilities:
+#   - setup_pipeline_context()
+#   - load_most_recent_checkpoint()
+#   - generate_timestamped_filename()
 #
-# File Discovery (2 functions):
-#   - find_most_recent_file(): Find latest file matching pattern
-#   - find_most_recent_checkpoint(): Discover checkpoint by type
+# Path Generation:
+#   - make_output_path()
+#   - make_versioned_path()
 #
-# Checkpoint Management (5 functions):
-#   - load_or_checkpoint(): Load from memory or file
-#   - load_intro_standardized(): Load 01 output
-#   - load_master_data(): Load 02 output
-#   - load_cpn_final(): Load 04 output
-#   - load_cpn_template_original(): Load 03 ORIGINAL template
+# Template Utilities:
+#   - fill_readme_template()
 #
-# Path Generation (2 functions):
-#   - make_output_path(): Generate output path with timestamp
-#   - make_timestamped_output_path(): Generate timestamped result path
+# Operators:
+#   - %||%
 #
-# Template Utilities (1 function):
-#   - fill_readme_template(): Populate README template
+# REMOVED (moved to other modules):
+#   - log_message() -> logging.R
+#   - initialize_pipeline_log() -> logging.R
+#   - center_text() -> console.R
+#   - print_stage_header() -> console.R
+#   - print_stage_banner() -> console.R (deprecated - use print_workflow_summary)
+#   - print_workflow_summary() -> console.R
+#   - print_pipeline_complete() -> console.R
+#   - create_unified_species_column() -> standardization.R
 #
-# Console Formatting (5 functions):
-#   - center_text(): Center text in fixed width
-#   - print_stage_header(): Print stage number and title
-#   - print_stage_banner(): Print large stage banner with box
-#   - print_workflow_summary(): Print workflow completion summary
-#   - print_pipeline_complete(): Print final pipeline summary
-#
-# Orchestrator Helpers (3 functions):
-#   - store_stage_results(): Add stage outputs to result list
-#   - load_cpn_template(): Load and standardize CPN template
-#
-# Operators (1 function):
-#   - %||%: Null coalescing operator
-#
-# USAGE
-# -----
-# source("R/functions/core/utilities.R")
-# 
-# # Logging
-# initialize_pipeline_log()
-# log_message("Processing started")
-#
-# # File discovery
-# latest_csv <- find_most_recent_file("outputs", "^02_.*\\.csv$")
-# checkpoint <- find_most_recent_checkpoint("kpro_master")
-#
-# # Console formatting
-# print_stage_banner("FINALIZE CPN", verbose = TRUE)
-# print_stage_header("1", "Load Configuration", verbose = TRUE)
-#
-# # Orchestrator helpers
-# result <- list()
-# result <- store_stage_results(result, "finalize_cpn", outputs, validation_html)
-# template_result <- load_cpn_template(template_path, validation_context)
+# LEGACY FUNCTIONS REMOVED (replaced by orchestrator utilities):
+#   - load_or_checkpoint() -> use load_most_recent_checkpoint()
+#   - load_intro_standardized() -> use load_most_recent_checkpoint("01_intro_.*")
+#   - load_master_data() -> use load_most_recent_checkpoint("02_kpro_master_.*")
+#   - load_cpn_final() -> use load_most_recent_checkpoint("04_CallsPerNight_Final_.*")
+#   - load_cpn_template_original() -> use load_cpn_template() in callspernight.R
 #
 # CHANGELOG
 # ---------
+# 2026-02-04: MODULE SPLIT - Reduced file size for LLM compatibility
+#             - Moved logging functions to core/logging.R (2 functions)
+#             - Moved console formatting to core/console.R (4 functions)
+#             - Moved create_unified_species_column() to standardization/standardization.R
+#             - Added load_cpn_template() to analysis/callspernight.R
+#             - Removed legacy checkpoint loaders (use load_most_recent_checkpoint instead)
+#             - Updated header documentation
 # 2026-02-03: Added orchestrator helper functions to reduce redundancy
-#             - Added print_stage_banner() for major stage headers
-#             - Added find_most_recent_checkpoint() for checkpoint discovery
-#             - Added make_timestamped_output_path() for results/ output files
-#             - Added store_stage_results() for result list assembly
-#             - Added load_cpn_template() for template loading with deduplication
-# 2026-01-31: Added center_text() helper for banner formatting
-# 2025-12-29: Added load_cpn_template_original() for template loading
-# 2025-12-26: Initial CODING_STANDARDS compliant version
+# 2026-02-01: Changed find_most_recent_file() to read off of timestamp
+# 2026-01-31: Refactored for standards compliance
+# 2024-12-29: Initial CODING_STANDARDS compliant version
+#
 # =============================================================================
 
 
@@ -149,27 +129,26 @@
 #' Null Coalescing Operator
 #'
 #' @description
-#' Returns left-hand side if not NULL, otherwise returns right-hand side.
-#' Equivalent to `x %||% y` in rlang package.
+#' Returns left operand if not NULL, otherwise returns right operand.
+#' Useful for providing default values.
 #'
-#' @param x Value to check for NULL.
+#' @param x First value to test.
 #' @param y Default value if x is NULL.
 #'
-#' @return Either x or y.
+#' @return x if not NULL, otherwise y.
 #'
 #' @section CONTRACT:
-#' - Returns x if !is.null(x)
-#' - Returns y if is.null(x)
-#' - No side effects
+#' - Returns first non-NULL value
+#' - Evaluates y only if x is NULL
 #'
 #' @section DOES NOT:
-#' - Check for NA (only NULL)
-#' - Evaluate y unless needed (lazy evaluation)
+#' - Test for NA (only NULL)
+#' - Test for empty strings
 #'
 #' @examples
 #' \dontrun{
-#' config_value <- user_value %||% default_value
-#' timezone <- params$timezone %||% "America/Chicago"
+#' value <- NULL %||% "default"  # Returns "default"
+#' value <- "actual" %||% "default"  # Returns "actual"
 #' }
 #'
 #' @export
@@ -182,19 +161,21 @@
 # DIRECTORY MANAGEMENT
 # ==============================================================================
 
+
 #' Ensure Directory Exists
 #'
 #' @description
-#' Creates directory if it doesn't exist. Safe to call multiple times.
+#' Creates directory if it doesn't exist. Safe for repeated calls.
+#' Used internally by I/O functions to guarantee output directories are available.
 #'
 #' @param dir_path Character. Directory path to ensure exists.
 #'
-#' @return Invisible TRUE on success.
+#' @return Invisible TRUE.
 #'
 #' @section CONTRACT:
-#' - Creates directory if missing (including parent directories)
-#' - No-op if directory already exists
-#' - Messages when creating new directory
+#' - Creates directory with recursive = TRUE
+#' - Safe to call multiple times
+#' - Never errors if directory already exists
 #'
 #' @section DOES NOT:
 #' - Check write permissions
@@ -208,102 +189,9 @@
 #'
 #' @export
 ensure_dir_exists <- function(dir_path) {
-  
   if (!dir.exists(dir_path)) {
-    dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
-    message(sprintf("Created directory: %s", dir_path))
+    dir.create(dir_path, recursive = TRUE)
   }
-  
-  invisible(TRUE)
-}
-
-
-# ==============================================================================
-# LOGGING
-# ==============================================================================
-
-#' Log Message to Pipeline Log
-#'
-#' @description
-#' Appends timestamped message to pipeline log file. Creates log directory
-#' if needed. Always writes regardless of verbose parameter.
-#'
-#' @param message Character. Message to log.
-#' @param log_path Character. Path to log file. Default: "logs/pipeline_log.txt"
-#'
-#' @return Invisible TRUE.
-#'
-#' @section CONTRACT:
-#' - ALWAYS writes to log (not gated by verbose)
-#' - Creates log directory if needed
-#' - Appends to existing log (does not overwrite)
-#' - Timestamps each message
-#'
-#' @section DOES NOT:
-#' - Rotate logs
-#' - Clear old entries
-#' - Print to console
-#'
-#' @examples
-#' \dontrun{
-#' log_message("=== WORKFLOW 01: START ===")
-#' log_message("[Stage 1] Configuration loaded")
-#' }
-#'
-#' @export
-log_message <- function(message, log_path = "logs/pipeline_log.txt") {
-  
-  # Ensure log directory exists
-  ensure_dir_exists(dirname(log_path))
-  
-  # Create timestamped entry
-  timestamp <- format(Sys.time(), "[%Y-%m-%d %H:%M:%S]")
-  log_entry <- paste(timestamp, message)
-  
-  # Append to log
-  cat(log_entry, "\n", file = log_path, append = TRUE)
-  
-  invisible(TRUE)
-}
-
-
-#' Initialize Pipeline Log
-#'
-#' @description
-#' Writes a section header to the log file to mark start of new pipeline run.
-#' Call at start of each workflow script.
-#'
-#' @param log_path Character. Path to log file. Default: "logs/pipeline_log.txt"
-#'
-#' @return Invisible TRUE.
-#'
-#' @section CONTRACT:
-#' - Creates directories if needed
-#' - Appends header to existing log (does not clear)
-#' - Timestamps the run start
-#'
-#' @section DOES NOT:
-#' - Clear existing log
-#' - Rotate logs
-#' - Validate previous entries
-#'
-#' @export
-initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
-  
-  # Ensure log directory exists
-  ensure_dir_exists(dirname(log_path))
-  
-  # Write header
-  cat(
-    paste0(
-      "\n========================================\n",
-      "PIPELINE RUN: ", Sys.time(), "\n",
-      "========================================\n\n"
-    ),
-    file = log_path,
-    append = TRUE
-  )
-  
   invisible(TRUE)
 }
 
@@ -311,6 +199,7 @@ initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
 # ==============================================================================
 # SAFE I/O
 # ==============================================================================
+
 
 #' Safely Read a CSV File with Error Logging
 #'
@@ -327,19 +216,20 @@ initialize_pipeline_log <- function(log_path = "logs/pipeline_log.txt") {
 #' @return Tibble if read succeeds; NULL otherwise.
 #'
 #' @section CONTRACT:
-#' - Returns tibble on success
-#' - Returns NULL on failure (never stops execution)
-#' - Logs all errors to error_log.txt
-#' - Reads all columns as character by default
+#' - Reads all columns as character by default (preserves original data)
+#' - Returns NULL on failure instead of stopping execution
+#' - Logs read errors with timestamps
+#' - Suppresses readr's column type messages
+#' - Optional progress messages when verbose = TRUE
 #'
 #' @section DOES NOT:
-#' - Stop execution on errors
 #' - Guess column types
-#' - Skip malformed rows
+#' - Modify data values
+#' - Enforce schema requirements
 #'
 #' @examples
 #' \dontrun{
-#' df <- safe_read_csv("data/raw/detector_001.csv")
+#' df <- safe_read_csv("data/raw/detector_001.csv", verbose = TRUE)
 #' if (is.null(df)) {
 #'   warning("Failed to load file")
 #' }
@@ -351,68 +241,97 @@ safe_read_csv <- function(file_path,
                           verbose = FALSE,
                           ...) {
   
-  tryCatch({
-    # Read all columns as character to preserve original data
-    df <- readr::read_csv(
-      file_path,
-      col_types = readr::cols(.default = readr::col_character()),
-      ...
-    )
-    
-    if (verbose) {
-      message(sprintf("  [OK] Read %d rows from %s", nrow(df), basename(file_path)))
+  # Input validation
+  if (!is.character(file_path) || length(file_path) != 1) {
+    stop("file_path must be a single character string")
+  }
+  
+  if (!is.character(error_log_path) || length(error_log_path) != 1) {
+    stop("error_log_path must be a single character string")
+  }
+  
+  # Ensure log directory exists
+  ensure_dir_exists(dirname(error_log_path))
+  
+  # Progress message
+  if (verbose) {
+    message(sprintf("  Reading: %s", basename(file_path)))
+  }
+  
+  result <- NULL
+  
+  tryCatch(
+    {
+      result <- readr::read_csv(
+        file_path,
+        col_types = readr::cols(.default = readr::col_character()),
+        ...
+      )
+      
+      # Success message
+      if (!is.null(result) && verbose) {
+        message(sprintf("  [OK] Loaded %s rows", format(nrow(result), big.mark = ",")))
+      }
+    },
+    error = function(e) {
+      msg <- paste(Sys.time(), "-", file_path, "-", e$message)
+      writeLines(msg, error_log_path, useBytes = TRUE)
     }
-    
-    df
-    
-  }, error = function(e) {
-    
-    # Log error
-    ensure_dir_exists(dirname(error_log_path))
-    error_msg <- sprintf(
-      "[%s] Failed to read %s: %s\n",
-      Sys.time(),
-      file_path,
-      e$message
-    )
-    cat(error_msg, file = error_log_path, append = TRUE)
-    
-    if (verbose) {
-      warning(sprintf("Failed to read %s: %s", basename(file_path), e$message))
-    }
-    
-    NULL
-  })
+  )
+  
+  result
 }
 
 
 #' Convert Empty Strings to NA
 #'
 #' @description
-#' Converts empty strings ("") to NA across all columns in a data frame.
-#' Useful for cleaning imported CSV data.
+#' Replaces empty or whitespace-only strings with NA in selected columns.
+#' Useful for cleaning data after CSV import.
 #'
-#' @param df Data frame to clean.
+#' @param df Data frame.
+#' @param columns Character vector of column names to process.
 #'
-#' @return Data frame with empty strings replaced by NA.
+#' @return Data frame with empty strings replaced by NA in specified columns.
 #'
 #' @section CONTRACT:
 #' - Replaces "" with NA
-#' - Works on all character columns
-#' - Preserves column types
+#' - Trims whitespace before checking
+#' - Preserves non-empty strings
 #'
 #' @section DOES NOT:
-#' - Convert whitespace-only strings
-#' - Trim whitespace
-#' - Modify non-character columns
+#' - Modify columns not in 'columns' parameter
+#' - Remove rows
+#' - Change data types
+#'
+#' @examples
+#' \dontrun{
+#' df <- convert_empty_to_na(df, c("auto_id", "manual_id"))
+#' }
 #'
 #' @export
-convert_empty_to_na <- function(df) {
+convert_empty_to_na <- function(df, columns) {
+  
+  # Input validation
+  if (!is.data.frame(df)) {
+    stop("df must be a data frame")
+  }
+  
+  if (!is.character(columns)) {
+    stop("columns must be a character vector")
+  }
+  
+  missing_cols <- setdiff(columns, names(df))
+  if (length(missing_cols) > 0) {
+    stop(sprintf("Columns not found: %s", paste(missing_cols, collapse = ", ")))
+  }
+  
+  # Replace empty strings with NA
   df %>%
     dplyr::mutate(
       dplyr::across(
-        dplyr::where(is.character),
-        ~ dplyr::na_if(., "")
+        dplyr::all_of(columns),
+        ~ ifelse(trimws(.) == "", NA, .)
       )
     )
 }
@@ -422,38 +341,43 @@ convert_empty_to_na <- function(df) {
 # FILE DISCOVERY
 # ==============================================================================
 
-#' Find Most Recent File Matching Pattern
+
+#' Find Most Recent File Matching Pattern (by Filename Timestamp)
 #'
 #' @description
-#' Searches directory for files matching a regex pattern and returns
-#' the most recently modified one. Essential for loading checkpoint files.
+#' Searches a directory for files matching a regex pattern and returns the
+#' file with the most recent timestamp embedded in its filename.
 #'
-#' @param directory Character. Directory to search.
+#' @param directory Character. Directory to search (not recursive).
 #' @param pattern Character. Regex pattern to match filenames.
 #' @param error_if_none Logical. Stop with error if no files found? Default: TRUE
-#' @param hint Character or NULL. Hint message if no files found.
+#' @param hint Character or NULL. Hint message if no files found. Default: NULL
 #'
-#' @return Character. Full path to most recent matching file, or NULL if
-#'   none found and error_if_none = FALSE.
+#' @return Character. Full path to most recent file, or NULL if none found
+#'   and error_if_none = FALSE.
+#'
+#' @section Timestamp Extraction:
+#' Expects filenames with YYYYMMDD_HHMMSS timestamp near the end:
+#' - 02_kpro_master_20260201_180259.csv
+#' - 03_CallsPerNight_Template_20260201_180259_ORIGINAL.csv
 #'
 #' @section CONTRACT:
-#' - Returns single file path (most recent by mtime)
-#' - Stops if no matches found and error_if_none = TRUE
-#' - Returns NULL if no matches and error_if_none = FALSE
-#' - Pattern matches filename only (not full path)
+#' - Uses filename timestamps (not file modification time)
+#' - Deterministic across file systems
+#' - Returns full path with here::here()
+#' - Stops with actionable error if no files found and error_if_none = TRUE
 #'
 #' @section DOES NOT:
-#' - Search subdirectories
-#' - Validate file contents
-#' - Load the file
+#' - Use file modification times (unreliable across systems)
+#' - Create files
+#' - Modify directory contents
 #'
 #' @examples
 #' \dontrun{
-#' # Find most recent master file
-#' master_file <- find_most_recent_file(
-#'   "outputs",
-#'   "^02_kpro_master_.*\\.csv$",
-#'   hint = "Run 02_standardize.R first"
+#' latest <- find_most_recent_file(
+#'   directory = "outputs/checkpoints",
+#'   pattern = "^02_kpro_master_.*\\.csv$",
+#'   hint = "Run Chunk 1 first"
 #' )
 #' }
 #'
@@ -472,246 +396,209 @@ find_most_recent_file <- function(directory,
   
   if (length(matching_files) == 0) {
     if (error_if_none) {
-      hint_msg <- if (!is.null(hint)) {
-        sprintf("\n  Hint: %s", hint)
-      } else {
-        ""
-      }
+      hint_msg <- if (!is.null(hint)) sprintf("\n  Hint: %s", hint) else ""
+      stop(sprintf("No files matching '%s' found in %s%s", pattern, directory, hint_msg))
+    } else {
+      return(NULL)
+    }
+  }
+  
+  # Extract timestamps from filenames
+  basenames <- basename(matching_files)
+  timestamps <- sub(".*_(\\d{8}_\\d{6})(?:_.*?)?\\.\\w+$", "\\1", basenames)
+  
+  # Convert to POSIXct for proper datetime sorting
+  timestamps_dt <- lubridate::ymd_hms(timestamps, quiet = TRUE)
+  
+  # Filter out files where timestamp parsing failed
+  valid_idx <- !is.na(timestamps_dt)
+  
+  if (!any(valid_idx)) {
+    if (error_if_none) {
       stop(sprintf(
-        "No files matching '%s' found in %s%s",
-        pattern, directory, hint_msg
+        "No files with valid timestamps found matching '%s' in %s\n  Expected format: ..._YYYYMMDD_HHMMSS.ext",
+        pattern, directory
       ))
     } else {
       return(NULL)
     }
   }
   
-  # Sort by modification time (most recent first)
-  file_mtimes <- file.mtime(matching_files)
-  most_recent <- matching_files[order(file_mtimes, decreasing = TRUE)][1]
+  # Keep only valid timestamped files
+  matching_files <- matching_files[valid_idx]
+  timestamps_dt <- timestamps_dt[valid_idx]
+  
+  # Sort by actual datetime (descending - most recent first)
+  sorted_idx <- order(timestamps_dt, decreasing = TRUE)
+  most_recent <- matching_files[sorted_idx[1]]
   
   most_recent
 }
 
 
-#' Find Most Recent Checkpoint by Type
+# ==============================================================================
+# ORCHESTRATOR UTILITIES
+# ==============================================================================
+
+
+#' Setup Pipeline Context
 #'
 #' @description
-#' Discovers the most recent checkpoint file of specified type using
-#' standard naming patterns. Consolidates checkpoint discovery logic
-#' used across orchestrating functions.
+#' Consolidates the standard initialization pattern used by all orchestrating
+#' functions: load YAML config, create validation context, set up paths.
 #'
-#' Standards Reference: 01_architecture_standards.md §3.2
+#' @param workflow_name Character. Workflow identifier (e.g., "ingest")
 #'
-#' @param checkpoint_type Character. Type of checkpoint:
-#'   - "kpro_master": 02_kpro_master_YYYYMMDD_HHMMSS.csv
-#'   - "cpn_original": CallsPerNight_ORIGINAL_YYYYMMDD_HHMMSS.csv
-#'   - "cpn_edit": CallsPerNight_EDIT_THIS_YYYYMMDD_HHMMSS.csv
-#'   - "summary_rds": summary_data_YYYYMMDD.rds
-#'   - "plots_rds": plot_objects_YYYYMMDD.rds
-#' @param checkpoints_dir Character. Directory to search.
-#'   Default: here::here("outputs", "checkpoints")
-#' @param required Logical. Stop if not found (vs return NULL). Default: TRUE
-#'
-#' @return Character. Path to most recent checkpoint, or NULL if not found
-#'   and required = FALSE.
+#' @return Named list with yaml_path, study_params, validation_context,
+#'   checkpoint_dir, outputs_dir.
 #'
 #' @section CONTRACT:
-#' - Uses standardized checkpoint naming patterns
-#' - Returns most recent file (alphabetically last due to timestamp)
-#' - Stops with clear error if required = TRUE and not found
-#' - Returns NULL if required = FALSE and not found
+#' - Loads study_parameters.yaml from inst/config/
+#' - Creates validation context with workflow name
+#' - Returns standard paths (checkpoints, outputs)
+#' - Stops with actionable error if YAML not found
 #'
 #' @section DOES NOT:
-#' - Load the checkpoint file
-#' - Validate checkpoint contents
-#' - Search subdirectories
+#' - Create directories
+#' - Validate YAML structure (config.R handles this)
+#' - Write to log file (caller's responsibility)
 #'
 #' @examples
 #' \dontrun{
-#' # Find most recent master checkpoint (required)
-#' master_path <- find_most_recent_checkpoint("kpro_master")
-#'
-#' # Find most recent RDS (optional)
-#' rds_path <- find_most_recent_checkpoint("summary_rds", required = FALSE)
-#' if (is.null(rds_path)) {
-#'   message("No summary RDS found, will create new")
-#' }
+#' ctx <- setup_pipeline_context("ingest")
+#' study_name <- ctx$study_params$study_parameters$study_name
 #' }
 #'
 #' @export
-find_most_recent_checkpoint <- function(checkpoint_type,
-                                        checkpoints_dir = here::here("outputs", "checkpoints"),
-                                        required = TRUE) {
+setup_pipeline_context <- function(workflow_name) {
   
-  # Define patterns for each checkpoint type
-  patterns <- list(
-    kpro_master = "^02_kpro_master_\\d{8}_\\d{6}\\.csv$",
-    cpn_original = "^CallsPerNight_ORIGINAL_\\d{8}_\\d{6}\\.csv$",
-    cpn_edit = "^CallsPerNight_EDIT_THIS_\\d{8}_\\d{6}\\.csv$",
-    summary_rds = "^summary_data_\\d{8}\\.rds$",
-    plots_rds = "^plot_objects_\\d{8}\\.rds$"
-  )
+  # Standard paths - FIXED by project structure
+  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
+  checkpoint_dir <- here::here("outputs", "checkpoints")
+  outputs_dir <- here::here("outputs")
   
-  if (!checkpoint_type %in% names(patterns)) {
-    stop(sprintf("Unknown checkpoint_type: '%s'. Valid types: %s",
-                 checkpoint_type,
-                 paste(names(patterns), collapse = ", ")))
+  # Assert YAML exists
+  if (!file.exists(yaml_path)) {
+    stop(sprintf(
+      "Configuration file not found: %s\n  Configure study parameters in Shiny app first.",
+      yaml_path
+    ))
   }
   
-  # Search for files
-  files <- list.files(
-    checkpoints_dir,
-    pattern = patterns[[checkpoint_type]],
-    full.names = TRUE
+  # Load configuration (requires load_study_parameters from config.R)
+  study_params <- load_study_parameters(yaml_path)
+  
+  # Create validation context (requires create_validation_context from validation.R)
+  validation_context <- create_validation_context(workflow = workflow_name)
+  validation_context$study_name <- study_params$study_parameters$study_name
+  
+  list(
+    yaml_path = yaml_path,
+    study_params = study_params,
+    validation_context = validation_context,
+    checkpoint_dir = checkpoint_dir,
+    outputs_dir = outputs_dir
   )
-  
-  if (length(files) == 0) {
-    if (required) {
-      stop(sprintf("No %s checkpoint found in %s\n  Run previous pipeline stages first.",
-                   checkpoint_type, checkpoints_dir))
-    }
-    return(NULL)
-  }
-  
-  # Return most recent (last in alphabetical order due to timestamp)
-  files[length(files)]
 }
 
 
-# ==============================================================================
-# CHECKPOINT MANAGEMENT
-# ==============================================================================
-
-#' Load Data from Memory or Checkpoint
+#' Load Most Recent Checkpoint
 #'
 #' @description
-#' Standard pattern for workflows: use data from memory if available,
-#' otherwise load from most recent checkpoint file. Messages indicate
-#' data source.
+#' Discovers and loads the most recent checkpoint file matching a pattern.
+#' Replaces legacy checkpoint loaders with a generic pattern-based approach.
 #'
-#' @param var_name Character. Name of variable to check in global environment.
-#' @param checkpoint_dir Character. Directory containing checkpoint files.
-#' @param checkpoint_pattern Character. Regex pattern for checkpoint files.
-#' @param loader_fn Function. Function to load file. Default: safe_read_csv
-#' @param hint Character or NULL. Hint if checkpoint not found.
+#' @param pattern Character. Regex pattern for filename matching.
 #'
-#' @return Data from memory or loaded from checkpoint.
+#' @return Tibble loaded from most recent checkpoint file.
 #'
 #' @section CONTRACT:
-#' - Checks global environment first
-#' - Falls back to most recent checkpoint
-#' - Messages source (memory vs file)
-#' - Stops if neither available
+#' - Searches outputs/checkpoints/ directory
+#' - Uses filename timestamps for "most recent" determination
+#' - Returns tibble with all columns as character
+#' - Stops with actionable error if no files found
 #'
 #' @section DOES NOT:
-#' - Modify the data
+#' - Convert column types (caller's responsibility)
 #' - Validate data structure
-#' - Create checkpoints
+#' - Create directories
+#'
+#' @examples
+#' \dontrun{
+#' # Load most recent kpro_master
+#' kpro_master <- load_most_recent_checkpoint("^02_kpro_master_.*\\.csv$")
+#'
+#' # Load most recent CPN final
+#' cpn_final <- load_most_recent_checkpoint("^04_CallsPerNight_Final_.*\\.csv$")
+#' }
 #'
 #' @export
-load_or_checkpoint <- function(var_name,
-                               checkpoint_dir,
-                               checkpoint_pattern,
-                               loader_fn = safe_read_csv,
-                               hint = NULL) {
+load_most_recent_checkpoint <- function(pattern) {
   
-  # Check if variable exists in global environment
-  if (exists(var_name, envir = .GlobalEnv)) {
-    message(sprintf("Using %s from R environment", var_name))
-    return(get(var_name, envir = .GlobalEnv))
+  checkpoint_dir <- here::here("outputs", "checkpoints")
+  
+  if (!dir.exists(checkpoint_dir)) {
+    stop(sprintf("Checkpoint directory not found: %s\n  Run previous chunk first.", checkpoint_dir))
   }
   
-  # Load from checkpoint
-  message(sprintf("Loading %s from checkpoint...", var_name))
-  checkpoint_path <- find_most_recent_file(
-    checkpoint_dir,
-    checkpoint_pattern,
-    hint = hint
-  )
+  files <- list.files(checkpoint_dir, pattern = pattern, full.names = TRUE)
   
-  loader_fn(checkpoint_path)
+  if (length(files) == 0) {
+    stop(sprintf(
+      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  Run previous chunk first.",
+      pattern, checkpoint_dir
+    ))
+  }
+  
+  # Get most recent (last in sorted list)
+  most_recent <- files[length(files)]
+  
+  safe_read_csv(most_recent)
 }
 
 
-#' Load Intro-Standardized Data (Workflow 01 Output)
+#' Generate Timestamped Filename
 #'
 #' @description
-#' Convenience wrapper for loading intro-standardized data from
-#' Workflow 01 checkpoint.
+#' Generates a filename with embedded timestamp in YYYYMMDD_HHMMSS format.
+#' Used by orchestrating functions for consistent checkpoint naming.
 #'
-#' @param checkpoint_dir Character. Checkpoint directory. Default: "outputs/checkpoints"
+#' @param prefix Character. Filename prefix (e.g., "02_kpro_master")
+#' @param suffix Character. Optional suffix before extension. Default: ""
 #'
-#' @return Tibble with intro-standardized data.
+#' @return Character. Formatted filename string with .csv extension.
 #'
-#' @export
-load_intro_standardized <- function(checkpoint_dir = "outputs/checkpoints") {
-  load_or_checkpoint(
-    var_name = "raw_combined",
-    checkpoint_dir = checkpoint_dir,
-    checkpoint_pattern = "^01_intro_standardized_.*\\.csv$",
-    hint = "Run 01_ingest_raw_data.R first"
-  )
-}
-
-
-#' Load Master Data (Workflow 02 Output)
+#' @section CONTRACT:
+#' - Timestamp format: YYYYMMDD_HHMMSS
+#' - Pattern: {prefix}_{timestamp}_{suffix}.csv
+#' - Returns filename only (not full path)
 #'
-#' @description
-#' Convenience wrapper for loading master data from Workflow 02 checkpoint.
+#' @section DOES NOT:
+#' - Create the file
+#' - Include directory path
+#' - Validate prefix format
 #'
-#' @param checkpoint_dir Character. Checkpoint directory. Default: "outputs/checkpoints"
+#' @examples
+#' \dontrun{
+#' filename <- generate_timestamped_filename("02_kpro_master")
+#' # Returns: "02_kpro_master_20260204_143022.csv"
 #'
-#' @return Tibble with master data.
-#'
-#' @export
-load_master_data <- function(checkpoint_dir = "outputs/checkpoints") {
-  load_or_checkpoint(
-    var_name = "kpro_master",
-    checkpoint_dir = checkpoint_dir,
-    checkpoint_pattern = "^02_kpro_master_.*\\.csv$",
-    hint = "Run 02_standardize.R first"
-  )
-}
-
-
-#' Load Finalized CallsPerNight Data (Workflow 04 Output)
-#'
-#' @description
-#' Convenience wrapper for loading finalized CPN data from Workflow 04.
-#'
-#' @param checkpoint_dir Character. Checkpoint directory. Default: "outputs/checkpoints"
-#'
-#' @return Tibble with finalized CallsPerNight data.
+#' filename <- generate_timestamped_filename("03_CallsPerNight_Template", "ORIGINAL")
+#' # Returns: "03_CallsPerNight_Template_20260204_143022_ORIGINAL.csv"
+#' }
 #'
 #' @export
-load_cpn_final <- function(checkpoint_dir = "outputs/checkpoints") {
-  load_or_checkpoint(
-    var_name = "calls_per_night_final",
-    checkpoint_dir = checkpoint_dir,
-    checkpoint_pattern = "^04_CallsPerNight_Final_.*\\.csv$",
-    hint = "Run 04_finalize_cpn.R first"
-  )
-}
-
-
-#' Load Original CallsPerNight Template (Workflow 03 Output)
-#'
-#' @description
-#' Convenience wrapper for loading ORIGINAL template from Workflow 03.
-#'
-#' @param checkpoint_dir Character. Checkpoint directory. Default: "outputs/checkpoints"
-#'
-#' @return Tibble with original CPN template.
-#'
-#' @export
-load_cpn_template_original <- function(checkpoint_dir = "outputs/checkpoints") {
-  load_or_checkpoint(
-    var_name = "calls_per_night_original",
-    checkpoint_dir = checkpoint_dir,
-    checkpoint_pattern = "^CallsPerNight_ORIGINAL_.*\\.csv$",
-    hint = "Run 03_generate_cpn_template.R first"
-  )
+generate_timestamped_filename <- function(prefix, suffix = "") {
+  
+  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  parts <- c(prefix, timestamp)
+  
+  if (!is.null(suffix) && nchar(suffix) > 0) {
+    parts <- c(parts, suffix)
+  }
+  
+  base_name <- paste(parts, collapse = "_")
+  paste0(base_name, ".csv")
 }
 
 
@@ -719,18 +606,18 @@ load_cpn_template_original <- function(checkpoint_dir = "outputs/checkpoints") {
 # PATH GENERATION
 # ==============================================================================
 
-#' Generate Output Path with Timestamp
+
+#' Generate Timestamped Output Path
 #'
 #' @description
-#' Creates output file path with timestamp. Standard pattern for
-#' saving workflow outputs.
+#' Creates an output file path with workflow prefix and timestamp.
 #'
-#' @param workflow_num Character. Workflow number (e.g., "01", "02").
-#' @param base_name Character. Base filename.
+#' @param workflow_num Character. Workflow number (e.g., "02", "04").
+#' @param base_name Character. Base name for file.
 #' @param extension Character. File extension. Default: "csv"
 #' @param output_dir Character. Output directory. Default: "outputs"
 #'
-#' @return Character. Full file path with timestamp.
+#' @return Character. Full file path string.
 #'
 #' @section CONTRACT:
 #' - Includes workflow number prefix
@@ -745,7 +632,7 @@ load_cpn_template_original <- function(checkpoint_dir = "outputs/checkpoints") {
 #' @examples
 #' \dontrun{
 #' path <- make_output_path("01", "intro_standardized")
-#' # Returns: "outputs/01_intro_standardized_20250203_141530.csv"
+#' # Returns: "outputs/01_intro_standardized_20260204_141530.csv"
 #' }
 #'
 #' @export
@@ -756,65 +643,66 @@ make_output_path <- function(workflow_num,
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   filename <- sprintf("%s_%s_%s.%s", workflow_num, base_name, timestamp, extension)
+  
   file.path(output_dir, filename)
 }
 
 
-#' Generate Timestamped Output Path in results/
+#' Generate Versioned Output Path (Auto-Increment)
 #'
 #' @description
-#' Creates timestamped file path in results/ directory structure.
-#' Used for final deliverables (vs checkpoints in outputs/).
+#' Creates output path with auto-incrementing version number.
 #'
-#' Standards Reference: 01_architecture_standards.md §2.1
+#' @param workflow_num Character. Workflow number.
+#' @param base_name Character. Base name for file.
+#' @param extension Character. File extension. Default: "csv"
+#' @param output_dir Character. Output directory. Default: "outputs"
 #'
-#' @param base_name Character. Base filename without extension.
-#' @param output_subdir Character. Subdirectory in results/ (e.g., "csv", "rds", "reports").
-#' @param extension Character. File extension without dot (e.g., "csv", "rds", "html").
-#' @param include_time Logical. Include HHMMSS in timestamp? Default: FALSE
-#'
-#' @return Character. Full path with here::here().
+#' @return Character. Full file path string with version number.
 #'
 #' @section CONTRACT:
-#' - Uses results/ directory (not outputs/)
-#' - Timestamp format: YYYYMMDD or YYYYMMDD_HHMMSS
-#' - Returns path only (does not create file/directory)
-#' - Uses here::here() for reproducibility
+#' - Scans output_dir for existing versions
+#' - Increments to next available version number
+#' - Returns path only (does not create file)
 #'
 #' @section DOES NOT:
 #' - Create directories
-#' - Check if file exists
-#' - Version the file (use save_callspernight_with_version for versioning)
+#' - Validate existing files
+#' - Check if returned path exists
 #'
 #' @examples
 #' \dontrun{
-#' # Date-only timestamp (typical for RDS files)
-#' path <- make_timestamped_output_path("summary_data", "rds", "rds")
-#' # Returns: "results/rds/summary_data_20250203.rds"
-#'
-#' # Include time (typical for CSV outputs)
-#' path <- make_timestamped_output_path("CallsPerNight_final", "csv", "csv", 
-#'                                     include_time = TRUE)
-#' # Returns: "results/csv/CallsPerNight_final_20250203_141530.csv"
+#' path <- make_versioned_path("04", "CallsPerNight_final", "csv", "results/csv")
+#' # Returns: "results/csv/04_CallsPerNight_final_v1.csv"
+#' # Next call returns v2, then v3, etc.
 #' }
 #'
 #' @export
-make_timestamped_output_path <- function(base_name,
-                                         output_subdir,
-                                         extension,
-                                         include_time = FALSE) {
+make_versioned_path <- function(workflow_num,
+                                base_name,
+                                extension = "csv",
+                                output_dir = "outputs") {
   
-  timestamp_format <- if (include_time) "%Y%m%d_%H%M%S" else "%Y%m%d"
-  timestamp <- format(Sys.time(), timestamp_format)
+  pattern <- sprintf("^%s_%s_v(\\d+)\\.%s$", workflow_num, base_name, extension)
+  existing <- list.files(output_dir, pattern = pattern)
   
-  filename <- sprintf("%s_%s.%s", base_name, timestamp, extension)
-  here::here("results", output_subdir, filename)
+  if (length(existing) == 0) {
+    next_version <- 1
+  } else {
+    versions <- as.integer(sub(pattern, "\\1", existing))
+    next_version <- max(versions) + 1
+  }
+  
+  filename <- sprintf("%s_%s_v%d.%s", workflow_num, base_name, next_version, extension)
+  
+  file.path(output_dir, filename)
 }
 
 
 # ==============================================================================
 # TEMPLATE UTILITIES
 # ==============================================================================
+
 
 #' Fill README Template
 #'
@@ -839,6 +727,16 @@ make_timestamped_output_path <- function(base_name,
 #' - Check parameter completeness
 #' - Append to existing file
 #'
+#' @examples
+#' \dontrun{
+#' fill_readme_template(
+#'   template_path = "templates/README_template.md",
+#'   output_path = "results/releases/README.md",
+#'   parameters = study_params,
+#'   log_path = "logs/pipeline_log.txt"
+#' )
+#' }
+#'
 #' @export
 fill_readme_template <- function(template_path,
                                  output_path,
@@ -850,21 +748,9 @@ fill_readme_template <- function(template_path,
   
   # Replace placeholders
   filled_text <- template_text
-  filled_text <- gsub("{{STUDY_NAME}}", 
-                      parameters$study_parameters$study_name %||% "Unknown",
-                      filled_text)
-  filled_text <- gsub("{{START_DATE}}",
-                      parameters$study_parameters$start_date %||% "Unknown",
-                      filled_text)
-  filled_text <- gsub("{{END_DATE}}",
-                      parameters$study_parameters$end_date %||% "Unknown",
-                      filled_text)
-  filled_text <- gsub("{{TIMEZONE}}",
-                      parameters$study_parameters$timezone %||% "Unknown",
-                      filled_text)
-  filled_text <- gsub("{{TIMESTAMP}}",
-                      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-                      filled_text)
+  filled_text <- gsub("{{STUDY_NAME}}", parameters$study_parameters$study_name, filled_text)
+  filled_text <- gsub("{{TIMEZONE}}", parameters$study_parameters$timezone, filled_text)
+  filled_text <- gsub("{{CUTOFF_HOUR}}", parameters$study_parameters$cutoff_hour, filled_text)
   
   # Ensure output directory exists
   ensure_dir_exists(dirname(output_path))
@@ -874,426 +760,3 @@ fill_readme_template <- function(template_path,
   
   invisible(TRUE)
 }
-
-
-# ==============================================================================
-# CONSOLE FORMATTING
-# ==============================================================================
-
-#' Center Text in Fixed Width
-#'
-#' @description
-#' Centers text within fixed width by padding with spaces on both sides.
-#' Helper for print_stage_banner().
-#'
-#' @param text Character. Text to center.
-#' @param width Integer. Total width for centering. Default: 63
-#'
-#' @return Character. Centered text with padding.
-#'
-#' @section CONTRACT:
-#' - Pads with spaces to reach exact width
-#' - Truncates text if longer than width
-#' - Left-aligns if perfect centering impossible
-#'
-#' @section DOES NOT:
-#' - Add line breaks
-#' - Validate text encoding
-#'
-#' @examples
-#' \dontrun{
-#' centered <- center_text("FINALIZE CPN", width = 63)
-#' # Returns: "                        FINALIZE CPN                         "
-#' }
-#'
-#' @export
-center_text <- function(text, width = 63) {
-  
-  text_width <- nchar(text)
-  
-  if (text_width >= width) {
-    return(substr(text, 1, width))
-  }
-  
-  left_pad <- floor((width - text_width) / 2)
-  right_pad <- width - text_width - left_pad
-  
-  sprintf("%s%s%s",
-          strrep(" ", left_pad),
-          text,
-          strrep(" ", right_pad))
-}
-
-
-#' Print Stage Number and Title
-#'
-#' @description
-#' Prints small stage header (e.g., "Stage 1: Load Configuration").
-#' Used for numbered stages within major pipeline sections.
-#'
-#' @param stage_num Character. Stage number (e.g., "1", "2a").
-#' @param stage_title Character. Stage title.
-#' @param verbose Logical. Print to console? Default: TRUE
-#'
-#' @return Invisible NULL.
-#'
-#' @section CONTRACT:
-#' - Only prints if verbose = TRUE
-#' - Uses consistent formatting
-#' - No logging (console only)
-#'
-#' @section DOES NOT:
-#' - Log to file
-#' - Print if verbose = FALSE
-#'
-#' @examples
-#' \dontrun{
-#' print_stage_header("1", "Load Configuration", verbose = TRUE)
-#' # Prints: "--- Stage 1: Load Configuration ---"
-#' }
-#'
-#' @export
-print_stage_header <- function(stage_num, stage_title, verbose = TRUE) {
-  
-  if (verbose) {
-    message(sprintf("--- Stage %s: %s ---", stage_num, stage_title))
-  }
-  
-  invisible(NULL)
-}
-
-
-#' Print Large Stage Banner
-#'
-#' @description
-#' Prints large box banner for major pipeline stages (Finalize CPN,
-#' Summary Stats, Plotting, Report & Release). Consolidates banner
-#' printing logic used across orchestrating functions.
-#'
-#' Standards Reference: 05_logging_console_standards.md §2.3
-#'
-#' @param stage_name Character. Name of stage (e.g., "FINALIZE CPN",
-#'   "SUMMARY STATISTICS"). Will be centered in box.
-#' @param verbose Logical. Print to console? Default: FALSE
-#'
-#' @return Invisible NULL. Side effect: prints banner and logs message.
-#'
-#' @section CONTRACT:
-#' - Only prints to console if verbose = TRUE
-#' - ALWAYS logs to file via log_message() (regardless of verbose)
-#' - Centers stage name in 63-character box
-#' - Uses Unicode box-drawing characters
-#'
-#' @section DOES NOT:
-#' - Skip logging (always logs even if verbose = FALSE)
-#' - Print stage details (only the banner)
-#' - Accept custom box characters
-#'
-#' @examples
-#' \dontrun{
-#' print_stage_banner("FINALIZE CPN", verbose = TRUE)
-#' # Prints:
-#' #
-#' # ╔═══════════════════════════════════════════════════════════════╗
-#' # ║                        FINALIZE CPN                         ║
-#' # ╚═══════════════════════════════════════════════════════════════╝
-#' #
-#' # Also logs: "=== FINALIZE CPN: START ==="
-#' }
-#'
-#' @export
-print_stage_banner <- function(stage_name, verbose = FALSE) {
-  
-  if (verbose) {
-    message("\n")
-    message("╔═══════════════════════════════════════════════════════════════╗")
-    message(sprintf("║%s║", center_text(stage_name, width = 63)))
-    message("╚═══════════════════════════════════════════════════════════════╝")
-    message("")
-  }
-  
-  # Always log (regardless of verbose)
-  log_message(sprintf("=== %s: START ===", toupper(stage_name)))
-  
-  invisible(NULL)
-}
-
-
-#' Print Workflow Summary
-#'
-#' @description
-#' Prints completion summary for a workflow with key statistics.
-#'
-#' @param workflow_name Character. Workflow name.
-#' @param duration_sec Numeric. Execution time in seconds.
-#' @param summary_stats List. Named list of summary statistics to display.
-#'
-#' @return Invisible NULL.
-#'
-#' @section CONTRACT:
-#' - Prints formatted box with statistics
-#' - Duration shown in seconds with 1 decimal place
-#' - Each stat on its own line
-#'
-#' @section DOES NOT:
-#' - Log to file (console only)
-#' - Calculate statistics
-#' - Validate inputs
-#'
-#' @export
-print_workflow_summary <- function(workflow_name, duration_sec, summary_stats) {
-  
-  message("\n")
-  message("╔═══════════════════════════════════════════════════════════════╗")
-  message(sprintf("║  WORKFLOW COMPLETE: %-40s ║", workflow_name))
-  message("╚═══════════════════════════════════════════════════════════════╝")
-  message("")
-  message(sprintf("  Duration: %.1f seconds", duration_sec))
-  
-  for (stat_name in names(summary_stats)) {
-    message(sprintf("  %s: %s", stat_name, summary_stats[[stat_name]]))
-  }
-  
-  message("")
-  
-  invisible(NULL)
-}
-
-
-#' Print Pipeline Complete Banner
-#'
-#' @description
-#' Prints final pipeline completion banner with overall statistics.
-#'
-#' @param total_duration_sec Numeric. Total pipeline duration in seconds.
-#' @param summary_stats List. Named list of summary statistics.
-#'
-#' @return Invisible NULL.
-#'
-#' @section CONTRACT:
-#' - Prints large completion banner
-#' - Shows total duration and key metrics
-#' - Always prints (not gated by verbose)
-#'
-#' @section DOES NOT:
-#' - Log to file
-#' - Calculate statistics
-#'
-#' @export
-print_pipeline_complete <- function(total_duration_sec, summary_stats) {
-  
-  message("\n")
-  message("╔═══════════════════════════════════════════════════════════════╗")
-  message("║           PIPELINE COMPLETE - ALL STAGES FINISHED           ║")
-  message("╚═══════════════════════════════════════════════════════════════╝")
-  message("")
-  message(sprintf("  Total Duration: %.1f seconds", total_duration_sec))
-  
-  for (stat_name in names(summary_stats)) {
-    message(sprintf("  %s: %s", stat_name, summary_stats[[stat_name]]))
-  }
-  
-  message("")
-  message("╚═══════════════════════════════════════════════════════════════╝")
-  message("")
-  
-  invisible(NULL)
-}
-
-
-# ==============================================================================
-# ORCHESTRATOR HELPER FUNCTIONS
-# ==============================================================================
-
-#' Store Stage Results in Master Result List
-#'
-#' @description
-#' Adds stage outputs to result list with validation tracking. Consolidates
-#' the result storage pattern used across all orchestrating functions.
-#' Reduces ~10 lines of boilerplate per stage.
-#'
-#' Standards Reference: 01_architecture_standards.md §4.2
-#'
-#' @param result_list List. Master result list being built (passed by reference).
-#' @param stage_key Character. Key for this stage (e.g., "finalize_cpn",
-#'   "summary_stats", "plotting", "report_release").
-#' @param stage_outputs List. Stage-specific outputs to store.
-#' @param validation_html Character. Path to validation HTML file for this stage.
-#'
-#' @return List. Updated result list with stage outputs and validation tracking.
-#'
-#' @section CONTRACT:
-#' - Adds validation_report to stage_outputs automatically
-#' - Stores complete stage outputs under stage_key
-#' - Appends validation HTML to validation_html_paths vector
-#' - Returns updated result list (functional style)
-#'
-#' @section DOES NOT:
-#' - Validate stage_outputs structure
-#' - Check if stage_key already exists
-#' - Create validation HTML (must be provided)
-#' - Log the storage operation
-#'
-#' @examples
-#' \dontrun{
-#' result <- list(validation_html_paths = character())
-#'
-#' # Store Finalize CPN results
-#' finalize_outputs <- list(
-#'   calls_per_night_final = cpn_final,
-#'   cpn_file = cpn_path,
-#'   total_edits = 5
-#' )
-#' result <- store_stage_results(result, "finalize_cpn", 
-#'                               finalize_outputs, validation_html)
-#' }
-#'
-#' @export
-store_stage_results <- function(result_list,
-                                stage_key,
-                                stage_outputs,
-                                validation_html) {
-  
-  # Add validation report to outputs
-  stage_outputs$validation_report <- validation_html
-  
-  # Store stage results under stage key
-  result_list[[stage_key]] <- stage_outputs
-  
-  # Track validation HTML path
-  result_list$validation_html_paths <- c(
-    result_list$validation_html_paths,
-    validation_html
-  )
-  
-  result_list
-}
-
-
-#' Load and Standardize CPN Template
-#'
-#' @description
-#' Loads CPN template CSV (ORIGINAL or EDIT_THIS), applies deduplication,
-#' standardizes data types, and optionally tracks changes in validation context.
-#' Consolidates template loading logic used in Finalize CPN stage.
-#' Eliminates ~80 lines of duplicate code.
-#'
-#' Standards Reference: 04_data_standards.md §4.1
-#'
-#' @param template_path Character. Path to template CSV file.
-#' @param validation_context List or NULL. Validation context to log events.
-#'   If NULL, deduplication is not logged. Default: NULL
-#' @param verbose Logical. Print progress messages? Default: FALSE
-#'
-#' @return List with three elements:
-#'   \describe{
-#'     \item{template}{Tibble. Cleaned and standardized template data}
-#'     \item{validation_context}{Updated validation context (if provided)}
-#'     \item{n_duplicates}{Integer. Number of duplicate rows removed}
-#'   }
-#'
-#' @section CONTRACT:
-#' - Reads CSV with safe_read_csv()
-#' - Removes exact duplicates (Detector + Night)
-#' - Converts Night to Date with format "%m-%d-%y"
-#' - Converts CallsPerNight and RecordingHours to numeric
-#' - Converts StartDateTime and EndDateTime to POSIXct (if present)
-#' - Logs deduplication to validation context (if provided)
-#' - Returns standardized tibble ready for use
-#'
-#' @section DOES NOT:
-#' - Validate template completeness
-#' - Calculate RecordingHours (preserves existing values)
-#' - Classify Status (that happens in next stage)
-#' - Stop on missing columns (handles gracefully)
-#'
-#' @examples
-#' \dontrun{
-#' # Load ORIGINAL template with validation tracking
-#' result <- load_cpn_template(
-#'   "outputs/checkpoints/CallsPerNight_ORIGINAL_20250203_141530.csv",
-#'   validation_context = validation_context_finalize_cpn,
-#'   verbose = TRUE
-#' )
-#' template_original <- result$template
-#' validation_context_finalize_cpn <- result$validation_context
-#'
-#' # Load EDIT_THIS template without validation
-#' result <- load_cpn_template(
-#'   "outputs/checkpoints/CallsPerNight_EDIT_THIS_20250203_141530.csv",
-#'   verbose = TRUE
-#' )
-#' template_edited <- result$template
-#' }
-#'
-#' @export
-load_cpn_template <- function(template_path,
-                              validation_context = NULL,
-                              verbose = FALSE) {
-  
-  # Load CSV
-  template <- safe_read_csv(template_path, na = c("", "NA"), verbose = verbose)
-  
-  if (is.null(template)) {
-    stop(sprintf("Failed to load template: %s", template_path))
-  }
-  
-  nrow_before <- nrow(template)
-  
-  # Deduplicate by Detector + Night
-  template <- template %>%
-    dplyr::distinct(Detector, Night, .keep_all = TRUE)
-  
-  n_duplicates <- nrow_before - nrow(template)
-  
-  if (verbose && n_duplicates > 0) {
-    message(sprintf("  [!] Removed %d duplicate rows", n_duplicates))
-  }
-  
-  # Standardize data types
-  template <- template %>%
-    dplyr::mutate(
-      # Parse Night with explicit format (CRITICAL: prevents date parsing failures)
-      Night = as.Date(Night, format = "%m-%d-%y"),
-      
-      # Convert to numeric
-      CallsPerNight = as.numeric(CallsPerNight),
-      
-      # Safe RecordingHours conversion (handle empty strings)
-      RecordingHours = dplyr::if_else(
-        RecordingHours == "" | is.na(RecordingHours),
-        NA_real_,
-        as.numeric(RecordingHours)
-      )
-    )
-  
-  # Convert datetime columns if present
-  if ("StartDateTime" %in% names(template)) {
-    template <- template %>%
-      dplyr::mutate(
-        StartDateTime = lubridate::ymd_hms(StartDateTime, quiet = TRUE),
-        EndDateTime = lubridate::ymd_hms(EndDateTime, quiet = TRUE)
-      )
-  }
-  
-  # Log deduplication if validation context provided
-  if (!is.null(validation_context) && n_duplicates > 0) {
-    validation_context <- log_validation_event(
-      validation_context,
-      event_type = "data_cleaning",
-      description = sprintf("Template deduplication (%s)", basename(template_path)),
-      count = n_duplicates
-    )
-  }
-  
-  list(
-    template = template,
-    validation_context = validation_context,
-    n_duplicates = n_duplicates
-  )
-}
-
-
-# ==============================================================================
-# END OF UTILITIES MODULE
-# ==============================================================================

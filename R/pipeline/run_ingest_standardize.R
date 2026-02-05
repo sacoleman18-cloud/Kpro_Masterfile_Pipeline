@@ -196,10 +196,12 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # SETUP
   # ===========================================================================
   
+  print_stage_banner("INGEST & STANDARDIZE", verbose = verbose)
+  
   log_message("=== CHUNK 1: Ingest & Standardize - START ===")
   
   # Initialize validation context
-  validation_context <- create_validation_context(workflow = "ingest")
+  validation_context <- init_stage_validation("ingest", study_params = NULL)
   
   # Standard paths (not configurable - derived from project structure)
   raw_data_dir <- here::here("data", "raw")
@@ -213,7 +215,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
   ctx <- setup_pipeline_context("ingest")
   study_params <- ctx$study_params
-  validation_context <- ctx$validation_context
+  validation_context <- init_stage_validation("ingest", study_params)
   yaml_path <- ctx$yaml_path
   checkpoint_dir <- ctx$checkpoint_dir
   outputs_dir <- ctx$outputs_dir
@@ -755,14 +757,13 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # -------------------------
   
   validation_dir <- here::here("results", "validation")
-  assert_directory_exists(validation_dir, create = TRUE)
   
-  validation_html_path <- finalize_validation_report(
+  validation_html_path <- complete_stage_validation(
     validation_context,
-    output_dir = validation_dir
+    validation_dir = validation_dir,
+    stage_name = "INGEST & STANDARDIZE",
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Validation report: %s", basename(validation_html_path)))
   
   log_message(sprintf("[Stage 8] Registered artifact: %s", artifact_id))
   log_message(sprintf("[Stage 8] Validation report: %s", basename(validation_html_path)))
@@ -788,9 +789,13 @@ run_ingest_standardize <- function(verbose = FALSE) {
     message("========================================\n")
   }
   
-  list(
+  result <- list(
+    validation_html_paths = character()
+  )
+  
+  # Stage key: ingest_standardize
+  stage_outputs <- list(
     kpro_master = kpro_master,
-    
     metadata = list(
       n_rows = nrow(kpro_master),
       n_detectors = n_detectors,
@@ -815,11 +820,18 @@ run_ingest_standardize <- function(verbose = FALSE) {
         external_rows = n_external
       )
     ),
-    
     artifact_id = artifact_id,
-    checkpoint_path = checkpoint_path,
-    validation_html_path = validation_html_path
+    checkpoint_path = checkpoint_path
   )
+  
+  result <- store_stage_results(
+    result,
+    stage_key = "ingest_standardize",
+    stage_outputs = stage_outputs,
+    validation_html = validation_html_path
+  )
+  
+  result
 }
 
 

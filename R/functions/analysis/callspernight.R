@@ -4,7 +4,8 @@
 # PURPOSE
 # -------
 # Generates CallsPerNight templates, handles user edits, calculates recording
-# hours and CallsPerHour metrics.
+# hours and CallsPerHour metrics, and provides template loading for finalization
+# workflows.
 #
 # RECORDING HOURS CONTRACT
 # ------------------------
@@ -35,16 +36,24 @@
 #    - Calculates CallsPerHour = CallsPerNight / RecordingHours
 #    - Saves with auto-incrementing version (v1, v2, v3...)
 #
+# 6. Template loading
+#    - Discovers and loads most recent template files (ORIGINAL or EDIT_THIS)
+#    - Pattern-based file discovery with timestamp sorting
+#    - Used by run_finalize_to_report() orchestrating function
+#
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
 #   - Validate data quality beyond template structure (validation/)
 #   - Generate plots or visualizations (output/)
 #   - Transform schema versions (standardization/)
+#   - Parse datetime strings (use standardization/datetime_helpers.R)
 #
 # DEPENDENCIES
 # ------------
-#   - core/utilities.R: log_message, save_with_version
+#   - core/utilities.R: find_most_recent_file, safe_read_csv
+#   - standardization/datetime_helpers.R: is.Date, parse_datetime_safe, extract_time,
+#                                          parse_date_safe, format_datetime_for_log
 #   - validation/validation.R: validate_calls_per_night
 #   - dplyr: group_by, summarize, mutate
 #   - lubridate: date/time parsing, date/time extraction
@@ -53,15 +62,19 @@
 #
 # CONTENTS
 # --------
-# - calculate_recording_hours()          # Recording duration calculation (vectorized)
-# - is.Date()                            # Type checker for Date objects
-# - parse_datetime_safe()                # Parse full datetime strings
-# - extract_time()                       # Extract time component from datetime
-# - parse_date_safe()                    # Parse date strings (multi-format)
-# - format_datetime_for_log()            # Format datetime for edit log display
-# - generate_calls_per_night_template()  # Template generation
-# - apply_schedule()                     # Apply recording schedule
-# - save_callspernight_with_version()    # Save with version numbering
+# Recording Hours Calculation:
+#   - calculate_recording_hours()          # Recording duration calculation (vectorized)
+#
+# Template Generation:
+#   - generate_calls_per_night_template()  # Template generation
+#   - apply_schedule()                     # Apply recording schedule
+#
+# Saving:
+#   - save_callspernight_with_version()    # Save with version numbering
+#
+# Template Loading:
+#   - load_cpn_template()                  # Load ORIGINAL or EDIT_THIS template
+#   - extract_template_timestamp()         # Extract timestamp from filename (internal)
 #
 # EXCEL FORMULA FOR RECORDINGHOURS
 # --------------------------------
@@ -71,6 +84,19 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-04: MODULE SPLIT - Moved datetime helpers to datetime_helpers.R
+#             - Moved 5 functions to standardization/datetime_helpers.R:
+#               * is.Date(), parse_datetime_safe(), extract_time()
+#               * parse_date_safe(), format_datetime_for_log()
+#             - Updated DEPENDENCIES to reference datetime_helpers.R
+#             - Removed DateTime Helpers from CONTENTS section
+#             - Callspernight now focuses on recording hours and template generation
+# 2026-02-04: MODULE SPLIT - Added template loading functions
+#             - Added load_cpn_template() for ORIGINAL/EDIT_THIS loading
+#             - Added extract_template_timestamp() helper
+#             - Replaces load_cpn_template_original() from utilities.R
+#             - Consolidates template loading logic in analysis layer
+#             - Updated CONTENTS section with Template Loading category
 # 2026-02-02: MAJOR REWRITE - calculate_recording_hours() now fully vectorized
 #             - Handles both time-only ("HH:MM:SS") and full datetime formats
 #             - Auto-detects format per row (contains "/" = datetime, else time-only)
@@ -82,8 +108,7 @@
 #             - Improves performance for large datasets (no loops required)
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
 # 2026-02-01: Confirmed usage in run_cpn_template.R (Chunk 2) and run_finalize_to_report.R (Chunk 3)
-# 2024-12-29: Added is.Date(), parse_datetime_safe(), extract_time()
-#             for Workflow 04 template comparison support
+# 2024-12-29: Added datetime helpers for Workflow 04 template comparison support
 #
 # =============================================================================
 
@@ -280,605 +305,6 @@ calculate_recording_hours <- function(start_time, end_time) {
   }
   
   result
-}
-
-
-# ------------------------------------------------------------------------------
-# Template Comparison Utilities (For Workflow 04 Edit Tracking)
-# ------------------------------------------------------------------------------
-
-#' Check if Object is a Date
-#'
-#' @description
-#' Simple type checker to determine if an object inherits from the Date class.
-#' Used in Workflow 04 for validating column types before joins in template
-#' comparison logic.
-#'
-#' @param x Object to check (any type)
-#'
-#' @return Logical scalar: TRUE if x inherits from Date class, FALSE otherwise
-#'
-#' @details
-#' **Purpose:**
-#' When comparing ORIGINAL vs EDITED templates in Workflow 04, the Night
-#' column must be Date type for join operations. This function provides a
-#' readable way to check column types.
-#'
-#' **Implementation:**
-#' Wrapper around `inherits(x, "Date")` for improved code readability.
-#'
-#' @section CONTRACT:
-#' - Returns TRUE if x inherits from "Date" class
-#' - Returns FALSE for all other types (including POSIXct, POSIXlt)
-#' - Does not coerce or modify input
-#' - Never throws errors (returns FALSE for invalid input)
-#' - Returns single logical value (not vectorized)
-#'
-#' @section DOES NOT:
-#' - Check if x can be PARSED as a date string
-#' - Validate date correctness (e.g., Feb 30 would still be Date class)
-#' - Coerce to Date type
-#' - Distinguish between different Date subclasses
-#' - Work element-wise on vectors (checks the vector's class, not elements)
-#'
-#' @examples
-#' \dontrun{
-#' # TRUE cases
-#' is.Date(as.Date("2024-10-15"))
-#' # [1] TRUE
-#'
-#' is.Date(Sys.Date())
-#' # [1] TRUE
-#'
-#' # FALSE cases
-#' is.Date("2024-10-15")
-#' # [1] FALSE (character, not Date)
-#'
-#' is.Date(Sys.time())
-#' # [1] FALSE (POSIXct, not Date)
-#'
-#' is.Date(NULL)
-#' # [1] FALSE
-#'
-#' is.Date(123)
-#' # [1] FALSE
-#'
-#' # Usage in Workflow 04
-#' if (is.Date(template$Night)) {
-#'   # Night column is already Date type, use as-is
-#'   template_ready <- template
-#' } else {
-#'   # Parse from string
-#'   template <- template %>% mutate(Night = parse_date_safe(Night))
-#' }
-#' }
-#'
-#' @export
-is.Date <- function(x) {
-  inherits(x, "Date")
-}
-
-
-#' Parse DateTime Strings Safely
-#'
-#' @description
-#' Parses full datetime strings in multiple formats commonly produced by
-#' Excel or user editing. Tries AM/PM format first, then 24-hour format,
-#' handling auto-formatting gracefully. Used for template comparison in
-#' Workflow 04.
-#'
-#' @param dt_string Character scalar datetime string to parse, or NA
-#'
-#' @return POSIXct datetime object in UTC timezone, or NA (POSIXct) if 
-#'   parsing fails or input is NA
-#'
-#' @details
-#' **Purpose:**
-#' When comparing ORIGINAL vs EDITED templates in Workflow 04, datetime
-#' strings may have been reformatted by Excel. This function handles multiple
-#' formats to ensure accurate comparison.
-#'
-#' **Supported formats (tried in order):**
-#' 1. "MM/DD/YYYY HH:MM:SS AM/PM" (e.g., "10/24/2025 6:00:00 PM")
-#' 2. "MM/DD/YYYY HH:MM" (e.g., "10/24/2025 18:00") - Excel auto-format
-#' 3. Explicit parse with format = "%m/%d/%Y %H:%M"
-#'
-#' **Excel auto-formatting:**
-#' Excel often converts "6:00:00 PM" to "18:00" when saving CSV files.
-#' This function handles both formats seamlessly by trying AM/PM first,
-#' then falling back to 24-hour format.
-#'
-#' **Time-only formats:**
-#' This function expects FULL datetime strings with dates. For time-only
-#' strings like "18:00:00", returns NA (use hms::as_hms() instead).
-#'
-#' **NA handling:**
-#' - Input: NA or empty string → Output: NA (POSIXct)
-#' - Input: Unparseable string → Output: NA (POSIXct)
-#' - No errors thrown - fails gracefully to NA
-#'
-#' **Timezone:**
-#' All datetimes parsed as UTC. This is appropriate for template comparison
-#' where we're checking if two datetime strings represent the same instant,
-#' regardless of timezone display.
-#'
-#' @section CONTRACT:
-#' - Returns POSIXct object with tz="UTC"
-#' - Returns NA (POSIXct) for NA or blank input (fails gracefully)
-#' - Returns NA (POSIXct) for unparseable strings (no errors)
-#' - Tries multiple formats automatically (no format parameter needed)
-#' - Handles Excel auto-formatting (AM/PM → 24-hour)
-#' - Never throws errors (silent NA return on failure)
-#' - Non-vectorized (processes single string at a time)
-#'
-#' @section DOES NOT:
-#' - Perform timezone conversions (always UTC output)
-#' - Validate if datetime is "reasonable" (e.g., Feb 30 would parse)
-#' - Handle time-only formats (requires full datetime with date)
-#' - Log parsing failures (silent operation)
-#' - Require explicit format specification (auto-detects)
-#' - Throw errors on parse failures (returns NA instead)
-#' - Work on vectors (use sapply for vectorization)
-#'
-#' @examples
-#' \dontrun{
-#' # AM/PM format (original template)
-#' parse_datetime_safe("10/24/2025 6:00:00 PM")
-#' # [1] "2025-10-24 18:00:00 UTC"
-#'
-#' # 24-hour format (Excel auto-formatted)
-#' parse_datetime_safe("10/24/2025 18:00")
-#' # [1] "2025-10-24 18:00:00 UTC"
-#'
-#' # Both parse to same instant
-#' identical(
-#'   parse_datetime_safe("10/24/2025 6:00:00 PM"),
-#'   parse_datetime_safe("10/24/2025 18:00")
-#' )
-#' # [1] TRUE
-#'
-#' # Morning time
-#' parse_datetime_safe("10/24/2025 7:30:00 AM")
-#' # [1] "2025-10-24 07:30:00 UTC"
-#'
-#' # NA handling
-#' parse_datetime_safe(NA)
-#' # [1] NA (POSIXct)
-#'
-#' parse_datetime_safe("")
-#' # [1] NA (POSIXct)
-#'
-#' # Unparseable format
-#' parse_datetime_safe("invalid")
-#' # [1] NA (POSIXct)
-#'
-#' # Time-only NOT supported
-#' parse_datetime_safe("18:00:00")
-#' # [1] NA (POSIXct) - use hms::as_hms() for time-only
-#'
-#' # Vectorization with sapply
-#' sapply(c("10/24/2025 6:00:00 PM", "10/24/2025 18:00"), parse_datetime_safe)
-#' # [1] "2025-10-24 18:00:00 UTC" "2025-10-24 18:00:00 UTC"
-#'
-#' # Usage in Workflow 04 template comparison
-#' template_orig <- template_orig %>%
-#'   mutate(
-#'     StartDateTime_parsed = sapply(StartDateTime, parse_datetime_safe),
-#'     EndDateTime_parsed = sapply(EndDateTime, parse_datetime_safe)
-#'   )
-#' }
-#'
-#' @export
-parse_datetime_safe <- function(dt_string) {
-  
-  # -------------------------
-  # Handle NA or empty input
-  # -------------------------
-  
-  if (is.na(dt_string) || trimws(dt_string) == "") {
-    return(as.POSIXct(NA))
-  }
-  
-  # -------------------------
-  # Parse full datetime formats
-  # -------------------------
-  
-  # Only process if contains "/" (full datetime format)
-  # Time-only formats like "18:00:00" should return NA
-  if (grepl("/", dt_string)) {
-    
-    # Try AM/PM format first (our intended template format)
-    # Example: "10/24/2025 6:00:00 PM"
-    result <- lubridate::mdy_hms(dt_string, quiet = TRUE)
-    
-    # Try 24-hour format if that failed (Excel auto-formatting)
-    # Example: "10/24/2025 18:00"
-    if (is.na(result)) {
-      result <- lubridate::mdy_hm(dt_string, quiet = TRUE)
-    }
-    
-    # Try explicit parse if still failed
-    # Handles edge cases like single-digit months/days
-    if (is.na(result)) {
-      result <- as.POSIXct(dt_string, format = "%m/%d/%Y %H:%M", tz = "UTC")
-    }
-    
-    return(result)
-    
-  } else {
-    # Time-only format - not expected in template comparison
-    # Return NA (this function is for FULL datetimes only)
-    return(as.POSIXct(NA))
-  }
-}
-
-
-#' Extract Time Component from DateTime String
-#'
-#' @description
-#' Parses a full datetime string and extracts just the time component as
-#' HH:MM:SS (24-hour format). Used for comparing recording times between
-#' original and edited templates when checking for manual edits in Workflow 04.
-#'
-#' @param datetime_str Character scalar datetime string, or NA
-#'
-#' @return Character time string in format "HH:MM:SS" (24-hour, zero-padded),
-#'   or NA_character_ if parsing fails or input is NA
-#'
-#' @details
-#' **Purpose:**
-#' In Workflow 04 edit tracking, we need to compare whether two datetime
-#' strings represent the same TIME, even if Excel reformatted them differently.
-#'
-#' **Example use case:**
-#' - Original: "10/24/2025 06:00:00 PM" (12-hour AM/PM)
-#' - Edited:   "10/24/2025 18:00"      (24-hour, no seconds)
-#' - Both extract to: "18:00:00"
-#' - Comparison: Times match → No manual edit occurred
-#'
-#' **Process:**
-#' 1. Parse datetime_str using parse_datetime_safe()
-#' 2. Extract time component as HH:MM:SS string (24-hour)
-#' 3. Return NA if parsing failed
-#'
-#' **Output format:**
-#' Always returns 24-hour format with seconds: "18:00:00"
-#' - Never includes AM/PM
-#' - Always includes seconds (even if :00)
-#' - Always zero-padded (e.g., "08:00:00" not "8:00:00")
-#'
-#' **Comparison logic:**
-#' By extracting times to a consistent format, we can compare them directly:
-#' ```r
-#' extract_time("10/24/2025 6:00:00 PM") == extract_time("10/24/2025 18:00")
-#' # [1] TRUE - Both are "18:00:00", so times match
-#' ```
-#'
-#' @section CONTRACT:
-#' - Returns time string in format "HH:MM:SS" (24-hour, zero-padded)
-#' - Returns NA_character_ for NA or blank input (fails gracefully)
-#' - Returns NA_character_ if datetime parsing fails (no errors)
-#' - Uses parse_datetime_safe() for robust parsing
-#' - Always includes seconds in output (:00 if not present)
-#' - Always zero-padded (08:00:00 not 8:00:00)
-#' - Non-vectorized (processes single string at a time)
-#'
-#' @section DOES NOT:
-#' - Preserve original AM/PM or 24-hour format (always 24-hour output)
-#' - Include date component in output (time only)
-#' - Perform timezone conversions (uses UTC from parse_datetime_safe)
-#' - Validate if time is "reasonable" (e.g., 25:00:00 would be invalid input)
-#' - Round or truncate times (exact extraction)
-#' - Throw errors (returns NA_character_ on failure)
-#' - Work on vectors (use sapply for vectorization)
-#'
-#' @examples
-#' \dontrun{
-#' # AM/PM format -> 24-hour time
-#' extract_time("10/24/2025 6:00:00 PM")
-#' # [1] "18:00:00"
-#'
-#' # 24-hour format (Excel auto-formatted)
-#' extract_time("10/24/2025 18:00")
-#' # [1] "18:00:00"
-#'
-#' # Morning time (zero-padded)
-#' extract_time("10/24/2025 7:30:00 AM")
-#' # [1] "07:30:00"
-#'
-#' # Early morning (zero-padded hour)
-#' extract_time("10/24/2025 1:15:00 AM")
-#' # [1] "01:15:00"
-#'
-#' # NA handling
-#' extract_time(NA)
-#' # [1] NA_character_
-#'
-#' extract_time("")
-#' # [1] NA_character_
-#'
-#' # Unparseable datetime
-#' extract_time("invalid")
-#' # [1] NA_character_
-#'
-#' # Vectorization with sapply
-#' sapply(c("10/24/2025 6:00:00 PM", "10/24/2025 18:00"), extract_time)
-#' # [1] "18:00:00" "18:00:00"
-#'
-#' # Usage in Workflow 04 template comparison:
-#' # Compare times between original and edited templates
-#' comparison <- comparison %>%
-#'   mutate(
-#'     StartTime_orig = sapply(StartDateTime_orig, extract_time),
-#'     StartTime_edit = sapply(StartDateTime_edit, extract_time),
-#'     
-#'     # Check if times match (handles Excel reformatting)
-#'     times_match = (StartTime_orig == StartTime_edit)
-#'   )
-#'
-#' # Example comparison result:
-#' # StartDateTime_orig: "10/24/2025 6:00:00 PM"  → StartTime_orig: "18:00:00"
-#' # StartDateTime_edit: "10/24/2025 18:00"      → StartTime_edit: "18:00:00"
-#' # times_match: TRUE (Excel reformatted but time unchanged)
-#' }
-#'
-#' @export
-extract_time <- function(datetime_str) {
-  
-  # -------------------------
-  # Handle NA or empty input
-  # -------------------------
-  
-  if (is.na(datetime_str) || trimws(datetime_str) == "") {
-    return(NA_character_)
-  }
-  
-  # -------------------------
-  # Parse and extract time
-  # -------------------------
-  
-  # Parse the datetime using our safe parser
-  dt <- parse_datetime_safe(datetime_str)
-  
-  # If parsing failed, return NA
-  if (is.na(dt)) {
-    return(NA_character_)
-  }
-  
-  # Extract time component as HH:MM:SS (24-hour format)
-  # format() with %H:%M:%S gives zero-padded 24-hour time
-  return(format(dt, "%H:%M:%S"))
-}
-
-
-#' Parse Date Strings Safely
-#'
-#' @description
-#' Parses date strings in multiple formats commonly produced by Excel or
-#' user editing. Handles mixed date formats gracefully. Used for parsing
-#' Night column in template comparison (Workflow 04).
-#'
-#' @param date_string Character date string to parse, Date object, or NA
-#'
-#' @return Date object, or NA (Date) if parsing fails or input is NA
-#'
-#' @details
-#' **Purpose:**
-#' When comparing ORIGINAL vs EDITED templates in Workflow 04, the Night
-#' column may have been saved in different date formats by Excel. This
-#' function handles multiple formats to ensure successful joins.
-#'
-#' **Supported formats (tried in order):**
-#' 1. YYYY-MM-DD (standard R format)
-#' 2. MM/DD/YYYY (US Excel format)
-#' 3. MM-DD-YYYY (Excel variant)
-#' 4. M/D/YYYY (single-digit month/day)
-#'
-#' **Already Date objects:**
-#' If input is already a Date object, returns it unchanged.
-#'
-#' **Excel date formats:**
-#' Excel saves dates in various formats depending on locale and settings.
-#' This function tries all common formats to maximize compatibility.
-#'
-#' **NA handling:**
-#' - Input: NA or empty string → Output: NA (Date)
-#' - Input: Unparseable string → Output: NA (Date) with warning
-#'
-#' @section CONTRACT:
-#' - Returns Date object (R Date class)
-#' - Returns NA (Date) for NA or blank input (fails gracefully)
-#' - Returns input unchanged if already Date object
-#' - Tries multiple formats automatically (no format parameter needed)
-#' - Warns on parse failures (logs unparseable strings)
-#' - Never throws errors (returns NA on failure)
-#' - Non-vectorized (processes single value at a time)
-#'
-#' @section DOES NOT:
-#' - Parse datetime strings (use parse_datetime_safe for those)
-#' - Validate if date is "reasonable" (e.g., Feb 30 would parse to NA)
-#' - Perform timezone conversions (Date has no timezone)
-#' - Require explicit format specification (auto-detects)
-#' - Throw errors on parse failures (warns and returns NA)
-#' - Work on vectors (use sapply for vectorization)
-#'
-#' @examples
-#' \dontrun{
-#' # Standard R format
-#' parse_date_safe("2024-10-15")
-#' # [1] "2024-10-15"
-#'
-#' # US Excel format
-#' parse_date_safe("10/15/2024")
-#' # [1] "2024-10-15"
-#'
-#' # Excel variant
-#' parse_date_safe("10-15-2024")
-#' # [1] "2024-10-15"
-#'
-#' # Single-digit month/day
-#' parse_date_safe("1/5/2024")
-#' # [1] "2024-01-05"
-#'
-#' # Already Date object (unchanged)
-#' parse_date_safe(as.Date("2024-10-15"))
-#' # [1] "2024-10-15"
-#'
-#' # NA handling
-#' parse_date_safe(NA)
-#' # [1] NA (Date)
-#'
-#' parse_date_safe("")
-#' # [1] NA (Date)
-#'
-#' # Unparseable format (warns and returns NA)
-#' parse_date_safe("invalid")
-#' # Warning: Could not parse date: 'invalid'
-#' # [1] NA (Date)
-#'
-#' # Vectorization with sapply
-#' dates <- c("2024-10-15", "10/15/2024", "10-15-2024")
-#' sapply(dates, parse_date_safe) %>% as.Date(origin = "1970-01-01")
-#' # [1] "2024-10-15" "2024-10-15" "2024-10-15"
-#'
-#' # Usage in Workflow 04 template comparison:
-#' template <- template %>%
-#'   mutate(Night = sapply(Night, parse_date_safe) %>% 
-#'            as.Date(origin = "1970-01-01"))
-#' }
-#'
-#' @export
-parse_date_safe <- function(date_string) {
-  
-  # -------------------------
-  # Handle special cases
-  # -------------------------
-  
-  # NA or empty string
-  if (is.na(date_string) || trimws(date_string) == "") {
-    return(as.Date(NA))
-  }
-  
-  # Already a Date object - return unchanged
-  if (inherits(date_string, "Date")) {
-    return(date_string)
-  }
-  
-  # -------------------------
-  # Try multiple date formats
-  # -------------------------
-  
-  # Format 1: YYYY-MM-DD (standard R format)
-  result <- as.Date(date_string, format = "%Y-%m-%d")
-  if (!is.na(result)) return(result)
-  
-  # Format 2: MM/DD/YYYY (US Excel)
-  result <- lubridate::mdy(date_string, quiet = TRUE)
-  if (!is.na(result)) return(result)
-  
-  # Format 3: MM-DD-YYYY (Excel variant)
-  result <- as.Date(date_string, format = "%m-%d-%Y")
-  if (!is.na(result)) return(result)
-  
-  # Format 4: M/D/YYYY (single-digit month/day)
-  result <- as.Date(date_string, format = "%m/%d/%Y")
-  if (!is.na(result)) return(result)
-  
-  # -------------------------
-  # All formats failed - warn and return NA
-  # -------------------------
-  
-  warning(sprintf("Could not parse date: '%s'", date_string))
-  return(as.Date(NA))
-}
-
-
-#' Format DateTime for Edit Log Display
-#'
-#' @description
-#' Formats a parsed POSIXct datetime for display in the CallsPerNight edit
-#' log. Returns consistent 24-hour format without seconds for readability.
-#' Used in Workflow 04 edit tracking.
-#'
-#' @param dt_parsed POSIXct datetime object (parsed), or NA
-#' @param dt_string Character original datetime string (for reference, unused)
-#'
-#' @return Character string in format "MM/DD/YYYY HH:MM" (24-hour, no seconds),
-#'   or "<blank>" if dt_parsed is NA
-#'
-#' @details
-#' **Purpose:**
-#' In the CallsPerNight edit log, we need consistent datetime formatting
-#' regardless of how Excel formatted the original strings. This function
-#' ensures all datetimes display as 24-hour format without seconds.
-#'
-#' **Format:**
-#' - Date: MM/DD/YYYY (US format, matches template format)
-#' - Time: HH:MM (24-hour, no seconds for readability)
-#' - Example: "10/24/2025 18:00"
-#'
-#' **NA handling:**
-#' Returns "<blank>" for NA datetimes to clearly indicate missing values
-#' in the edit log.
-#'
-#' **Design note:**
-#' The dt_string parameter is included for consistency with calling pattern
-#' but is not used. We format from the parsed datetime to ensure consistency.
-#'
-#' @section CONTRACT:
-#' - Returns character string in format "MM/DD/YYYY HH:MM"
-#' - Returns "<blank>" for NA input
-#' - Always 24-hour format (never AM/PM)
-#' - Never includes seconds
-#' - Zero-padded (e.g., "08:00" not "8:00")
-#' - Non-vectorized (processes single datetime at a time)
-#'
-#' @section DOES NOT:
-#' - Include AM/PM indicators (always 24-hour)
-#' - Include seconds (omitted for readability)
-#' - Use original string format (formats from parsed datetime)
-#' - Perform timezone conversions (uses datetime as-is)
-#' - Validate if datetime is "reasonable"
-#' - Work on vectors (processes single value)
-#'
-#' @examples
-#' \dontrun{
-#' # Normal datetime
-#' dt <- parse_datetime_safe("10/24/2025 6:00:00 PM")
-#' format_datetime_for_log(dt, "10/24/2025 6:00:00 PM")
-#' # [1] "10/24/2025 18:00"
-#'
-#' # Morning time
-#' dt <- parse_datetime_safe("10/24/2025 7:30:00 AM")
-#' format_datetime_for_log(dt, "10/24/2025 7:30:00 AM")
-#' # [1] "10/24/2025 07:30"
-#'
-#' # NA datetime
-#' format_datetime_for_log(NA, "")
-#' # [1] "<blank>"
-#'
-#' # Usage in Workflow 04 edit log:
-#' for (i in seq_len(nrow(edit_log))) {
-#'   row <- edit_log[i, ]
-#'   cat(sprintf("      Original: %s\n",
-#'     format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)
-#'   ))
-#'   cat(sprintf("      Edited:   %s\n",
-#'     format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
-#'   ))
-#' }
-#' }
-#'
-#' @export
-format_datetime_for_log <- function(dt_parsed, dt_string) {
-  
-  # Handle NA input - return clear indicator
-  if (is.na(dt_parsed)) {
-    return("<blank>")
-  }
-  
-  # Format as: MM/DD/YYYY HH:MM (24-hour, no seconds, consistent)
-  return(format(dt_parsed, "%m/%d/%Y %H:%M"))
 }
 
 
@@ -1341,11 +767,183 @@ save_callspernight_with_version <- function(data,
   file_path <- file.path(output_dir, paste0(base_name, "_v", next_version, ".csv"))
   readr::write_csv(data, file_path)
   
-  message(sprintf("✓ CallsPerNight file saved: %s", basename(file_path)))
+  message(sprintf("âœ“ CallsPerNight file saved: %s", basename(file_path)))
   message(sprintf("  Full path: %s", file_path))
   
   return(file_path)
 }
+
+
+
+# ------------------------------------------------------------------------------
+# Template Loading (for CPN Finalization)
+# ------------------------------------------------------------------------------
+
+#' Load CPN Template (ORIGINAL or EDIT_THIS)
+#'
+#' @description
+#' Discovers and loads the most recent CPN template file. Used by
+#' run_finalize_to_report() to load edited templates for processing.
+#' Handles the two-file template system: ORIGINAL for tracking and
+#' EDIT_THIS for user modifications.
+#' 
+#' This function encapsulates the template discovery and loading logic
+#' that was previously scattered across workflow scripts. It provides
+#' consistent error handling and verbose messaging.
+#'
+#' @param type Character. Template type to load: "ORIGINAL" or "EDIT_THIS".
+#'   Default: "EDIT_THIS" (what users typically edit)
+#' @param output_dir Character. Directory containing template files.
+#'   Default: "outputs/final"
+#' @param verbose Logical. Print status messages? Default: FALSE
+#'
+#' @return Tibble with template data. Contains columns:
+#'   - Detector: Character, detector name
+#'   - Night: Character (date string), study night
+#'   - CallsPerNight: Character (numeric string), call count
+#'   - StartDateTime: Character, formatted start time
+#'   - EndDateTime: Character, formatted end time
+#'   - RecordingHours: Character, duration or Excel formula
+#'
+#' @section Template File Naming:
+#' Templates follow the naming convention:
+#' ```
+#' 03_CallsPerNight_Template_ORIGINAL_YYYYMMDD_HHMMSS.csv
+#' 03_CallsPerNight_Template_EDIT_THIS_YYYYMMDD_HHMMSS.csv
+#' ```
+#' 
+#' The function searches for the most recent file matching the pattern
+#' and loads it using safe_read_csv() with all columns as character.
+#'
+#' @section CONTRACT:
+#' - Searches outputs/final directory by default
+#' - Uses filename timestamp for "most recent" determination
+#' - Returns tibble with all columns as character
+#' - Stops with informative error if no templates found
+#' - Reports file path when verbose = TRUE
+#' - Adds source_file and template_type attributes to result
+#'
+#' @section DOES NOT:
+#' - Convert column types (caller's responsibility)
+#' - Validate template structure (caller's responsibility)
+#' - Modify the loaded data
+#' - Create directories
+#'
+#' @examples
+#' \dontrun{
+#' # Load most recent EDIT_THIS template (typical use)
+#' edited_template <- load_cpn_template(type = "EDIT_THIS", verbose = TRUE)
+#'
+#' # Load ORIGINAL for comparison (edit tracking)
+#' original_template <- load_cpn_template(type = "ORIGINAL")
+#'
+#' # Compare for edit detection
+#' edits_detected <- detect_template_edits(original_template, edited_template)
+#' }
+#'
+#' @export
+load_cpn_template <- function(type = "EDIT_THIS",
+                              output_dir = NULL,
+                              verbose = FALSE) {
+  
+  # Input validation
+  valid_types <- c("ORIGINAL", "EDIT_THIS")
+  if (!type %in% valid_types) {
+    stop(sprintf(
+      "Invalid template type: '%s'\n  Valid types: %s",
+      type, paste(valid_types, collapse = ", ")
+    ))
+  }
+  
+  # Default output directory
+  if (is.null(output_dir)) {
+    output_dir <- here::here("outputs", "final")
+  }
+  
+  # Build pattern for file discovery
+  # Pattern: 03_CallsPerNight_Template_{TYPE}_YYYYMMDD_HHMMSS.csv
+  pattern <- sprintf("^03_CallsPerNight_Template_%s_\\d{8}_\\d{6}\\.csv$", type)
+  
+  # Find most recent file
+  template_file <- find_most_recent_file(
+    directory = output_dir,
+    pattern = pattern,
+    error_if_none = TRUE,
+    hint = sprintf("Run Chunk 2 (run_cpn_template) first to generate %s template", type)
+  )
+  
+  if (verbose) {
+    message(sprintf("  Loading %s template: %s", type, basename(template_file)))
+  }
+  
+  # Load template
+  template <- safe_read_csv(template_file, verbose = FALSE)
+  
+  if (is.null(template)) {
+    stop(sprintf(
+      "Failed to read template file: %s\n  Check file permissions and format.",
+      template_file
+    ))
+  }
+  
+  if (verbose) {
+    message(sprintf("  [OK] Loaded %s rows from %s template",
+                    format(nrow(template), big.mark = ","), type))
+  }
+  
+  # Add source file as attribute for reference
+  attr(template, "source_file") <- template_file
+  attr(template, "template_type") <- type
+  
+  template
+}
+
+
+#' Extract Timestamp from Template Filename
+#'
+#' @description
+#' Extracts the YYYYMMDD_HHMMSS timestamp from a template filename.
+#' Used for edit log naming and tracking purposes.
+#'
+#' @param filename Character. Template filename (not full path).
+#'
+#' @return Character. Timestamp string in YYYYMMDD_HHMMSS format,
+#'   or NA if pattern not found.
+#'
+#' @section CONTRACT:
+#' - Extracts from pattern: ..._YYYYMMDD_HHMMSS.csv
+#' - Returns NA if pattern not found
+#' - Does not validate timestamp values
+#'
+#' @section DOES NOT:
+#' - Accept full paths (use basename() first)
+#' - Parse the timestamp to datetime
+#' - Validate file existence
+#'
+#' @examples
+#' \dontrun{
+#' extract_template_timestamp("03_CallsPerNight_Template_ORIGINAL_20260201_143022.csv")
+#' # Returns: "20260201_143022"
+#' 
+#' extract_template_timestamp("invalid_filename.csv")
+#' # Returns: NA_character_
+#' }
+#'
+#' @keywords internal
+extract_template_timestamp <- function(filename) {
+  # Extract timestamp from pattern: ..._YYYYMMDD_HHMMSS.csv
+  match <- regmatches(
+    filename,
+    regexpr("\\d{8}_\\d{6}(?=\\.csv$)", filename, perl = TRUE)
+  )
+  
+  if (length(match) == 0 || match == "") {
+    return(NA_character_)
+  }
+  
+  match
+}
+
 
 # ==============================================================================
 # END OF FILE

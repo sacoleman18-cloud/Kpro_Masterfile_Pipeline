@@ -83,7 +83,7 @@ message("  └── Layer 2 loaded")
 message("[3/7] Loading Layer 3: standardization/")
 
 source_module(file.path("R", "functions", "standardization", "standardization.R"),      "standardization.R     (schema transformation)")
-source_module(file.path("R", "functions", "standardization", "datetime_conversion.R"), "datetime_conversion.R (timezone handling)")
+source_module(file.path("R", "functions", "standardization", "datetime_helpers.R"), "datetime_helpers.R (timezone handling)")
 
 message("  └── Layer 3 loaded")
 
@@ -191,7 +191,7 @@ message("
           │                            (8 functions + 1 constant)
           │                            • Constant(s): 1
           │                            • Functions: 8
-          └─ datetime_conversion.R ..  Timezone handling
+          └─ datetime_helpers.R ..  Timezone handling
                                        (3 functions)
 
  Layer 4: validation/

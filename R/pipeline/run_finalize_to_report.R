@@ -1,15 +1,17 @@
 # ==============================================================================
-# R/pipeline/run_finalize_to_report.R -HAVE NOT TESTED YET
+# R/pipeline/run_finalize_to_report.R
 # ==============================================================================
 # PURPOSE
 # -------
 # Chunk 3 of 3 in the Shiny-driven pipeline. Orchestrates the complete
 # finalization process from edited CPN template through final report and
-# release bundle generation. Combines Finalize CPN, Summary Stats, Plotting, and Report & Release into a single function.
+# release bundle generation. Combines Finalize CPN, Summary Stats, Plotting,
+# and Report & Release into a single function. Validation reporting and
+# artifact registration are standardized via helpers.
 #
 # PIPELINE POSITION
 # -----------------
-# Chunk 3 of 3 in the Shiny-driven pipeline:
+# Layer: pipeline/orchestration (Chunk 3 of 3)
 #   run_ingest_standardize()  -> Chunk 1: Raw CSVs to kpro_master
 #   run_cpn_template()        -> Chunk 2: Generate CPN template
 #   run_finalize_to_report()  -> [THIS FUNCTION] Finalize through Report
@@ -96,10 +98,21 @@
 #       save_callspernight_with_version, create_detector_activity_summary,
 #       create_study_summary, generate_quality_plots, generate_detector_plots,
 #       generate_species_plots, generate_temporal_plots, create_release_bundle,
-#       init_artifact_registry, register_artifact
+#       init_artifact_registry, register_artifact,
+#       print_stage_banner, init_stage_validation,
+#       complete_stage_validation, save_and_register_rds,
+#       store_stage_results, find_most_recent_checkpoint,
+#       load_cpn_template
 #
 # CHANGELOG
 # ---------
+# 2026-02-04: Standardized stage helpers and documentation refresh
+#             - Replaced custom banners with print_stage_banner()
+#             - Swapped validation init/finalize with init_stage_validation()/
+#               complete_stage_validation()
+#             - Consolidated RDS save/register via save_and_register_rds()
+#             - Standardized checkpoint discovery and template loading helpers
+#             - Added helper usage summary and updated header metadata
 # 2026-02-03: CRITICAL FIX - Date parsing and edit tracking failures
 #             - Fixed Stage 2: Added explicit format parameter to as.Date() for Night column
 #             - Bug: as.Date(Night) without format failed to parse "MM-DD-YY" format
@@ -112,24 +125,6 @@
 #             - Added detection for 6 edit types: changed, added, removed (Start/End)
 #             - Now correctly tracks all manual datetime edits in EDIT_THIS template
 #             - Template now preserves all 252 rows (9 detectors × 28 nights) as expected
-# 2026-02-02: Fixed Stage 2 template loading and deduplication
-#             - Added deduplication logic for both ORIGINAL and EDIT_THIS templates
-#             - Improved RecordingHours conversion with safe handling of empty strings
-#             - Added diagnostic reporting for duplicate rows removed
-#             - Fixed datetime column conversion to handle missing columns gracefully
-#             - Added logging of deduplication counts to validation context
-# 2026-02-02: Fixed Stage 2 checkpoint loading and type conversion
-#             - Replaced removed load_master_data() with find_most_recent_file()
-#             - Added numeric type conversion for CallsPerNight and RecordingHours
-#             - Fixed template patterns to use explicit timestamp format (YYYYMMDD_HHMMSS)
-#             - Added verbose parameter to safe_read_csv() calls
-# 2026-01-31: Initial creation - merged finalization through release logic into orchestrating function
-# 2026-01-31: Added edited_template_file parameter for Shiny integration
-# 2026-01-31: Removed all interactive prompts
-# 2026-01-31: Standardized to verbose parameter pattern
-# 2026-01-31: Combined validation reports for all 4 stages
-#
-# ==============================================================================
 
 
 #' Run Complete Finalization Pipeline (CPN → Report)
@@ -306,17 +301,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # FINALIZE CPN
   # ===========================================================================
   
-  if (verbose) {
-    message("\n")
-    message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║                        FINALIZE CPN                         ║")
-    message("╚═══════════════════════════════════════════════════════════════╝")
-    message("")
-  }
-  
-  log_message("=== FINALIZE CPN: START ===")
-  
-  validation_context_finalize_cpn <- create_validation_context(workflow = "finalize_cpn")
+  print_stage_banner("FINALIZE CPN", verbose = verbose)
   
   # ---------------------------------------------------------------------------
   # Stage 1: Load Configuration
@@ -327,7 +312,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   assert_file_exists(yaml_path, hint = "Configure study parameters first.")
   study_params <- load_study_parameters(yaml_path)
   
-  validation_context_finalize_cpn$study_name <- study_params$study_parameters$study_name
+  validation_context_finalize_cpn <- init_stage_validation("finalize_cpn", study_params)
   
   if (verbose) message("  [OK] Loaded study_parameters.yaml")
   
@@ -351,10 +336,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   } else {
     if (verbose) message("  [!] Loading kpro_master from checkpoint...")
     
-    kpro_master_file <- find_most_recent_file(
-      directory = here::here("outputs", "checkpoints"),
-      pattern = "^02_kpro_master_\\d{8}_\\d{6}\\.csv$",
-      hint = "Run Chunk 1 (run_ingest_standardize) first"
+    kpro_master_file <- find_most_recent_checkpoint(
+      "kpro_master",
+      checkpoints_dir = here::here("outputs", "checkpoints"),
+      required = TRUE
     )
     
     kpro_master <- safe_read_csv(kpro_master_file, verbose = verbose)
@@ -374,13 +359,19 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # Load original template for comparison
-  template_original_file <- find_most_recent_file(
-    directory = outputs_dir,
-    pattern = "^03_CallsPerNight_Template_\\d{8}_\\d{6}_ORIGINAL\\.csv$",
-    hint = "Run Chunk 2 first"
+  template_original_file <- find_most_recent_checkpoint(
+    "cpn_original",
+    checkpoints_dir = outputs_dir,
+    required = TRUE
   )
   
-  template_original <- safe_read_csv(template_original_file, verbose = verbose)
+  template_original_result <- load_cpn_template(
+    template_original_file,
+    validation_context = validation_context_finalize_cpn,
+    verbose = verbose
+  )
+  template_original <- template_original_result$template
+  validation_context_finalize_cpn <- template_original_result$validation_context
   
   if (verbose) {
     message(sprintf("  [DIAGNOSTIC] ORIGINAL template loaded: %d rows", nrow(template_original)))
@@ -408,16 +399,22 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Load edited template
   if (is.null(edited_template_file)) {
-    edited_template_file <- find_most_recent_file(
-      directory = outputs_dir,
-      pattern = "^03_CallsPerNight_Template_\\d{8}_\\d{6}_EDIT_THIS\\.csv$",
-      hint = "Edit template before running Chunk 3"
+    edited_template_file <- find_most_recent_checkpoint(
+      "cpn_edit",
+      checkpoints_dir = outputs_dir,
+      required = TRUE
     )
   } else {
     assert_file_exists(edited_template_file, hint = "Check edited template path")
   }
   
-  template_edited <- safe_read_csv(edited_template_file, verbose = verbose)
+  template_edited_result <- load_cpn_template(
+    edited_template_file,
+    validation_context = validation_context_finalize_cpn,
+    verbose = verbose
+  )
+  template_edited <- template_edited_result$template
+  validation_context_finalize_cpn <- template_edited_result$validation_context
   
   if (verbose) {
     message(sprintf("  [DIAGNOSTIC] EDIT_THIS template loaded: %d rows", nrow(template_edited)))
@@ -794,43 +791,34 @@ run_finalize_to_report <- function(kpro_master = NULL,
   validation_dir <- here::here("results", "validation")
   assert_directory_exists(validation_dir, create = TRUE)
   
-  validation_html_finalize_cpn <- finalize_validation_report(
+  validation_html_finalize_cpn <- complete_stage_validation(
     validation_context_finalize_cpn,
-    output_dir = validation_dir
+    validation_dir = validation_dir,
+    stage_name = "FINALIZE CPN",
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_finalize_cpn)))
-  
-  log_message("=== FINALIZE CPN: COMPLETE ===")
   
   # Store Finalize CPN results
-  result$finalize_cpn <- list(
-    calls_per_night_final = calls_per_night_final,
-    cpn_file = cpn_final_path,
-    total_edits = total_edits,
-    status_distribution = as.list(status_dist),
-    dead_nights_retained = dead_nights,
-    validation_report = validation_html_finalize_cpn
+  result <- store_stage_results(
+    result,
+    stage_key = "finalize_cpn",
+    stage_outputs = list(
+      calls_per_night_final = calls_per_night_final,
+      cpn_file = cpn_final_path,
+      total_edits = total_edits,
+      status_distribution = as.list(status_dist),
+      dead_nights_retained = dead_nights
+    ),
+    validation_html = validation_html_finalize_cpn
   )
-  
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_finalize_cpn)
   
   # ===========================================================================
   # SUMMARY STATISTICS
   # ===========================================================================
   
-  if (verbose) {
-    message("\n")
-    message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║                    SUMMARY STATISTICS                      ║")
-    message("╚═══════════════════════════════════════════════════════════════╝")
-    message("")
-  }
+  print_stage_banner("SUMMARY STATISTICS", verbose = verbose)
   
-  log_message("=== SUMMARY STATISTICS: START ===")
-  
-  validation_context_summary_stats <- create_validation_context(workflow = "summary_stats")
-  validation_context_summary_stats$study_name <- study_params$study_parameters$study_name
+  validation_context_summary_stats <- init_stage_validation("summary_stats", study_params)
   
   # Initialize summaries list
   all_summaries <- list()
@@ -957,67 +945,49 @@ run_finalize_to_report <- function(kpro_master = NULL,
     has_temporal = has_temporal
   )
   
-  assert_directory_exists(dirname(summary_rds_path), create = TRUE)
-  saveRDS(all_summaries, summary_rds_path)
-  
-  # Register artifact
-  artifact_id_summary <- sprintf("summary_data_%s", timestamp_05)
-  registry <- register_artifact(
-    registry = registry,
-    artifact_name = artifact_id_summary,
-    artifact_type = "summary_stats",  # FIXED: was "summary_rds"
-    workflow = "summary_stats",
+  registry <- save_and_register_rds(
+    object = all_summaries,
     file_path = summary_rds_path,
+    artifact_type = "summary_stats",
+    workflow = "summary_stats",
+    registry = registry,
     metadata = list(
       n_summaries = length(all_summaries),
       has_species = has_species,
       has_temporal = has_temporal
-    )
+    ),
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Saved: %s", basename(summary_rds_path)))
   
   # Finalize validation
-  validation_html_summary_stats <- finalize_validation_report(
+  validation_html_summary_stats <- complete_stage_validation(
     validation_context_summary_stats,
-    output_dir = validation_dir
+    validation_dir = validation_dir,
+    stage_name = "SUMMARY STATISTICS",
+    verbose = verbose
   )
   
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_summary_stats)))
-  
-  log_message("=== SUMMARY STATISTICS: COMPLETE ===")
-  
-  # Origin: 05_summary_stats.R, Standards: 01_architecture_standards.md (structured returns)
-  # Store Summary Stats results in return structure
-  # Note: GT table exports are not implemented in chunk 3 (simplified from legacy Summary Stats stage)
-  # as the primary outputs are the RDS file and plots from Plotting.
-  result$summary_stats <- list(
-    all_summaries = all_summaries,
-    summary_rds = summary_rds_path,
-    files_created = character(),  # GT table PNG/HTML exports skipped in chunk 3
-    has_species = has_species,
-    has_temporal = has_temporal,
-    validation_report = validation_html_summary_stats
+  # Store Summary Stats results
+  result <- store_stage_results(
+    result,
+    stage_key = "summary_stats",
+    stage_outputs = list(
+      all_summaries = all_summaries,
+      summary_rds = summary_rds_path,
+      files_created = character(),
+      has_species = has_species,
+      has_temporal = has_temporal
+    ),
+    validation_html = validation_html_summary_stats
   )
-  
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_summary_stats)
   
   # ===========================================================================
   # PLOTTING
   # ===========================================================================
   
-  if (verbose) {
-    message("\n")
-    message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║                         PLOTTING                            ║")
-    message("╚═══════════════════════════════════════════════════════════════╝")
-    message("")
-  }
+  print_stage_banner("PLOTTING", verbose = verbose)
   
-  log_message("=== PLOTTING: START ===")
-  
-  validation_context_plotting <- create_validation_context(workflow = "exploratory_plots")
-  validation_context_plotting$study_name <- study_params$study_parameters$study_name
+  validation_context_plotting <- init_stage_validation("exploratory_plots", study_params)
   
   # Initialize plots structure
   all_plots <- list(
@@ -1187,69 +1157,55 @@ run_finalize_to_report <- function(kpro_master = NULL,
   timestamp_06 <- format(Sys.time(), "%Y%m%d")
   plots_rds_path <- here::here("results", "rds", sprintf("plot_objects_%s.rds", timestamp_06))
   
-  saveRDS(all_plots, plots_rds_path)
-  
-  # Register artifact
-  artifact_id_plots <- sprintf("plot_objects_%s", timestamp_06)
-  registry <- register_artifact(
-    registry = registry,
-    artifact_name = artifact_id_plots,
-    artifact_type = "plot_objects",  # FIXED: was "plots_rds"
-    workflow = "exploratory_plots",
+  registry <- save_and_register_rds(
+    object = all_plots,
     file_path = plots_rds_path,
+    artifact_type = "plot_objects",
+    workflow = "exploratory_plots",
+    registry = registry,
     metadata = list(
       total_plots = total_plots_exported,
       quality_plots = length(quality_plots),
       detector_plots = length(detector_plots),
       species_plots = length(species_plots),
       temporal_plots = length(temporal_plots)
-    )
+    ),
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Saved: %s", basename(plots_rds_path)))
   
   # Finalize validation
-  validation_html_plotting <- finalize_validation_report(
+  validation_html_plotting <- complete_stage_validation(
     validation_context_plotting,
-    output_dir = validation_dir
+    validation_dir = validation_dir,
+    stage_name = "PLOTTING",
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_plotting)))
-  
-  log_message("=== PLOTTING: COMPLETE ===")
   
   # Store Plotting results
-  result$plotting <- list(
-    all_plots = all_plots,
-    plots_rds = plots_rds_path,
-    files_created = files_created_06,
-    plot_counts = list(
-      quality = length(quality_plots),
-      detector = length(detector_plots),
-      species = length(species_plots),
-      temporal = length(temporal_plots)
+  result <- store_stage_results(
+    result,
+    stage_key = "plotting",
+    stage_outputs = list(
+      all_plots = all_plots,
+      plots_rds = plots_rds_path,
+      files_created = files_created_06,
+      plot_counts = list(
+        quality = length(quality_plots),
+        detector = length(detector_plots),
+        species = length(species_plots),
+        temporal = length(temporal_plots)
+      )
     ),
-    validation_report = validation_html_plotting
+    validation_html = validation_html_plotting
   )
-  
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_plotting)
   
   # ===========================================================================
   # REPORT & RELEASE
   # ===========================================================================
   
-  if (verbose) {
-    message("\n")
-    message("╔═══════════════════════════════════════════════════════════════╗")
-    message("║                     REPORT & RELEASE                       ║")
-    message("╚═══════════════════════════════════════════════════════════════╝")
-    message("")
-  }
+  print_stage_banner("REPORT & RELEASE", verbose = verbose)
   
-  log_message("=== REPORT & RELEASE: START ===")
-  
-  validation_context_report_release <- create_validation_context(workflow = "report_release")
-  validation_context_report_release$study_name <- study_params$study_parameters$study_name
+  validation_context_report_release <- init_stage_validation("report_release", study_params)
   
   # ---------------------------------------------------------------------------
   # Stage 22: Verify RDS Artifacts
@@ -1427,25 +1383,27 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) print_stage_header("25", "Finalize Validation")
   
-  validation_html_report_release <- finalize_validation_report(
+  validation_html_report_release <- complete_stage_validation(
     validation_context_report_release,
-    output_dir = validation_dir
+    validation_dir = validation_dir,
+    stage_name = "REPORT & RELEASE",
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Validation: %s", basename(validation_html_report_release)))
   
   log_message("=== REPORT & RELEASE: COMPLETE ===")
   
   # Store Report & Release results
-  result$report_release <- list(
-    report_html = report_html_path,
-    release_zip = release_zip_path,
-    report_size_kb = if(!is.null(report_html_path) && file.exists(report_html_path)) 
-      file.size(report_html_path) / 1024 else NA,
-    validation_report = validation_html_report_release
+  result <- store_stage_results(
+    result,
+    stage_key = "report_release",
+    stage_outputs = list(
+      report_html = report_html_path,
+      release_zip = release_zip_path,
+      report_size_kb = if(!is.null(report_html_path) && file.exists(report_html_path)) 
+        file.size(report_html_path) / 1024 else NA
+    ),
+    validation_html = validation_html_report_release
   )
-  
-  result$validation_html_paths <- c(result$validation_html_paths, validation_html_report_release)
   
   # ===========================================================================
   # FINALIZE AND RETURN

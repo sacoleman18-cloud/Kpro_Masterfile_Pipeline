@@ -5,8 +5,9 @@
 # -------
 # Transforms all KPro schema versions into a unified master schema. Handles
 # alternates splitting (including semicolon-delimited variants), species code
-# conversion, column name harmonization across KPro versions, and schema
-# unification with row-level detection support.
+# conversion, column name harmonization across KPro versions, schema
+# unification with row-level detection support, and unified species column
+# generation for analysis workflows.
 #
 # STANDARDIZATION CONTRACT
 # ------------------------
@@ -48,6 +49,11 @@
 #    - All rows preserved (no filtering)
 #    - Logs all transformation steps with row counts
 #
+# 6. Species unification
+#    - Creates unified 'species' column with priority: manual_id > auto_id > "NoID"
+#    - Used in CPN template generation and finalization workflows
+#    - Deterministic priority logic (not configurable)
+#
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
@@ -69,11 +75,12 @@
 #
 # WORKFLOW INTEGRATION
 # --------------------
-# This module is used in Workflow 02 (Standardization):
+# This module is used in Workflow 02 (Standardization) and Chunk 2 (CPN Template):
 #   1. raw_combined (from Workflow 01) -> detect_row_schema()
 #   2. raw_with_schemas -> standardize_kpro_schema() -> unified_data
 #   3. unified_data -> convert_datetime_to_cst() -> enforce_unified_schema()
 #   4. validated_data -> finalize_master_columns() -> kpro_master
+#   5. kpro_master -> create_unified_species_column() -> [ready for CPN template]
 #
 # CONTENTS
 # --------
@@ -92,8 +99,15 @@
 # Orchestration:
 #   - standardize_kpro_schema()          # Main orchestrator (splits by schema, transforms, combines)
 #
+# Species Unification:
+#   - create_unified_species_column()    # Unified species with priority logic (manual > auto > NoID)
+#
 # CHANGELOG
 # ---------
+# 2026-02-04: MODULE SPLIT - Added create_unified_species_column()
+#             - Moved from utilities.R for domain-specific logic
+#             - Species unification is data transformation, not utility
+#             - Updated CONTENTS section and WORKFLOW INTEGRATION
 # 2026-01-30: Refactored to use centralized assert_* functions from validation.R
 # 2026-01-30: Removed redundant validate_unified_schema() (use enforce_unified_schema instead)
 # 2026-01-30: Added verbose gating to all message() calls
@@ -103,6 +117,7 @@
 # 2024-12-XX: Initial CODING_STANDARDS compliant version
 #
 # =============================================================================
+
 
 
 # ------------------------------------------------------------------------------
@@ -720,6 +735,125 @@ harmonize_column_names <- function(df, verbose = FALSE) {
   
   df
 }
+
+
+
+# ------------------------------------------------------------------------------
+# Species Unification
+# ------------------------------------------------------------------------------
+
+#' Create Unified Species Column
+#'
+#' @description
+#' Creates a unified species column with priority: manual_id > auto_id > "NoID".
+#' This is the canonical species identification for each detection, resolving
+#' cases where automated identification may have been corrected by expert review.
+#' 
+#' Used in CPN template generation (Chunk 2) and finalization (Chunk 3) to
+#' ensure consistent species assignment across all analysis stages.
+#'
+#' @param data Data frame. Must contain auto_id column at minimum.
+#'   If manual_id column is missing, it will be treated as all NA.
+#'
+#' @return Data frame with unified 'species' column added. Original columns
+#'   (auto_id, manual_id) are preserved unchanged.
+#'
+#' @section Species Priority Logic:
+#' The unified species column follows this priority:
+#' 1. **manual_id** (highest priority): Expert-reviewed identification
+#' 2. **auto_id** (fallback): Automated Kaleidoscope Pro identification
+#' 3. **"NoID"** (default): When both are unidentifiable
+#' 
+#' Values considered "unidentifiable":
+#' - NA (missing)
+#' - "" (empty string)
+#' - "NoID" (explicit no-identification)
+#' - "UNKNOWN" (legacy unknown marker)
+#'
+#' @section CONTRACT:
+#' - Priority: manual_id > auto_id > "NoID" (FIXED)
+#' - Column names: manual_id, auto_id, species (FIXED per schema)
+#' - Treats NA, "", "NoID", "UNKNOWN" as unidentifiable (FIXED)
+#' - Adds 'species' column to data frame
+#' - Does not modify input data frame (returns new one)
+#' - Preserves all existing columns
+#' - No configurable behavior - purely deterministic
+#'
+#' @section DOES NOT:
+#' - Remove rows (just marks as "NoID")
+#' - Modify existing columns
+#' - Validate species names against reference list
+#' - Accept custom column names (violates schema standards)
+#' - Log or print messages (caller controls verbosity)
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage in CPN template generation
+#' kpro_master <- create_unified_species_column(kpro_master)
+#' # Now has 'species' column with priority logic applied
+#'
+#' # Filter to identified species only
+#' identified_calls <- kpro_master %>%
+#'   filter(species != "NoID")
+#'
+#' # Count by unified species
+#' species_counts <- kpro_master %>%
+#'   count(species, sort = TRUE)
+#'
+#' # Example priority resolution:
+#' # auto_id = "MYLU", manual_id = NA    -> species = "MYLU"
+#' # auto_id = "MYLU", manual_id = "EPFU" -> species = "EPFU"
+#' # auto_id = "NoID", manual_id = "LABO" -> species = "LABO"
+#' # auto_id = "NoID", manual_id = NA     -> species = "NoID"
+#' }
+#'
+#' @export
+create_unified_species_column <- function(data) {
+  
+  # Input validation
+  if (!is.data.frame(data)) {
+    stop("data must be a data frame")
+  }
+  
+  # Helper to check if value is valid (not unidentifiable)
+  is_valid <- function(x) {
+    !is.na(x) & x != "" & x != "NoID" & x != "UNKNOWN"
+  }
+  
+  # FIXED column names per schema standards
+  manual_col <- "manual_id"
+  auto_col <- "auto_id"
+  output_col <- "species"
+  
+  # Verify auto_id exists (required)
+  if (!auto_col %in% names(data)) {
+    stop(sprintf(
+      "Required column '%s' not found in data.\n  Available columns: %s",
+      auto_col, paste(head(names(data), 10), collapse = ", ")
+    ))
+  }
+  
+  # Add manual_id if missing (treat as all NA)
+  if (!manual_col %in% names(data)) {
+    data[[manual_col]] <- NA_character_
+  }
+  
+  # Build species column with FIXED priority logic
+  data <- data %>%
+    dplyr::mutate(
+      !!output_col := dplyr::case_when(
+        # Priority 1: manual_id (if valid)
+        is_valid(.data[[manual_col]]) ~ .data[[manual_col]],
+        # Priority 2: auto_id (if valid)
+        is_valid(.data[[auto_col]]) ~ .data[[auto_col]],
+        # Fallback: NoID
+        TRUE ~ "NoID"
+      )
+    )
+  
+  data
+}
+
 
 # ==============================================================================
 # END OF FILE
