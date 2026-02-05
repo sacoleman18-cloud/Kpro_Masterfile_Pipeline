@@ -753,11 +753,6 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 - `apply_intro_standardization()`: Apply initial standardization (internal)
 - `load_local_raw_data()`: Load CSV files from local directory
 - `load_external_raw_data()`: Load CSV files from external sources
-- `detect_schema_version()`: Identify KPro schema version
-- `transform_schema_v1()`: Transform v1 legacy schema
-- `transform_schema_v2()`: Transform v2 transitional schema
-- `transform_schema_v3()`: Transform v3 modern schema
-- `apply_schema_transformation()`: Apply appropriate transformation
 
 ### 5.3 Standardization Module (`R/functions/standardization/`)
 
@@ -775,9 +770,6 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 - `standardize_kpro_schema()`: Main orchestrator - splits by schema and transforms
 - `create_unified_species_column()`: Create unified species column with priority logic
 - Constants: `SPECIES_CODE_MAP_4_TO_6` (60+ species mapping)
-- `transform_v3_to_unified()`: Transform v3 modern schema to unified
-- `standardize_kpro_schema()`: Main orchestrator for schema transformation
-- `create_unified_species_column()`: Create unified species field (manual_id > auto_id > NoID)
 
 **datetime_helpers.R** (8 functions)
 - `convert_datetime_to_local()`: Convert UTC to local timezone with DST handling
