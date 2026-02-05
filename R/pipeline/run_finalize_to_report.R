@@ -866,8 +866,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # ---------------------------------------------------------------------------
-  # Stage 10: Species Composition Summary (Conditional)
+  # Stage 10: Species Composition Summary (Conditional on species column)
   # ---------------------------------------------------------------------------
+  # Creates species composition summary by detector if species column exists.
+  # Skipped if kpro_master does not contain a 'species' column.
   
   log_stage_start("10", "Species Composition Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
@@ -888,8 +890,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # ---------------------------------------------------------------------------
-  # Stage 11: Species Accumulation Summary (Conditional)
+  # Stage 11: Species Accumulation Summary (Conditional on species column)
   # ---------------------------------------------------------------------------
+  # Creates species accumulation over time if species column exists.
+  # Skipped if kpro_master does not contain a 'species' column.
   
   log_stage_start("11", "Species Accumulation Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
@@ -907,8 +911,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # ---------------------------------------------------------------------------
-  # Stage 12: Hourly Activity Summary (Conditional)
+  # Stage 12: Hourly Activity Summary (Conditional on temporal columns)
   # ---------------------------------------------------------------------------
+  # Creates hourly activity summary if Hour_local or DateTime_local columns exist.
+  # Skipped if kpro_master does not contain temporal columns.
   
   log_stage_start("12", "Hourly Activity Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
@@ -926,8 +932,9 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # ---------------------------------------------------------------------------
-  # Stage 13-14: Save Summary RDS and Export Tables
+  # Stage 13: Save Summary RDS
   # ---------------------------------------------------------------------------
+  # Saves all computed summaries to RDS file for later use in reports.
   
   log_stage_start("13", "Save Summary RDS", verbose = verbose, workflow_prefix = "Summary Stats")
   
@@ -1214,10 +1221,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # ---------------------------------------------------------------------------
   # Save all plot objects to RDS for future reference and reproducibility.
   # The RDS contains a structured list with four categories:
-  #   - quality: Quality control and data completeness plots (8 plots)
-  #   - detector: Detector-specific activity and comparison plots (7 plots)
-  #   - species: Species composition and diversity plots (0-5 plots, conditional)
-  #   - temporal: Temporal activity patterns and trends (6 plots)
+  #   - quality: Quality control and data completeness plots (typically 8 plots)
+  #   - detector: Detector-specific activity and comparison plots (typically 7 plots)
+  #   - species: Species composition and diversity plots (0-5 plots, conditional on species data)
+  #   - temporal: Temporal activity patterns and trends (typically 6 plots)
+  # Plot counts may vary based on data availability and plot generation functions.
   # Plot objects can be reloaded and modified without regenerating from data.
   
   log_stage_start("21", "Save Plot Objects RDS", verbose = verbose, workflow_prefix = "Plots")
