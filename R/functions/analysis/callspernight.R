@@ -820,6 +820,8 @@ save_callspernight_with_version <- function(data,
 #' @param output_dir Character. Directory containing template files.
 #'   Default: "outputs/final"
 #' @param verbose Logical. Print status messages? Default: FALSE
+#' @param file_path Character or NULL. Optional explicit path to template file.
+#'   When provided, skips auto-discovery and loads this file directly.
 #'
 #' @return Tibble with template data. Contains columns:
 #'   - Detector: Character, detector name
@@ -868,7 +870,8 @@ save_callspernight_with_version <- function(data,
 #' @export
 load_cpn_template <- function(type = "EDIT_THIS",
                               output_dir = NULL,
-                              verbose = FALSE) {
+                              verbose = FALSE,
+                              file_path = NULL) {
   
   # Input validation
   valid_types <- c("ORIGINAL", "EDIT_THIS")
@@ -884,17 +887,31 @@ load_cpn_template <- function(type = "EDIT_THIS",
     output_dir <- here::here("outputs", "final")
   }
   
-  # Build pattern for file discovery
-  # Pattern: 03_CallsPerNight_Template_{TYPE}_YYYYMMDD_HHMMSS.csv
-  pattern <- sprintf("^03_CallsPerNight_Template_%s_\\d{8}_\\d{6}\\.csv$", type)
-  
-  # Find most recent file
-  template_file <- find_most_recent_file(
-    directory = output_dir,
-    pattern = pattern,
-    error_if_none = TRUE,
-    hint = sprintf("Run Chunk 2 (run_cpn_template) first to generate %s template", type)
-  )
+  if (!is.null(file_path)) {
+    if (!file.exists(file_path)) {
+      stop(sprintf("Failed to load template: file not found at %s", file_path))
+    }
+    expected_pattern <- sprintf("^03_CallsPerNight_Template_%s_\\d{8}_\\d{6}\\.csv$", type)
+    if (!grepl(expected_pattern, basename(file_path))) {
+      stop(sprintf(
+        "Provided template file name does not match expected pattern %s: %s",
+        expected_pattern, basename(file_path)
+      ))
+    }
+    template_file <- file_path
+  } else {
+    # Build pattern for file discovery
+    # Pattern: 03_CallsPerNight_Template_{TYPE}_YYYYMMDD_HHMMSS.csv
+    pattern <- sprintf("^03_CallsPerNight_Template_%s_\\d{8}_\\d{6}\\.csv$", type)
+    
+    # Find most recent file
+    template_file <- find_most_recent_file(
+      directory = output_dir,
+      pattern = pattern,
+      error_if_none = TRUE,
+      hint = sprintf("Run Chunk 2 (run_cpn_template) first to generate %s template", type)
+    )
+  }
   
   if (verbose) {
     message(sprintf("  Loading %s template: %s", type, basename(template_file)))
