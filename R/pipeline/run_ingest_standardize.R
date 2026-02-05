@@ -63,16 +63,26 @@
 #     - standardization.R: standardize_kpro_schema
 #     - datetime_helpers.R: convert_datetime_to_local
 #     - validation.R: enforce_unified_schema, finalize_master_columns,
-#                     create_validation_context, log_validation_event,
-#                     finalize_validation_report, assert_file_exists,
-#                     assert_directory_exists, assert_not_empty
+#                     log_validation_event
 #     - config.R: load_study_parameters
-#     - artifacts.R: init_artifact_registry, register_artifact, hash_dataframe
-#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%,
-#                    setup_pipeline_context, generate_timestamped_filename
+#     - logging.R: initialize_pipeline_log, log_message
+#     - console.R: print_stage_banner
+#     - artifacts.R: hash_dataframe
+#     - utilities.R: setup_pipeline_context, generate_timestamped_filename,
+#                    log_stage_start, save_checkpoint_and_register,
+#                    finalize_stage_validation_report, %||%
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: REFACTORING - Enhanced helper function utilization
+#             - Added initialize_pipeline_log() at startup for proper log initialization
+#             - Replaced all print_stage_header + log_message pairs with log_stage_start()
+#             - Replaced manual CSV save + artifact registration with save_checkpoint_and_register()
+#             - Replaced manual validation HTML finalization with finalize_stage_validation_report()
+#             - Removed direct calls to assert_directory_exists (handled by helper functions)
+#             - Savings: ~50 lines of boilerplate code
+#             - Improved consistency across all orchestration modules
+#             - Updated DEPENDENCIES section to reflect new helper functions
 # 2026-02-05: DOCUMENTATION FIX - Updated DEPENDENCIES reference
 #             - Changed datetime_conversion.R → datetime_helpers.R
 #             - Reflects module consolidation and renaming
@@ -201,6 +211,8 @@ run_ingest_standardize <- function(verbose = FALSE) {
   
   print_stage_banner("INGEST & STANDARDIZE", verbose = verbose)
   
+  # Initialize pipeline log with header
+  initialize_pipeline_log()
   log_message("=== CHUNK 1: Ingest & Standardize - START ===")
   
   # Initialize validation context
@@ -213,7 +225,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 1: LOAD CONFIGURATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("1", "Load Configuration")
+  log_stage_start("1", "Load Configuration", verbose = verbose)
   
   # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
   ctx <- setup_pipeline_context("ingest")
@@ -226,13 +238,11 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # Get external sources from YAML (may be NULL)
   external_sources <- study_params$study_parameters$external_data_sources
   
-  log_message("[Stage 1] Configuration loaded")
-  
   # ===========================================================================
   # STAGE 2: LOAD RAW DATA
   # ===========================================================================
   
-  if (verbose) print_stage_header("2", "Load Raw Data")
+  log_stage_start("2", "Load Raw Data", verbose = verbose)
   
   # Initialize tracking variables
   local_data <- NULL
@@ -393,7 +403,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 3: SCHEMA TRANSFORMATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("3", "Schema Transformation")
+  log_stage_start("3", "Schema Transformation", verbose = verbose)
   
   # Capture schema distribution before transformation
   schema_before <- table(raw_combined$schema_version)
@@ -422,7 +432,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 4: DETECTOR MAPPING
   # ===========================================================================
   
-  if (verbose) print_stage_header("4", "Detector Mapping")
+  log_stage_start("4", "Detector Mapping", verbose = verbose)
   
   # Get detector mapping from configuration
   detector_mapping <- study_params$study_parameters$detector_mapping
@@ -486,7 +496,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 5: TIME CONVERSION
   # ===========================================================================
   
-  if (verbose) print_stage_header("5", "Time Conversion")
+  log_stage_start("5", "Time Conversion", verbose = verbose)
   
   target_tz <- study_params$study_parameters$timezone
   
@@ -524,7 +534,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # CHANGED: Made deduplication optional via YAML configuration
   # ===========================================================================
   
-  if (verbose) print_stage_header("6", "Finalize & Deduplicate")
+  log_stage_start("6", "Finalize & Deduplicate", verbose = verbose)
   
   # Enforce unified schema (using validation.R function)
   kpro_master <- enforce_unified_schema(unified_data)
@@ -587,7 +597,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 7: DATA FILTERS
   # ===========================================================================
   
-  if (verbose) print_stage_header("7", "Data Filters")
+  log_stage_start("7", "Data Filters", verbose = verbose)
   
   # Read filter configuration from YAML (with defensive defaults)
   data_filters <- study_params$study_parameters$data_filters
@@ -683,44 +693,33 @@ run_ingest_standardize <- function(verbose = FALSE) {
   # STAGE 8: SAVE, REGISTER & VALIDATE
   # ===========================================================================
   
-  if (verbose) print_stage_header("8", "Save, Register & Validate")
+  log_stage_start("8", "Save, Register & Validate", verbose = verbose)
   
   # -------------------------
-  # Save checkpoint (using centralized assertion for directory)
+  # Save checkpoint and register artifact
   # -------------------------
   
   checkpoint_dir <- here::here("outputs", "checkpoints")
-  assert_directory_exists(checkpoint_dir, create = TRUE)
   
   # Generate timestamped checkpoint filename using utility
   checkpoint_filename <- generate_timestamped_filename("02_kpro_master")
   checkpoint_path <- here::here("outputs", "checkpoints", checkpoint_filename)
-  
-  readr::write_csv(kpro_master, checkpoint_path)
-  
-  if (verbose) message(sprintf("  [OK] Checkpoint saved: %s", basename(checkpoint_path)))
-  
-  # -------------------------
-  # Register artifact with data hash
-  # -------------------------
   
   # Compute deterministic hash of data content for reproducibility
   data_hash <- hash_dataframe(kpro_master, 
                               sort_by = c("Detector", "DateTime_local", "auto_id"))
   
   # Generate artifact ID using utility (DETERMINISTIC)
-  # Note: For artifact IDs, we need timestamp without extension - still deterministic
   artifact_id <- sub("\\.csv$", "", generate_timestamped_filename("kpro_master"))
   
-  registry <- init_artifact_registry()
-  
-  registry <- register_artifact(
-    registry = registry,
+  # Save checkpoint and register artifact atomically
+  registry <- save_checkpoint_and_register(
+    data = kpro_master,
+    file_path = checkpoint_path,
     artifact_name = artifact_id,
     artifact_type = "masterfile",
     workflow = "ingest",
-    file_path = checkpoint_path,
-    data_hash = data_hash,  # Add data hash for reproducibility tracking
+    data_hash = data_hash,
     metadata = list(
       n_rows_final = nrow(kpro_master),
       n_rows_removed_invalid = total_rows_removed,
@@ -742,10 +741,9 @@ run_ingest_standardize <- function(verbose = FALSE) {
         remove_noid = remove_noid,
         remove_zero_pulse_calls = remove_zero_pulse
       )
-    )
+    ),
+    verbose = verbose
   )
-  
-  if (verbose) message("  [OK] Artifact registered")
   
   # -------------------------
   # Finalize validation context
@@ -756,16 +754,14 @@ run_ingest_standardize <- function(verbose = FALSE) {
   validation_context$summary$date_range <- as.character(date_range)
   
   # -------------------------
-  # Render validation HTML (using centralized assertion for directory)
+  # Render validation HTML
   # -------------------------
   
-  validation_dir <- here::here("results", "validation")
-  
-  validation_html_path <- complete_stage_validation(
+  validation_html_path <- finalize_stage_validation_report(
     validation_context,
-    validation_dir = validation_dir,
     stage_name = "INGEST & STANDARDIZE",
-    verbose = verbose
+    verbose = verbose,
+    output_dir = here::here("results", "validation")
   )
   
   log_message(sprintf("[Stage 8] Registered artifact: %s", artifact_id))
