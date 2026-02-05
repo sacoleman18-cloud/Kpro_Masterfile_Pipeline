@@ -2212,4 +2212,46 @@ artifacts:
       study_id: SchmeeckleBatStudy
       n_files: 33
       zip_size_bytes: 5055176.0
-last_modified_utc: '2026-02-03T22:00:09Z'
+  kpro_master_20260204_215105:
+    name: kpro_master_20260204_215105
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260204_215105.csv
+    file_hash_sha256: 528072827932c0cf6f09a54a9714655da09b36293e0a288062e22382d0af2f32
+    file_size_bytes: 591887.0
+    created_utc: '2026-02-05T03:51:05Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1468
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 540
+      n_rows_removed_zero_pulse: 0
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: yes
+        remove_zero_pulse_calls: yes
+    data_hash_sha256: 9d1c181ab5bc3d1e66df12a36342c9973776a6b7dc3a246c984140f3fd5cd660
+last_modified_utc: '2026-02-05T03:51:05Z'
