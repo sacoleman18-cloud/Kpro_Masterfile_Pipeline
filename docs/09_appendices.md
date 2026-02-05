@@ -1,8 +1,8 @@
 # ==============================================================================
 # APPENDICES
 # ==============================================================================
-# VERSION: 2.3
-# LAST UPDATED: 2026-01-31
+# VERSION: 2.4
+# LAST UPDATED: 2026-02-05
 # PURPOSE: Templates, inventories, checklists, and quick reference
 # ==============================================================================
 
@@ -704,20 +704,31 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 - `get_detector_mapping()`: Extract detector ID -> name mapping
 - `get_recording_schedule()`: Extract recording schedule parameters
 
-**utilities.R** (15+ functions)
+**utilities.R** (11 functions)
 - `%||%`: Null coalescing operator
+- `ensure_dir_exists()`: Create directory if needed
 - `safe_read_csv()`: Read CSV with error handling
-- `make_timestamped_path()`: Generate timestamped file paths
-- `format_number()`: Format numbers with separators
-- `snake_to_title()`: Convert snake_case to Title Case
+- `convert_empty_to_na()`: Convert empty strings to NA
+- `find_most_recent_file()`: Find most recent file by timestamp
+- `setup_pipeline_context()`: Initialize pipeline context (YAML + validation)
+- `load_most_recent_checkpoint()`: Load most recent checkpoint file
+- `generate_timestamped_filename()`: Generate filename with timestamp
+- `make_output_path()`: Generate output path for workflow
+- `make_versioned_path()`: Generate versioned output path
+- `fill_readme_template()`: Fill README template with values
+
+**logging.R** (3 functions)
+- `ensure_log_dir_exists()`: Create log directory if needed (internal)
+- `log_message()`: Write timestamped message to log file
+- `initialize_pipeline_log()`: Initialize pipeline run log
+
+**console.R** (4 functions)
+- `center_text()`: Center text within fixed width
 - `print_stage_header()`: Print formatted stage header
 - `print_workflow_summary()`: Print workflow completion summary
-- `print_pipeline_complete()`: Print final pipeline summary
-- `log_message()`: Write to pipeline log file
-- `ensure_directory()`: Create directory if needed
-- Plus additional helper functions
+- `print_pipeline_complete()`: Print final pipeline completion
 
-**artifacts.R** (13 functions)
+**artifacts.R** (11 functions)
 - `init_artifact_registry()`: Create or load artifact registry
 - `register_artifact()`: Add artifact with metadata and hash
 - `get_artifact()`: Retrieve artifact by name
@@ -726,9 +737,7 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 - `hash_file()`: Compute SHA256 hash of file
 - `hash_dataframe()`: Compute hash of data frame contents
 - `verify_artifact()`: Check if artifact matches registered hash
-- `create_validation_context()`: Initialize validation tracking
-- `log_validation_event()`: Record validation event
-- `finalize_validation_report()`: Generate HTML/YAML validation report
+- `save_and_register_rds()`: Save RDS and register atomically
 - `discover_pipeline_rds()`: Find summary_data and plot_objects RDS
 - `validate_rds_structure()`: Validate RDS has required elements
 
@@ -754,41 +763,65 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 
 ### 5.3 Standardization Module (`R/functions/standardization/`)
 
-**standardization.R** (4+ functions)
-- `standardize_column_names()`: Normalize column names
-- `convert_species_codes()`: Convert between code formats
-- `unify_species_column()`: Create unified species field
-- `apply_detector_mapping()`: Map detector IDs to names
+**standardization.R** (7 functions)
+- `convert_4letter_to_6letter()`: Convert 4-letter species codes to 6-letter
+- `harmonize_column_names()`: Normalize column names (out_file -> out_file_fs)
+- `transform_v1_to_unified()`: Transform v1 legacy schema to unified
+- `transform_v2_to_unified()`: Transform v2 transitional schema to unified
+- `transform_v3_to_unified()`: Transform v3 modern schema to unified
+- `standardize_kpro_schema()`: Main orchestrator for schema transformation
+- `create_unified_species_column()`: Create unified species field (manual_id > auto_id > NoID)
 
-**datetime_conversion.R** (4 functions)
-- `convert_datetime_to_local()`: Convert UTC to local timezone
-- `parse_datetime_safe()`: Safe datetime parsing
-- `parse_date_safe()`: Safe date parsing
-- `parse_time_safe()`: Safe time parsing
+**datetime_helpers.R** (8 functions)
+- `convert_datetime_to_local()`: Convert UTC to local timezone with DST handling
+- `is.Date()`: Check if object is Date class
+- `parse_datetime_safe()`: Safe multi-format datetime parsing
+- `parse_date_safe()`: Safe multi-format date parsing
+- `extract_time()`: Extract time component from datetime
+- `format_datetime_for_log()`: Format datetime for edit log display
+- `is_valid_timezone()`: Timezone validation (internal)
+- `summarize_date_formats()`: Analyze date format patterns (internal)
 
 ### 5.4 Validation Module (`R/functions/validation/`)
 
-**validation.R** (12+ functions)
-- `validate_cpn_data()`: Validate CallsPerNight data
-- `validate_master_data()`: Validate master file
+**validation.R** (19 functions)
 - `assert_data_frame()`: Assert object is data frame
 - `assert_not_empty()`: Assert data frame has rows
+- `assert_row_count()`: Assert exact row count
 - `assert_columns_exist()`: Assert required columns exist
-- `assert_file_exists()`: Assert file exists
+- `assert_column_type()`: Assert column has expected class
+- `assert_not_na()`: Assert column has no NA values
+- `assert_date_range()`: Assert valid date range
+- `assert_time_format()`: Assert HH:MM:SS time format
+- `assert_file_exists()`: Assert file exists with hints
 - `assert_directory_exists()`: Assert/create directory
 - `assert_scalar_string()`: Assert single string value
-- `assert_date_range()`: Assert valid date range
-- `assert_column_type()`: Assert column has expected class
-- `enforce_unified_schema()`: Ensure unified schema compliance
-- `check_column_completeness()`: Check for NA values
+- `validate_data_frame()`: Combined assertions for common pattern
+- `validate_cpn_data()`: Domain-specific CallsPerNight validation
+- `validate_master_data()`: Domain-specific master file validation
+- `enforce_unified_schema()`: Ensure master file schema compliance
+- `finalize_master_columns()`: Remove unwanted columns and reorder
+- `check_column_completeness()`: Report NA percentages per column
+- `check_duplicates()`: Detect duplicate rows
+- `validate_calls_per_night()`: Check CPN logical consistency
+
+**validation_reporting.R** (6 functions)
+- `create_validation_context()`: Initialize validation event tracking
+- `log_validation_event()`: Record validation event to context
+- `finalize_validation_report()`: Finalize context and save YAML + HTML
+- `generate_validation_html()`: Generate HTML report from context
+- `init_stage_validation()`: Initialize validation for stage (wrapper)
+- `complete_stage_validation()`: Complete validation for stage (wrapper)
 
 ### 5.5 Analysis Module (`R/functions/analysis/`)
 
-**callspernight.R** (4 functions)
-- `generate_calls_per_night_template()`: Generate CPN template
-- `apply_schedule()`: Apply recording schedule
-- `calculate_recording_hours()`: Calculate hours from times
-- `save_callspernight_with_version()`: Save with version number
+**callspernight.R** (6 functions)
+- `calculate_recording_hours()`: Calculate recording duration (vectorized)
+- `generate_calls_per_night_template()`: Generate CPN template with Excel formulas
+- `apply_schedule()`: Apply recording schedule to template
+- `save_callspernight_with_version()`: Save with auto-incrementing version
+- `load_cpn_template()`: Load ORIGINAL or EDIT_THIS template
+- `extract_template_timestamp()`: Extract timestamp from filename (internal)
 
 **summarization.R** (3+ functions)
 - `summarize_by_detector()`: Detector-level statistics
@@ -866,15 +899,18 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 | Module | File | Function Count |
 |--------|------|----------------|
 | Core | config.R | 5 |
-| Core | utilities.R | 15+ |
-| Core | artifacts.R | 13 |
+| Core | utilities.R | 11 |
+| Core | logging.R | 3 |
+| Core | console.R | 4 |
+| Core | artifacts.R | 11 |
 | Core | release.R | 4+ |
 | Ingestion | ingestion.R | 3 |
 | Ingestion | schema_detection.R | 5+ |
-| Standardization | standardization.R | 4+ |
-| Standardization | datetime_conversion.R | 4 |
-| Validation | validation.R | 12+ |
-| Analysis | callspernight.R | 4 |
+| Standardization | standardization.R | 7 |
+| Standardization | datetime_helpers.R | 8 |
+| Validation | validation.R | 19 |
+| Validation | validation_reporting.R | 6 |
+| Analysis | callspernight.R | 6 |
 | Analysis | summarization.R | 3+ |
 | Output | plot_helpers.R | 6 |
 | Output | plot_quality.R | 8 |
@@ -884,7 +920,7 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 | Output | tables.R | 3+ |
 | Output | report.R | 4+ |
 | Pipeline | run_*.R | 3 |
-| **TOTAL** | | **~95+ functions** |
+| **TOTAL** | | **~120+ functions** |
 
 ---
 
