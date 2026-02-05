@@ -593,7 +593,7 @@ if (has_hour || has_datetime) {
   # Add Hour column if not present
   if (!has_hour && has_datetime) {
     kpro_master <- kpro_master %>%
-      mutate(Hour_local = lubridate::hour(DateTime_local))
+      mutate(Hour_local = as.integer(lubridate::hour(DateTime_local)))
   }
   
   # Study-wide hourly profile

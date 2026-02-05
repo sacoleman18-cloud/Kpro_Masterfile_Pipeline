@@ -339,7 +339,7 @@ plot_hourly_activity_profile <- function(master_data, metric = "total") {
   if (!"Hour_local" %in% names(master_data)) {
     if ("DateTime_local" %in% names(master_data)) {
       master_data <- master_data %>%
-        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
+        dplyr::mutate(Hour_local = as.integer(lubridate::hour(DateTime_local)))
     } else {
       stop(
         "master_data must contain 'Hour_local' or 'DateTime_local' column",

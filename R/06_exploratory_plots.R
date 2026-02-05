@@ -388,7 +388,7 @@ has_datetime_local <- "DateTime_local" %in% names(kpro_master)
 if (!has_hour_local && has_datetime_local) {
   message("\nCreating Hour_local column from DateTime_local...")
   kpro_master <- kpro_master %>%
-    mutate(Hour_local = lubridate::hour(DateTime_local))
+    mutate(Hour_local = as.integer(lubridate::hour(DateTime_local)))
   has_hour_local <- TRUE
   message("✓ Hour_local column created")
 }
