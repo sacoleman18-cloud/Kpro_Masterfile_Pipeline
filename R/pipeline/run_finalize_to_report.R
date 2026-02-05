@@ -347,6 +347,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
     )
     
     kpro_master <- safe_read_csv(kpro_master_file, verbose = verbose)
+    
+    # Parse DateTime_local from CSV format back to POSIXct
+    study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
+    kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
   }
   
   validation_context_finalize_cpn <- log_validation_event(
