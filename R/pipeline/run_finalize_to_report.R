@@ -99,7 +99,7 @@
 #       create_study_summary, generate_quality_plots, generate_detector_plots,
 #       generate_species_plots, generate_temporal_plots, create_release_bundle,
 #       print_stage_banner, init_stage_validation,
-#       save_and_register_rds, store_stage_results, find_most_recent_checkpoint,
+#       save_and_register_rds, store_stage_results, load_most_recent_checkpoint,
 #       load_cpn_template, initialize_pipeline_log, log_stage_start,
 #       save_checkpoint_and_register, finalize_stage_validation_report
 #
@@ -340,13 +340,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   } else {
     if (verbose) message("  [!] Loading kpro_master from checkpoint...")
     
-    kpro_master_file <- find_most_recent_checkpoint(
-      "kpro_master",
-      checkpoints_dir = here::here("outputs", "checkpoints"),
-      required = TRUE
-    )
-    
-    kpro_master <- safe_read_csv(kpro_master_file, verbose = verbose)
+    kpro_master <- load_most_recent_checkpoint("^02_kpro_master_.*\\.csv$")
     
     # Parse DateTime_local from CSV format back to POSIXct
     study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
@@ -367,19 +361,12 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # Load original template for comparison
-  template_original_file <- find_most_recent_checkpoint(
-    "cpn_original",
-    checkpoints_dir = outputs_dir,
-    required = TRUE
-  )
-  
-  template_original_result <- load_cpn_template(
-    template_original_file,
-    validation_context = validation_context_finalize_cpn,
+  template_original <- load_cpn_template(
+    type = "ORIGINAL",
+    output_dir = outputs_dir,
     verbose = verbose
   )
-  template_original <- template_original_result$template
-  validation_context_finalize_cpn <- template_original_result$validation_context
+  template_original_file <- attr(template_original, "source_file") %||% "UNKNOWN_ORIGINAL"
   
   if (verbose) {
     message(sprintf("  [DIAGNOSTIC] ORIGINAL template loaded: %d rows", nrow(template_original)))
@@ -407,22 +394,16 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Load edited template
   if (is.null(edited_template_file)) {
-    edited_template_file <- find_most_recent_checkpoint(
-      "cpn_edit",
-      checkpoints_dir = outputs_dir,
-      required = TRUE
+    template_edited <- load_cpn_template(
+      type = "EDIT_THIS",
+      output_dir = outputs_dir,
+      verbose = verbose
     )
+    edited_template_file <- attr(template_edited, "source_file") %||% "UNKNOWN_EDIT_THIS"
   } else {
     assert_file_exists(edited_template_file, hint = "Check edited template path")
+    template_edited <- safe_read_csv(edited_template_file, verbose = verbose)
   }
-  
-  template_edited_result <- load_cpn_template(
-    edited_template_file,
-    validation_context = validation_context_finalize_cpn,
-    verbose = verbose
-  )
-  template_edited <- template_edited_result$template
-  validation_context_finalize_cpn <- template_edited_result$validation_context
   
   if (verbose) {
     message(sprintf("  [DIAGNOSTIC] EDIT_THIS template loaded: %d rows", nrow(template_edited)))
