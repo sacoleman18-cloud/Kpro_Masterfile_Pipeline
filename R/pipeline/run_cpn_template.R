@@ -65,7 +65,7 @@
 # ------------
 #   Custom functions (via load_all.R):
 #     - config.R: load_study_parameters, get_schedule_config
-#     - utilities.R: log_message, print_stage_header, safe_read_csv, %||%,
+#     - utilities.R: log_message, print_stage_header, print_stage_banner, safe_read_csv, %||%,
 #                    setup_pipeline_context, load_most_recent_checkpoint,
 #                    generate_timestamped_filename, create_unified_species_column
 #     - callspernight.R: generate_calls_per_night_template
@@ -243,6 +243,8 @@ run_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   # SETUP
   # ===========================================================================
+  
+  print_stage_banner("CPN TEMPLATE GENERATION", verbose = verbose)
   
   log_message("=== CHUNK 2: Generate CallsPerNight Template - START ===")
   
