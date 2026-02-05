@@ -311,6 +311,10 @@ run_cpn_template <- function(kpro_master = NULL,
     if (verbose) message(sprintf("  [!] Loading Manual ID file: %s", basename(manual_id_file)))
     
     kpro_master <- safe_read_csv(manual_id_file)
+    
+    # Parse DateTime_local from CSV format back to POSIXct
+    kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
+    
     manual_id_used <- TRUE
     
     validation_context <- log_validation_event(
@@ -347,6 +351,9 @@ run_cpn_template <- function(kpro_master = NULL,
     if (verbose) message("  [!] Loading from most recent checkpoint...")
     
     kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*\\.csv$")
+    
+    # Parse DateTime_local from CSV format back to POSIXct
+    kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
     
     validation_context <- log_validation_event(
       validation_context,

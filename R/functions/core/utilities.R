@@ -353,6 +353,89 @@ convert_empty_to_na <- function(df, columns) {
 }
 
 
+#' Parse DateTime_local Column from CSV
+#'
+#' @description
+#' Parses the DateTime_local column after reading from CSV, converting from
+#' character (MM/DD/YYYY HH:MM:SS format) back to POSIXct with correct timezone.
+#' This function should be called on kpro_master after loading from CSV to
+#' restore the datetime object with proper timezone attribute.
+#'
+#' @param df Data frame with DateTime_local as character column
+#' @param target_tz Character. Target timezone (e.g., "America/Chicago").
+#'   REQUIRED - must match the timezone used when creating DateTime_local.
+#' @param verbose Logical. Print status messages? Default: FALSE
+#'
+#' @return Data frame with DateTime_local as POSIXct with correct timezone
+#'
+#' @section CONTRACT:
+#' - Parses DateTime_local from MM/DD/YYYY HH:MM:SS format
+#' - Returns DateTime_local as POSIXct with tz=target_tz
+#' - Skips parsing if DateTime_local is already POSIXct
+#' - Prints warning if DateTime_local column not found
+#' - Never throws errors (returns df unchanged on failure)
+#'
+#' @section DOES NOT:
+#' - Perform timezone conversions (assumes datetime is already in target_tz)
+#' - Modify other columns
+#' - Validate timezone names
+#'
+#' @examples
+#' \dontrun{
+#' # After loading from CSV
+#' kpro_master <- safe_read_csv("outputs/checkpoints/02_kpro_master_*.csv")
+#' kpro_master <- parse_datetime_columns(kpro_master, target_tz = "America/Chicago", verbose = TRUE)
+#' }
+#'
+#' @export
+parse_datetime_columns <- function(df, target_tz, verbose = FALSE) {
+  
+  # Validate target_tz is provided
+  if (missing(target_tz)) {
+    stop("target_tz is REQUIRED for parsing DateTime_local from CSV")
+  }
+  
+  # Check if DateTime_local column exists
+  if (!"DateTime_local" %in% names(df)) {
+    if (verbose) {
+      message("  [!] DateTime_local column not found, skipping datetime parsing")
+    }
+    return(df)
+  }
+  
+  # Skip if already POSIXct
+  if (inherits(df$DateTime_local, "POSIXct")) {
+    if (verbose) {
+      message("  [OK] DateTime_local already POSIXct, skipping parsing")
+    }
+    return(df)
+  }
+  
+  # Parse from character to POSIXct
+  if (verbose) {
+    message(sprintf("  Parsing DateTime_local column (timezone: %s)...", target_tz))
+  }
+  
+  df <- df %>%
+    dplyr::mutate(
+      DateTime_local = parse_datetime_local_from_csv(DateTime_local, target_tz = target_tz)
+    )
+  
+  # Count successful parses
+  n_success <- sum(!is.na(df$DateTime_local))
+  n_failed <- sum(is.na(df$DateTime_local))
+  
+  if (verbose) {
+    message(sprintf("    [OK] Parsed %s datetime values", format(n_success, big.mark = ",")))
+    if (n_failed > 0) {
+      message(sprintf("    [!] Warning: %s values failed to parse", format(n_failed, big.mark = ",")))
+    }
+  }
+  
+  df
+}
+
+
 # ==============================================================================
 # FILE DISCOVERY
 # ==============================================================================
@@ -1035,8 +1118,30 @@ save_checkpoint_and_register <- function(data,
   output_dir_actual <- dirname(file_path)
   ensure_dir_exists(output_dir_actual)
   
+  # Format DateTime_local column for CSV export if present
+  # This converts POSIXct to character in MM/DD/YYYY HH:MM:SS format
+  # to prevent ISO 8601 format and preserve timezone through CSV round-trip
+  data_to_save <- data
+  if ("DateTime_local" %in% names(data_to_save)) {
+    if (inherits(data_to_save$DateTime_local, "POSIXct")) {
+      # Store the timezone for metadata
+      dt_tz <- attr(data_to_save$DateTime_local, "tzone")
+      if (is.null(dt_tz) || dt_tz == "") {
+        dt_tz <- "UTC"  # Default if no timezone set
+      }
+      
+      # Format for CSV export
+      data_to_save$DateTime_local <- format_datetime_for_csv(data_to_save$DateTime_local)
+      
+      # Add timezone to metadata for reconstruction
+      if (is.null(metadata$datetime_timezone)) {
+        metadata$datetime_timezone <- dt_tz
+      }
+    }
+  }
+  
   # Save CSV file
-  readr::write_csv(data, file_path)
+  readr::write_csv(data_to_save, file_path)
   
   # Initialize or use existing registry
   if (is.null(registry)) {

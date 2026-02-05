@@ -72,18 +72,26 @@
 #   - parse_datetime_safe()            # Parse full datetime strings (multi-format)
 #   - parse_date_safe()                # Parse date strings (multi-format)
 #   - extract_time()                   # Extract time component from datetime
+#   - parse_datetime_local_from_csv()  # Parse DateTime_local from CSV (MM/DD/YYYY HH:MM:SS)
 #
 # Type Checking:
 #   - is.Date()                        # Check if object is Date class
 #
 # Formatting:
 #   - format_datetime_for_log()        # Format datetime for edit log display
+#   - format_datetime_for_csv()        # Format datetime for CSV export (MM/DD/YYYY HH:MM:SS)
 #
 # Debugging:
 #   - summarize_date_formats()         # Analyze date format patterns (internal)
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: CSV FORMAT FIX - Added DateTime_local CSV formatting functions
+#             - Added format_datetime_for_csv() for MM/DD/YYYY HH:MM:SS export format
+#             - Added parse_datetime_local_from_csv() to parse CSV datetime back to POSIXct
+#             - Fixes issue where DateTime_local was exported in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+#             - Fixes error in run_cpn_template where force_tz() failed on character column
+#             - Ensures DateTime_local maintains timezone through CSV round-trip
 # 2026-02-05: DOCUMENTATION FIX - Standards compliance update
 #             - Fixed MODULE header format (removed path prefix)
 #             - Renamed "CONTENTS" to "FUNCTIONS PROVIDED"
@@ -594,6 +602,73 @@ extract_time <- function(datetime_str) {
 }
 
 
+#' Parse DateTime_local from CSV Format
+#'
+#' @description
+#' Parses a DateTime_local character string from CSV files back to POSIXct with
+#' the correct timezone. Handles the MM/DD/YYYY HH:MM:SS format used in exported
+#' CSV files. Used when loading kpro_master from checkpoint CSV files.
+#'
+#' @param datetime_str Character datetime string in format "MM/DD/YYYY HH:MM:SS"
+#' @param target_tz Character. Target timezone (e.g., "America/Chicago").
+#'   REQUIRED - must match the timezone used when creating DateTime_local.
+#'
+#' @return POSIXct datetime object with timezone attribute set to target_tz,
+#'   or NA (POSIXct) if parsing fails or input is NA
+#'
+#' @section CONTRACT:
+#' - Returns POSIXct object with tz=target_tz
+#' - Returns NA (POSIXct) for NA or blank input (fails gracefully)
+#' - Parses MM/DD/YYYY HH:MM:SS format
+#' - Never throws errors (returns NA on failure)
+#' - Vectorized (works on entire columns)
+#'
+#' @section DOES NOT:
+#' - Perform timezone conversions (assumes input is already in target_tz)
+#' - Validate timezone names
+#' - Handle other date formats (only MM/DD/YYYY HH:MM:SS)
+#'
+#' @examples
+#' \dontrun{
+#' # Parse single datetime
+#' dt_str <- "10/24/2025 18:00:00"
+#' dt <- parse_datetime_local_from_csv(dt_str, target_tz = "America/Chicago")
+#' # Result: POSIXct with tz="America/Chicago"
+#' 
+#' # Parse column in data frame after CSV import
+#' kpro_master <- kpro_master %>%
+#'   mutate(DateTime_local = parse_datetime_local_from_csv(DateTime_local, target_tz = study_tz))
+#' }
+#'
+#' @export
+parse_datetime_local_from_csv <- function(datetime_str, target_tz) {
+  
+  # Validate target_tz is provided
+  if (missing(target_tz)) {
+    stop("target_tz is REQUIRED for parsing DateTime_local from CSV")
+  }
+  
+  # Handle NA or empty input
+  if (length(datetime_str) == 0) {
+    return(as.POSIXct(character(0), tz = target_tz))
+  }
+  
+  # Parse MM/DD/YYYY HH:MM:SS format with target timezone
+  # Use lubridate::mdy_hms which handles this format
+  result <- lubridate::mdy_hms(datetime_str, tz = target_tz, quiet = TRUE)
+  
+  # If parsing failed for any values, try format() approach
+  if (any(is.na(result) & !is.na(datetime_str))) {
+    # Fallback to base R parsing
+    result2 <- as.POSIXct(datetime_str, format = "%m/%d/%Y %H:%M:%S", tz = target_tz)
+    # Use fallback for failed parses
+    result[is.na(result) & !is.na(datetime_str)] <- result2[is.na(result) & !is.na(datetime_str)]
+  }
+  
+  return(result)
+}
+
+
 # ------------------------------------------------------------------------------
 # Formatting (Edit Log Display)
 # ------------------------------------------------------------------------------
@@ -643,6 +718,61 @@ format_datetime_for_log <- function(dt_parsed, dt_string) {
   
   # Format as: MM/DD/YYYY HH:MM (24-hour, no seconds, consistent)
   return(format(dt_parsed, "%m/%d/%Y %H:%M"))
+}
+
+
+#' Format DateTime for CSV Export
+#'
+#' @description
+#' Formats a POSIXct datetime column to character format for CSV export,
+#' ensuring human-readable display in MM/DD/YYYY HH:MM:SS format. This prevents
+#' the default ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) and preserves timezone
+#' information for later parsing.
+#'
+#' @param dt_column POSIXct datetime vector
+#'
+#' @return Character vector in format "MM/DD/YYYY HH:MM:SS" (24-hour with seconds),
+#'   or NA_character_ for NA inputs
+#'
+#' @section CONTRACT:
+#' - Returns character string in format "MM/DD/YYYY HH:MM:SS"
+#' - Returns NA_character_ for NA inputs
+#' - Always 24-hour format (never AM/PM)
+#' - Always includes seconds
+#' - Zero-padded (e.g., "08:00:00" not "8:00:0")
+#' - Vectorized (works on entire columns)
+#'
+#' @section DOES NOT:
+#' - Perform timezone conversions (preserves datetime as-is)
+#' - Validate timezone attribute
+#' - Add timezone indicator to output string
+#'
+#' @examples
+#' \dontrun{
+#' # Format single datetime
+#' dt <- as.POSIXct("2025-10-24 18:00:00", tz = "America/Chicago")
+#' format_datetime_for_csv(dt)  # [1] "10/24/2025 18:00:00"
+#' 
+#' # Format column in data frame before CSV export
+#' kpro_master <- kpro_master %>%
+#'   mutate(DateTime_local = format_datetime_for_csv(DateTime_local))
+#' }
+#'
+#' @export
+format_datetime_for_csv <- function(dt_column) {
+  
+  # Handle NA values
+  if (all(is.na(dt_column))) {
+    return(rep(NA_character_, length(dt_column)))
+  }
+  
+  # Format as: MM/DD/YYYY HH:MM:SS (24-hour with seconds)
+  formatted <- format(dt_column, "%m/%d/%Y %H:%M:%S")
+  
+  # Replace "NA" strings with actual NA
+  formatted[is.na(dt_column)] <- NA_character_
+  
+  return(formatted)
 }
 
 
