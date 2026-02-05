@@ -941,8 +941,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     study_name = study_params$study_parameters$study_name %||% "Unknown",
     n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
     n_nights = dplyr::n_distinct(calls_per_night_final$Night),
-    has_species = has_species,
-    has_temporal = has_temporal
+    has_species = TRUE,  # Guaranteed by schema validation in Stage 2
+    has_temporal = TRUE  # Guaranteed by schema validation in Stage 2
   )
   
   registry <- save_and_register_rds(
@@ -953,8 +953,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     registry = registry,
     metadata = list(
       n_summaries = length(all_summaries),
-      has_species = has_species,
-      has_temporal = has_temporal
+      has_species = TRUE,  # Guaranteed by schema validation in Stage 2
+      has_temporal = TRUE  # Guaranteed by schema validation in Stage 2
     ),
     verbose = verbose
   )
@@ -1034,8 +1034,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
       all_summaries = all_summaries,
       summary_rds = summary_rds_path,
       files_created = character(),
-      has_species = has_species,
-      has_temporal = has_temporal,
+      has_species = TRUE,    # Guaranteed by schema validation in Stage 2
+      has_temporal = TRUE,   # Guaranteed by schema validation in Stage 2
       tables_exported = tables_exported
     ),
     validation_html = validation_html_summary_stats
