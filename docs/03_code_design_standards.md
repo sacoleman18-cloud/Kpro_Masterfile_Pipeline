@@ -1,9 +1,9 @@
 # ==============================================================================
 # CODE DESIGN STANDARDS
 # ==============================================================================
-# VERSION: 2.3
-# LAST UPDATED: 2026-01-31
-# PURPOSE: Function design, error handling, variable naming, and code style
+# VERSION: 2.4
+# LAST UPDATED: 2026-02-05
+# PURPOSE: Function design, error handling, variable naming, code style, and helper patterns
 # ==============================================================================
 
 ## 1. FUNCTION DESIGN PRINCIPLES
@@ -158,16 +158,125 @@ run_my_chunk <- function() {
 
 ---
 
-## 2. ERROR HANDLING STANDARDS
+## 2. CUSTOM OPERATORS AND UTILITY PATTERNS
 
-### 2.1 Error Message Requirements
+### 2.1 Null Coalescing Operator (`%||%`)
+
+The null coalescing operator provides default values when dealing with NULL:
+
+```r
+# Definition (in utilities.R)
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
+}
+
+# Usage: Provide defaults in function parameters
+timezone <- config$timezone %||% "America/New_York"
+detector_name <- mapping[[detector_id]] %||% detector_id
+output_path <- user_path %||% here("outputs", "default.csv")
+
+# Common pattern: Safe nested list access
+study_name <- config$metadata$study_name %||% "Unknown Study"
+```
+
+**When to use:**
+- Providing default values for optional parameters
+- Safely accessing nested list elements
+- Handling missing configuration values
+
+**What it does NOT do:**
+- Does NOT handle NA values (only NULL)
+- Does NOT handle empty strings ("")
+- Does NOT handle empty vectors (length 0)
+
+### 2.2 Safe File Operations
+
+**Pattern: Safe CSV Reading**
+```r
+# Use safe_read_csv() instead of readr::read_csv()
+df <- safe_read_csv(file_path, col_types = cols(.default = "c"))
+
+# Returns tibble on success, NULL on failure (never errors)
+# Useful for optional file loading
+external_data <- safe_read_csv(external_path) %||% tibble()
+```
+
+**Pattern: Ensure Directory Exists**
+```r
+# Always use before writing files
+ensure_dir_exists(here("outputs", "checkpoints"))
+write_csv(df, output_path)
+
+# Safe for repeated calls - no error if already exists
+ensure_dir_exists(output_dir)  # Creates with recursive = TRUE
+```
+
+### 2.3 Orchestrator Helper Patterns
+
+**Pattern: Pipeline Context Setup**
+```r
+# Consolidates YAML loading + validation context initialization
+run_my_chunk <- function(verbose = FALSE) {
+  # Replaces ~20 lines of boilerplate
+  context_result <- setup_pipeline_context("my_chunk")
+  study_params <- context_result$study_params
+  validation_context <- context_result$validation_context
+  
+  # ... rest of processing ...
+}
+```
+
+**Pattern: Checkpoint Loading**
+```r
+# Pattern-based checkpoint discovery
+kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*")
+cpn_final <- load_most_recent_checkpoint("04_CallsPerNight_Final_.*")
+
+# Returns tibble on success, throws informative error if not found
+# Searches in outputs/checkpoints/ by default
+```
+
+**Pattern: Timestamped Filenames**
+```r
+# Consistent timestamp format across pipeline
+checkpoint_file <- generate_timestamped_filename(
+  "02_kpro_master", 
+  suffix = ".csv"
+)
+# Result: "02_kpro_master_20260205_143022.csv"
+
+# Used with make_output_path for full paths
+checkpoint_path <- here("outputs", "checkpoints", checkpoint_file)
+```
+
+**Pattern: Atomic RDS Save + Register**
+```r
+# Saves RDS and registers artifact in one operation
+registry <- save_and_register_rds(
+  object = summary_data,
+  file_path = here("results", "rds", "summary_data.rds"),
+  artifact_type = "summary_stats",
+  workflow = "05",
+  registry = registry,
+  metadata = list(n_summaries = 8, has_species = TRUE),
+  verbose = verbose
+)
+
+# Atomically: saves file, computes SHA256 hash, registers in artifact registry
+```
+
+---
+
+## 3. ERROR HANDLING STANDARDS
+
+### 3.1 Error Message Requirements
 
 **Every error message must:**
 1. Explain WHAT went wrong
 2. Explain WHERE it went wrong (filename, column, row)
 3. Suggest HOW to fix it
 
-### 2.2 Good Error Messages
+### 3.2 Good Error Messages
 
 ```r
 # [OK] GOOD: Actionable, specific, helpful
@@ -189,7 +298,7 @@ if (length(missing_cols) > 0) {
 }
 ```
 
-### 2.3 Bad Error Messages
+### 3.3 Bad Error Messages
 
 ```r
 # [X] BAD: Uninformative
@@ -202,7 +311,7 @@ stop("File not found")
 stop("Invalid data")
 ```
 
-### 2.4 Error Handling Rules
+### 3.4 Error Handling Rules
 
 | Scope | Rule | Enforcement Example |
 |-------|------|---------------------|
@@ -215,7 +324,7 @@ stop("Invalid data")
 | Never silent | Always throw error or warn | [X] `if (error) return(NULL)` silently |
 | Severity matching | Use appropriate level | [X] `stop()` for optional missing column |
 
-### 2.5 Centralized Assertion Functions
+### 3.5 Centralized Assertion Functions
 
 Use the centralized `assert_*` functions from `validation.R` instead of writing custom validation:
 
@@ -255,9 +364,246 @@ my_function <- function(df, config_path) {
 
 ---
 
-## 3. VARIABLE NAMING
+## 4. CONSOLE OUTPUT AND LOGGING HELPERS
 
-### 3.1 Snake_case for Everything in R
+### 4.1 Console Formatting Functions
+
+**Stage Headers (from console.R):**
+```r
+# Use for numbered stages in orchestrator functions
+if (verbose) print_stage_header("1", "Load Configuration")
+if (verbose) print_stage_header("2.1", "Apply Detector Mapping")
+
+# Output:
+# +-----------------------------------------------------------------+
+# |                   STAGE 1: Load Configuration                   |
+# +-----------------------------------------------------------------+
+```
+
+**Workflow Summary (from console.R):**
+```r
+# Use at chunk/workflow completion
+if (verbose) {
+  print_workflow_summary(
+    workflow = "CHUNK 1",
+    title = "Ingest & Standardize Complete",
+    items = list(
+      "Rows processed" = format(nrow(df), big.mark = ","),
+      "Checkpoint" = basename(checkpoint_path),
+      "Validation HTML" = basename(validation_html)
+    )
+  )
+}
+
+# Output: Formatted box with workflow name, title, and key-value items
+```
+
+**Pipeline Complete (from console.R):**
+```r
+# Use at final pipeline completion
+if (verbose) {
+  print_pipeline_complete(
+    outputs = list(
+      "Final CPN" = "CallsPerNight_final_v1.csv",
+      "Report" = "bat_activity_report.html"
+    ),
+    next_steps = c(
+      "Review validation report",
+      "Download release bundle"
+    ),
+    report_path = report_path
+  )
+}
+```
+
+### 4.2 File Logging Functions
+
+**Always Active (Never Gated):**
+```r
+# From logging.R - file logging always happens regardless of verbose
+log_message("=== CHUNK 1: Ingest & Standardize Started ===")
+log_message(sprintf("Loaded %d rows from %d files", n_rows, n_files))
+log_message("Checkpoint saved: outputs/checkpoints/02_kpro_master.csv")
+log_message("=== CHUNK 1: Complete ===")
+
+# Writes to logs/pipeline_YYYY-MM-DD.log with timestamps
+# [2026-02-05 14:30:22] === CHUNK 1: Ingest & Standardize Started ===
+```
+
+**Initialize Pipeline Log:**
+```r
+# Initialize at start of orchestrator function
+initialize_pipeline_log("run_ingest_standardize")
+
+# Creates/appends to daily log file, writes header
+```
+
+### 4.3 Console Output Gating Pattern
+
+**Orchestrator functions must gate all console output:**
+```r
+run_my_chunk <- function(verbose = FALSE) {
+  
+  # File logging: NEVER gated
+  log_message("=== Starting chunk ===")
+  
+  # Stage headers: GATED
+  if (verbose) print_stage_header("1", "Load Data")
+  
+  # Progress messages: GATED
+  if (verbose) message("  Loading configuration...")
+  
+  # Warnings: NEVER gated
+  if (nrow(df) == 0) warning("Empty data frame")
+  
+  # Errors: NEVER gated
+  if (!file.exists(path)) stop("File not found")
+  
+  # Completion: GATED
+  if (verbose) message("  [OK] Complete")
+  
+  # File logging: NEVER gated
+  log_message("=== Chunk complete ===")
+}
+```
+
+---
+
+## 5. ARTIFACT MANAGEMENT AND VALIDATION REPORTING
+
+### 5.1 Artifact Registry Pattern
+
+**Initialize Registry:**
+```r
+# At start of orchestrator function
+registry <- init_artifact_registry()
+```
+
+**Register Individual Artifacts:**
+```r
+# Register checkpoints, outputs, reports
+registry <- register_artifact(
+  registry = registry,
+  artifact_name = "kpro_master",
+  artifact_type = "checkpoint",
+  workflow = "01",
+  file_path = checkpoint_path,
+  metadata = list(
+    n_rows = nrow(df),
+    data_hash = hash_dataframe(df)
+  )
+)
+```
+
+**Atomic RDS Save + Register:**
+```r
+# Best practice for RDS files - combines save + register
+registry <- save_and_register_rds(
+  object = plot_objects,
+  file_path = here("results", "rds", "plot_objects.rds"),
+  artifact_type = "plots",
+  workflow = "06",
+  registry = registry,
+  metadata = list(n_plots = 26),
+  verbose = verbose
+)
+```
+
+### 5.2 Validation Reporting Pattern
+
+**Initialize Validation Context:**
+```r
+# Option 1: Using helper wrapper
+validation_context <- init_stage_validation("chunk_1", study_params)
+
+# Option 2: Direct creation
+validation_context <- create_validation_context(
+  workflow = "chunk_1",
+  study_name = study_params$study_name
+)
+```
+
+**Log Events During Processing:**
+```r
+# Track important events during chunk execution
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "data_loaded",
+  description = "Raw CSV files loaded",
+  count = n_files,
+  details = list(local = n_local, external = n_external)
+)
+
+validation_context <- log_validation_event(
+  validation_context,
+  event_type = "filter_noid",
+  description = "NoID detections removed",
+  count = n_removed
+)
+```
+
+**Finalize and Generate Report:**
+```r
+# Option 1: Using helper wrapper
+validation_html_path <- complete_stage_validation(
+  validation_context = validation_context,
+  validation_dir = here("results", "validation"),
+  stage_name = "CHUNK 1",
+  verbose = verbose
+)
+
+# Option 2: Direct finalization
+validation_context <- finalize_validation_report(
+  validation_context,
+  output_dir = here("results", "validation")
+)
+validation_html_path <- validation_context$html_path
+```
+
+### 5.3 Combined Pattern in Orchestrator
+
+```r
+run_my_chunk <- function(verbose = FALSE) {
+  
+  # Initialize both registry and validation
+  registry <- init_artifact_registry()
+  validation_context <- init_stage_validation("my_chunk", study_params)
+  
+  # ... processing stages ...
+  
+  # Log events
+  validation_context <- log_validation_event(
+    validation_context,
+    event_type = "processing_complete",
+    count = nrow(result_df)
+  )
+  
+  # Register artifacts
+  registry <- register_artifact(
+    registry, "my_output", "checkpoint", "01", checkpoint_path
+  )
+  
+  # Finalize validation
+  validation_html <- complete_stage_validation(
+    validation_context, validation_dir, "MY CHUNK", verbose
+  )
+  
+  # Return structured list
+  list(
+    data = result_df,
+    metadata = list(...),
+    artifact_id = artifact_id,
+    checkpoint_path = checkpoint_path,
+    validation_html_path = validation_html
+  )
+}
+```
+
+---
+
+## 6. VARIABLE NAMING
+
+### 6.1 Snake_case for Everything in R
 
 ```r
 detector_id          # [OK] Good
@@ -265,7 +611,7 @@ detectorId           # [X] Bad (camelCase)
 detector.id          # [X] Bad (dot notation)
 ```
 
-### 3.2 Descriptive Names
+### 6.2 Descriptive Names
 
 ```r
 recording_start_time # [OK] Good
@@ -273,7 +619,7 @@ rst                  # [X] Bad (unclear abbreviation)
 time1                # [X] Bad (meaningless)
 ```
 
-### 3.3 Boolean Variables
+### 6.3 Boolean Variables
 
 ```r
 is_valid             # [OK] Good
@@ -281,7 +627,7 @@ has_species_column   # [OK] Good
 valid                # [X] Bad (unclear)
 ```
 
-### 3.4 Variable Naming Rules
+### 6.4 Variable Naming Rules
 
 - [OK] Use full words (not abbreviations)
 - [OK] Be specific (not `data`, but `calls_per_night`)
@@ -291,9 +637,9 @@ valid                # [X] Bad (unclear)
 
 ---
 
-## 4. CODE ORGANIZATION
+## 7. CODE ORGANIZATION
 
-### 4.1 Within a Function
+### 7.1 Within a Function
 
 ```r
 my_function <- function(df, verbose = FALSE) {
@@ -326,7 +672,7 @@ my_function <- function(df, verbose = FALSE) {
 }
 ```
 
-### 4.2 Within a Workflow Script
+### 7.2 Within a Workflow Script
 
 Use the standardized `print_stage_header()` function (see `05_logging_console_standards.md`):
 
@@ -348,7 +694,7 @@ print_stage_header("1.2", "Apply Intro Standardization")
 # Stage code here...
 ```
 
-### 4.3 Within an Orchestrating Function
+### 7.3 Within an Orchestrating Function
 
 Gate all console output with verbose:
 
@@ -372,9 +718,9 @@ run_my_chunk <- function(verbose = FALSE) {
 
 ---
 
-## 5. STYLE STANDARDS
+## 8. STYLE STANDARDS
 
-### 5.1 Spacing and Indentation
+### 8.1 Spacing and Indentation
 
 **Use 2 spaces for indentation:**
 ```r
@@ -405,7 +751,7 @@ x<-1+2
 result<-df%>%filter(value>0)
 ```
 
-### 5.2 Line Length
+### 8.2 Line Length
 
 **Keep lines under 80 characters when possible:**
 ```r
@@ -418,7 +764,7 @@ result <- df %>%
 result <- df %>% filter(detector_id %in% active_detectors) %>% summarise(total = sum(calls, na.rm = TRUE))
 ```
 
-### 5.3 Piping Style
+### 8.3 Piping Style
 
 **Use %>% for clarity:**
 ```r
@@ -435,7 +781,7 @@ result <- raw_data %>% filter(!is.na(detector_id)) %>% mutate(date = ymd(date)) 
 
 ---
 
-## 6. QUICK REFERENCE
+## 9. QUICK REFERENCE
 
 ### Good vs Bad Examples
 
@@ -565,4 +911,73 @@ process <- function(d) { ... }
 #'
 #' @export
 remove_duplicates <- function(df, verbose = FALSE) { ... }
+```
+
+**Helper Functions:**
+```r
+# [X] BAD: Manual null checking
+config_tz <- if (is.null(config$timezone)) "America/New_York" else config$timezone
+
+# [OK] GOOD: Use %||% operator
+config_tz <- config$timezone %||% "America/New_York"
+
+# [X] BAD: Manual checkpoint loading
+files <- list.files("outputs/checkpoints", pattern = "02_kpro_master", full.names = TRUE)
+checkpoint_file <- files[length(files)]
+df <- read_csv(checkpoint_file)
+
+# [OK] GOOD: Use helper function
+df <- load_most_recent_checkpoint("02_kpro_master_.*")
+
+# [X] BAD: Manual RDS save + register
+saveRDS(summary_data, file_path)
+file_hash <- digest::digest(file_path, algo = "sha256", file = TRUE)
+registry <- register_artifact(registry, "summary_data", "summary", "05", file_path, 
+                              metadata = list(hash = file_hash))
+
+# [OK] GOOD: Atomic save + register
+registry <- save_and_register_rds(
+  summary_data, file_path, "summary", "05", registry, 
+  metadata = list(n_summaries = 8), verbose = verbose
+)
+```
+
+**Console Output:**
+```r
+# [X] BAD: Manual box drawing
+message("\n+----------------------------------------------------------+")
+message("|                STAGE 1: Load Data                         |")
+message("+----------------------------------------------------------+\n")
+
+# [OK] GOOD: Use helper function
+if (verbose) print_stage_header("1", "Load Data")
+
+# [X] BAD: No structured completion message
+if (verbose) message("Complete!")
+
+# [OK] GOOD: Use workflow summary
+if (verbose) {
+  print_workflow_summary(
+    workflow = "CHUNK 1",
+    title = "Processing Complete",
+    items = list("Rows" = nrow(df), "Time" = elapsed_time)
+  )
+}
+```
+
+**Validation Reporting:**
+```r
+# [X] BAD: Manual validation tracking
+events <- list()
+events[[1]] <- list(type = "data_loaded", count = nrow(df))
+# ... more manual tracking ...
+
+# [OK] GOOD: Use validation helpers
+validation_context <- init_stage_validation("chunk_1", study_params)
+validation_context <- log_validation_event(
+  validation_context, "data_loaded", "Raw data loaded", nrow(df)
+)
+validation_html <- complete_stage_validation(
+  validation_context, validation_dir, "CHUNK 1", verbose
+)
 ```

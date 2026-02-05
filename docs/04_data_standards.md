@@ -1,9 +1,9 @@
 # ==============================================================================
 # DATA STANDARDS
 # ==============================================================================
-# VERSION: 2.3
-# LAST UPDATED: 2026-01-31
-# PURPOSE: Data handling, quality validation, fingerprinting, and validation reports
+# VERSION: 2.4
+# LAST UPDATED: 2026-02-05
+# PURPOSE: Data handling, schema structures, quality validation, fingerprinting, and validation reports
 # ==============================================================================
 
 ## 1. DATA FRAME CONVENTIONS
@@ -35,9 +35,181 @@ df <- tibble(
 
 ---
 
-## 2. MISSING DATA
+## 2. KPRO SCHEMA STRUCTURES
 
-### 2.1 Explicit NA Handling
+### 2.1 Schema Evolution Overview
+
+The pipeline handles three KPro schema versions, each with different column structures and species code formats. All schemas are transformed to a unified master schema during Chunk 1 processing.
+
+| Schema | Era | Species Codes | Alternates | Key Identifier Column |
+|--------|-----|---------------|------------|----------------------|
+| V1 | Legacy | 4-letter | Semicolon-delimited in single column | `IN FILE` or `INFILE` |
+| V2 | Transitional | 4-letter | Separate columns (alternate_1, alternate_2) | `INDIR` |
+| V3 | Modern | 6-letter | Separate columns (alternate_1, alternate_2, alternate_3) | `FOLDER` |
+
+### 2.2 Schema V1 (Legacy)
+
+**Characteristics:**
+- 4-letter species codes (e.g., "MYLU", "EPFU")
+- Semicolon-delimited alternates in single column
+- Two variants:
+  - Traditional: `alternates` column with semicolons
+  - Modern variant: `alternate_1` column with semicolons
+
+**Key Columns:**
+```
+IN FILE, DATE, TIME, AUTO ID, alternates (or alternate_1 with semicolons)
+```
+
+**Example Data:**
+```
+AUTO ID: MYLU
+alternates: EPFU;LACI;LANO
+```
+
+**Transformation:**
+- Split alternates by semicolon → separate alternate_1, alternate_2, alternate_3
+- Convert all 4-letter codes to 6-letter using species code map
+- Result: `auto_id: MYOLUC, alternate_1: EPTFUS, alternate_2: LASCIN, alternate_3: LASNO D`
+
+### 2.3 Schema V2 (Transitional)
+
+**Characteristics:**
+- 4-letter species codes (e.g., "MYLU", "EPFU")
+- Separate alternate columns (no semicolons)
+- May have alternate_1 and alternate_2, but not alternate_3
+
+**Key Columns:**
+```
+INDIR, DATE, TIME, AUTO ID, alternate_1, alternate_2
+```
+
+**Transformation:**
+- Add alternate_3 column (filled with NA if missing)
+- Convert all 4-letter codes to 6-letter using species code map
+
+### 2.4 Schema V3 (Modern)
+
+**Characteristics:**
+- 6-letter species codes (e.g., "MYOLUC", "EPTFUS")
+- Separate alternate columns
+- May have alternate_1 and alternate_2, but not alternate_3
+
+**Key Columns:**
+```
+FOLDER, IN FILE, DATE, TIME, AUTO ID, alternate_1, alternate_2
+```
+
+**Transformation:**
+- Add alternate_3 column (filled with NA if missing)
+- Species codes already in target 6-letter format (no conversion needed)
+- Pass through with minimal changes
+
+### 2.5 Unified Master Schema
+
+All schema versions are transformed into this unified format during Chunk 1:
+
+**Required Columns:**
+```r
+# Core identification
+Detector          # Character - detector name (from mapping or ID)
+DateTime_local    # POSIXct - local timezone timestamp
+Date_local        # Date - local date
+Hour_local        # Integer - hour of day (0-23)
+
+# Species identification (6-letter codes)
+auto_id           # Character - automatic species ID
+alternate_1       # Character - first alternate species
+alternate_2       # Character - second alternate species
+alternate_3       # Character - third alternate species
+manual_id         # Character - manual review ID (optional)
+
+# Call characteristics
+N                 # Integer - number of pulses
+Pulses            # Integer - alias for N (both present)
+
+# File references
+out_file_fs       # Character - full spectrum output file
+out_file_zc       # Character - zero-crossing output file (optional)
+```
+
+**Optional Columns (if present in source):**
+```r
+Duration, Fmax, Fmin, Fc, TBC, S1, Sc, FcMedKhz, FmaxMedKhz, 
+BwMedKhz, DurMedMs, TcMedS, FreqKneeMedKhz, and others
+```
+
+**Removed During Finalization:**
+```r
+# These columns are removed by finalize_master_columns()
+orgid, userid, review_orig, review_userid, 
+alternates (legacy v1), schema_version (temporary detection column)
+```
+
+### 2.6 Species Code Mapping
+
+The pipeline uses a comprehensive species code map (60+ species) to convert 4-letter legacy codes to 6-letter modern codes:
+
+**Example Mappings:**
+```r
+SPECIES_CODE_MAP_4_TO_6 <- c(
+  # Myotis species
+  "MYLU" = "MYOLUC",   # Little brown bat
+  "MYSE" = "MYOSEP",   # Northern long-eared bat
+  "MYSO" = "MYOSOD",   # Indiana bat
+  
+  # Eptesicus species
+  "EPFU" = "EPTFUS",   # Big brown bat
+  
+  # Lasiurus species
+  "LACI" = "LASCIN",   # Hoary bat
+  "LABO" = "LASBOR",   # Eastern red bat
+  "LANO" = "LASNOC",   # Silver-haired bat
+  
+  # ... 50+ more species
+)
+```
+
+**Conversion Rules:**
+- Applied to: auto_id, alternate_1, alternate_2, alternate_3
+- Case-insensitive matching
+- Unknown codes preserved (logged but not errored)
+- NoID preserved as "NoID" (not converted)
+
+### 2.7 Column Name Harmonization
+
+The pipeline handles legacy-to-modern column name transitions:
+
+**Key Harmonizations:**
+```r
+# Output file naming (KPro version change)
+"out_file" → "out_file_fs"  # Full spectrum file
+# Preserves "out_file_zc" if present (zero-crossing file)
+
+# Coalescing: If both legacy and modern names exist, modern wins
+out_file_fs = coalesce(out_file_fs, out_file)
+```
+
+### 2.8 Schema Transformation Contract
+
+**Guarantees:**
+1. **Non-destructive** - All rows preserved (no filtering)
+2. **Deterministic** - Same input always produces same output
+3. **Logged** - All transformations logged with row counts
+4. **Type-safe** - Character columns remain character, numeric remain numeric
+5. **Mixed-schema support** - Can process files with different schemas in same batch
+
+**Validation Points:**
+- Schema detection before transformation
+- Required columns present after transformation
+- Species code conversion completion logged
+- Row count preserved across transformation
+
+---
+
+## 3. MISSING DATA
+
+### 3.1 Explicit NA Handling
 
 ```r
 # [OK] GOOD: Explicit about NA behavior
@@ -49,7 +221,7 @@ total_calls <- df %>%
   summarise(total = sum(calls))
 ```
 
-### 2.2 Check for Completeness
+### 3.2 Check for Completeness
 
 ```r
 # Before critical operations
@@ -58,7 +230,7 @@ if (any(is.na(df$detector_id))) {
 }
 ```
 
-### 2.3 Missing Data Rules
+### 3.3 Missing Data Rules
 
 - [OK] Always specify `na.rm = TRUE/FALSE` explicitly
 - [OK] Warn users about NA values in critical columns
@@ -67,9 +239,9 @@ if (any(is.na(df$detector_id))) {
 
 ---
 
-## 3. DATE/TIME HANDLING
+## 4. DATE/TIME HANDLING
 
-### 3.1 Use Lubridate
+### 4.1 Use Lubridate
 
 ```r
 library(lubridate)
@@ -83,7 +255,7 @@ datetime_utc <- ymd_hms("2025-01-15 14:30:00", tz = "UTC")
 datetime_local <- force_tz(datetime_utc, tzone = "America/Chicago")
 ```
 
-### 3.2 Date/Time Rules
+### 4.2 Date/Time Rules
 
 - [OK] Always specify timezone explicitly
 - [OK] Use `force_tz()` when asserting timezone (not converting)
@@ -92,7 +264,7 @@ datetime_local <- force_tz(datetime_utc, tzone = "America/Chicago")
 - [X] NEVER use character strings for date arithmetic
 - [X] NEVER assume local timezone
 
-### 3.3 Timezone Column Naming Convention
+### 4.3 Timezone Column Naming Convention
 
 Use explicit timezone suffixes to prevent ambiguity:
 
@@ -111,9 +283,9 @@ Date
 
 ---
 
-## 4. DATA QUALITY VALIDATION
+## 5. DATA QUALITY VALIDATION
 
-### 4.1 Validation Checkpoints by Chunk
+### 5.1 Validation Checkpoints by Chunk
 
 | Chunk | Function | Validation Points |
 |-------|----------|-------------------|
@@ -129,7 +301,7 @@ Date
 | 03 | Chunk 2 | After loading master, after filtering NoID, after species unification |
 | 04-07 | Chunk 3 | After CPN finalization, after stats, after plots, before report |
 
-### 4.2 Post-Load Validation Example
+### 5.2 Post-Load Validation Example
 
 ```r
 df <- readRDS(here("results", "csv", "CallsPerNight_final.rds"))
@@ -150,7 +322,7 @@ if (verbose) message("[OK] Data loaded and validated")
 if (verbose) message(sprintf("  Rows: %s", format(nrow(df), big.mark = ",")))
 ```
 
-### 4.3 Validation Rules
+### 5.3 Validation Rules
 
 | Scope | Rule | Enforcement Example |
 |-------|------|---------------------|
@@ -161,7 +333,7 @@ if (verbose) message(sprintf("  Rows: %s", format(nrow(df), big.mark = ",")))
 | Data types | Check class of critical columns | [OK] `assert_column_type()` |
 | Valid ranges | Check numeric ranges | [OK] `recording_hours > 0` |
 
-### 4.4 Schema Validation
+### 5.4 Schema Validation
 
 ```r
 # Validate schema was detected
@@ -188,7 +360,7 @@ if (length(missing) > 0) {
 }
 ```
 
-### 4.5 Data Quality Reporting
+### 5.5 Data Quality Reporting
 
 **Always report:**
 - Number of rows processed
@@ -213,24 +385,43 @@ if (verbose) {
 
 ---
 
-## 5. VALIDATION REPORT SYSTEM
+## 6. VALIDATION REPORT SYSTEM
 
 Every chunk/workflow generates a human-readable validation report documenting all operations performed, data quality checks, and transformation summaries. These reports provide QA documentation and audit trails.
 
-### 5.1 Output Locations
+### 6.1 Output Locations
 
 - YAML: `results/validation/validation_[chunk]_YYYYMMDD_HHMMSS.yaml`
 - HTML: `results/validation/validation_[chunk]_YYYYMMDD_HHMMSS.html`
 
-### 5.2 Validation Context
+### 6.2 Validation Context
 
-A validation context tracks events throughout chunk/workflow execution:
+A validation context tracks events throughout chunk/workflow execution. Validation context functions are provided in `validation_reporting.R`.
 
+**Core Functions:**
+```r
+# From validation_reporting.R
+create_validation_context(workflow, study_name = NULL)
+log_validation_event(context, event_type, description, count, details)
+finalize_validation_report(context, output_dir)
+generate_validation_html(context, output_path)
+```
+
+**Helper Wrappers (Recommended):**
+```r
+# Convenience wrappers for orchestrators
+init_stage_validation(stage_name, study_params)
+complete_stage_validation(validation_context, validation_dir, stage_name, verbose)
+```
+
+**Pattern:**
 ```r
 # Initialize at chunk start
+validation_context <- init_stage_validation("chunk_1", study_params)
+# Or directly:
 validation_context <- create_validation_context(
   workflow = "ingest",
-  workflow_name = "Ingest & Standardize"
+  study_name = study_params$study_name
 )
 
 # Log events during processing
@@ -245,14 +436,21 @@ validation_context <- log_validation_event(
   )
 )
 
-# Finalize at chunk end
-report_path <- finalize_validation_report(
+# Finalize at chunk end (using wrapper)
+validation_html_path <- complete_stage_validation(
   validation_context,
-  output_dir = here::here("results", "validation")
+  validation_dir = here("results", "validation"),
+  stage_name = "CHUNK 1",
+  verbose = verbose
+)
+# Or directly:
+validation_context <- finalize_validation_report(
+  validation_context,
+  output_dir = here("results", "validation")
 )
 ```
 
-### 5.3 Event Types
+### 6.3 Event Types
 
 The following event types are recognized and auto-accumulate in summaries:
 
@@ -300,7 +498,7 @@ The following event types are recognized and auto-accumulate in summaries:
 | `warning` | Non-fatal issues | count |
 | `error` | Fatal issues | count |
 
-### 5.4 Event Logging Pattern
+### 6.4 Event Logging Pattern
 
 ```r
 # Simple event
@@ -336,7 +534,7 @@ validation_context <- log_validation_event(
 )
 ```
 
-### 5.5 HTML Report Structure
+### 6.5 HTML Report Structure
 
 Generated HTML reports contain:
 
@@ -349,21 +547,23 @@ Generated HTML reports contain:
 
 **Collapsible details:** Complex event details are hidden by default and expandable.
 
-### 5.6 Integration Patterns
+### 6.6 Integration Patterns
 
 **Orchestrating Function Pattern (Preferred):**
 ```r
 run_my_chunk <- function(verbose = FALSE) {
   
-  # Initialize at chunk start
-  validation_context <- create_validation_context(workflow = "chunk_name")
+  # Initialize using helper wrapper
+  validation_context <- init_stage_validation("chunk_name", study_params)
   
   # ... processing with log_validation_event() calls ...
   
-  # Finalize (always happens, not gated by verbose)
-  validation_html_path <- finalize_validation_report(
+  # Finalize using helper wrapper (always happens, not gated by verbose)
+  validation_html_path <- complete_stage_validation(
     validation_context,
-    output_dir = here::here("results", "validation")
+    validation_dir = here("results", "validation"),
+    stage_name = "CHUNK NAME",
+    verbose = verbose
   )
   
   # Return path in structured result
@@ -400,7 +600,7 @@ log_message(sprintf("[Workflow ##] Validation report: %s",
                     basename(validation_report_path)))
 ```
 
-### 5.7 Validation Report Naming
+### 6.7 Validation Report Naming
 
 Reports are named with chunk/workflow identifier and timestamp:
 ```
@@ -412,7 +612,7 @@ validation_finalize_20260119_143420.html
 
 This allows multiple runs to be preserved and compared.
 
-### 5.8 User-Configured Data Filters
+### 6.8 User-Configured Data Filters
 
 The pipeline supports YAML-configured data filters that are applied during Chunk 1 processing. These are tracked as validation events.
 
@@ -463,18 +663,18 @@ result$metadata$rows_removed
 
 ---
 
-## 6. DATASET FINGERPRINTING & HASHING
+## 7. DATASET FINGERPRINTING & HASHING
 
 Cryptographic hashing provides scientific reproducibility guarantees.
 
-### 6.1 Purpose
+### 7.1 Purpose
 
 1. **Integrity verification** - Detect any modification to artifacts
 2. **Provenance tracking** - Link outputs to specific inputs
 3. **Reproducibility proof** - Same inputs produce same hashes
 4. **Audit trail** - Complete chain of custody for data
 
-### 6.2 Hashing Functions
+### 7.2 Hashing Functions
 
 **File hashing:**
 ```r
@@ -496,7 +696,7 @@ is_valid <- verify_artifact(registry, "kpro_master_20260112")
 # Returns: TRUE if current file hash matches registered hash
 ```
 
-### 6.3 Hash Storage
+### 7.3 Hash Storage
 
 Hashes are stored in two locations:
 
@@ -517,7 +717,7 @@ data_integrity:
   release_fingerprint: "<SHA256_HASH>"
 ```
 
-### 6.4 Provenance Chain
+### 7.4 Provenance Chain
 
 The manifest tracks a complete provenance chain showing how each artifact derives from its inputs:
 
@@ -545,7 +745,7 @@ provenance_chain:
   # ... continues through all pipeline steps
 ```
 
-### 6.5 When to Hash
+### 7.5 When to Hash
 
 **ALWAYS hash:**
 - Final data outputs (Master, CPN)
@@ -558,7 +758,7 @@ provenance_chain:
 - Log files
 - Validation reports (they document, not produce data)
 
-### 6.6 Hash Verification Pattern
+### 7.6 Hash Verification Pattern
 
 Use this pattern when loading artifacts that require integrity:
 
@@ -589,7 +789,7 @@ load_verified_artifact <- function(artifact_name, registry) {
 }
 ```
 
-### 6.7 Combined Input Hash
+### 7.7 Combined Input Hash
 
 For reproducibility, the manifest computes a combined hash of all source inputs:
 

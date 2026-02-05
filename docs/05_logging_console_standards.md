@@ -1,8 +1,8 @@
 # ==============================================================================
 # LOGGING & CONSOLE OUTPUT STANDARDS
 # ==============================================================================
-# VERSION: 2.3
-# LAST UPDATED: 2026-01-31
+# VERSION: 2.4
+# LAST UPDATED: 2026-02-05
 # PURPOSE: File logging, console output formatting, progress indicators, verbose gating
 # ==============================================================================
 
@@ -18,6 +18,8 @@
 
 ### 1.2 Implementation
 
+**Core Module:** `R/functions/core/logging.R`
+
 ```r
 log_message <- function(message) {
   log_dir <- here::here("logs")
@@ -29,6 +31,25 @@ log_message <- function(message) {
   cat(sprintf("[%s] %s\n", timestamp, message), 
       file = log_file, 
       append = TRUE)
+}
+```
+
+### 1.3 Initialize Pipeline Log
+
+Use `initialize_pipeline_log()` at the start of orchestrator functions to write a formatted header:
+
+```r
+# From logging.R
+initialize_pipeline_log <- function(workflow_name) {
+  log_message(sprintf("===== %s =====", workflow_name))
+  log_message(sprintf("Started: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  log_message("")
+}
+
+# Usage in orchestrator
+run_ingest_standardize <- function(verbose = FALSE) {
+  initialize_pipeline_log("CHUNK 1: Ingest & Standardize")
+  # ... processing ...
 }
 ```
 
@@ -82,6 +103,10 @@ run_ingest_standardize <- function(verbose = FALSE) {
 ---
 
 ## 3. CONSOLE FORMATTING FUNCTIONS
+
+**Core Module:** `R/functions/core/console.R`
+
+All console formatting functions are provided in `console.R` (split from utilities.R on 2026-02-04 for modularity).
 
 ### 3.1 Stage Header Function
 
@@ -375,17 +400,26 @@ message(sprintf("  Duration: %.1f seconds", as.numeric(elapsed)))
 
 ## 8. UTILITY FUNCTIONS
 
-### 8.1 Null Coalescing Operator
+### 8.1 Module Organization
 
-```r
-# Definition (in utilities.R)
-`%||%` <- function(x, y) if (is.null(x)) y else x
+Console and logging functions are organized into separate modules for clarity:
 
-# Usage
-result <- potentially_null_value %||% "default"
-```
+**`R/functions/core/logging.R`:**
+- `log_message()` - Write timestamped messages to log file
+- `initialize_pipeline_log()` - Write formatted header to log
+- `ensure_log_dir_exists()` - Internal helper (creates log directory)
 
-### 8.2 Console Formatting Functions (in utilities.R)
+**`R/functions/core/console.R`:**
+- `center_text()` - Center text within fixed width (internal helper)
+- `print_stage_header()` - Print formatted stage header box
+- `print_workflow_summary()` - Print workflow/chunk completion summary
+- `print_pipeline_complete()` - Print pipeline completion with next steps
+
+**`R/functions/core/utilities.R`:**
+- `%||%` - Null coalescing operator (for default values)
+- Other general utilities (not console/logging specific)
+
+### 8.2 Console Formatting Functions (in console.R)
 
 ```r
 #' Print Stage Header
