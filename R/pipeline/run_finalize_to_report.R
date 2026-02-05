@@ -361,7 +361,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (length(missing_columns) > 0) {
     stop(sprintf(
-      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream workflows:\n  - DateTime_local & Hour_local: created by run_ingest_standardize() (Workflow 02)\n  - species: created by run_cpn_template() (Workflow 03)\n  Please verify that both upstream workflows completed successfully.",
+      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream workflows:\n  - DateTime_local & Hour_local: created by run_ingest_standardize() (Workflow 02)\n  - species: created by run_cpn_template() (Workflow 03)\n  \n  To remediate:\n  1. Check that both workflows completed without errors\n  2. Verify kpro_master checkpoint files exist in outputs/checkpoints/\n  3. Review pipeline logs for any warnings or failures in Workflows 02-03\n  4. Ensure input data contains datetime and species identification columns",
       paste(missing_columns, collapse = ", ")
     ))
   }
