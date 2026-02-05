@@ -77,6 +77,7 @@
 #   - setup_pipeline_context()
 #   - load_most_recent_checkpoint()
 #   - generate_timestamped_filename()
+#   - store_stage_results()
 #
 # Path Generation:
 #   - make_output_path()
@@ -107,6 +108,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: Added store_stage_results() orchestrator helper
+#             - Consolidates stage output storage in result object
+#             - Tracks validation HTML paths across multiple stages
+#             - Used by multi-stage orchestrators (run_finalize_to_report)
 # 2026-02-04: MODULE SPLIT - Reduced file size for LLM compatibility
 #             - Moved logging functions to core/logging.R (2 functions)
 #             - Moved console formatting to core/console.R (4 functions)
@@ -599,6 +604,81 @@ generate_timestamped_filename <- function(prefix, suffix = "") {
   
   base_name <- paste(parts, collapse = "_")
   paste0(base_name, ".csv")
+}
+
+
+#' Store Stage Results in Orchestrator Result Object
+#'
+#' @description
+#' Consolidates stage outputs into a structured result object used by 
+#' multi-stage orchestrator functions. Stores stage-specific outputs under 
+#' a stage key and tracks validation HTML paths.
+#'
+#' @param result List. The result object being built (must have 
+#'   `validation_html_paths` field).
+#' @param stage_key Character. Unique identifier for the stage 
+#'   (e.g., "ingest_standardize", "finalize_cpn").
+#' @param stage_outputs List. Stage-specific outputs to store (typically 
+#'   includes data, metadata, artifact_id, checkpoint_path).
+#' @param validation_html Character. Optional. Path to validation HTML for 
+#'   this stage.
+#'
+#' @return List. Updated result object with stage outputs stored and 
+#'   validation_html added to tracking array.
+#'
+#' @section CONTRACT:
+#' - Stores stage_outputs under result[[stage_key]]
+#' - Appends validation_html to result$validation_html_paths if provided
+#' - Returns modified result object
+#' - Does not validate structure of stage_outputs (caller's responsibility)
+#'
+#' @section DOES NOT:
+#' - Create or validate files
+#' - Modify global state
+#' - Write to log (caller's responsibility)
+#' - Validate stage_key uniqueness (caller may overwrite)
+#'
+#' @examples
+#' \dontrun{
+#' # Initialize result object
+#' result <- list(
+#'   validation_html_paths = character()
+#' )
+#' 
+#' # Store stage outputs
+#' stage_outputs <- list(
+#'   kpro_master = df,
+#'   metadata = list(n_rows = nrow(df)),
+#'   artifact_id = "kpro_master_20260205"
+#' )
+#' 
+#' result <- store_stage_results(
+#'   result,
+#'   stage_key = "ingest_standardize",
+#'   stage_outputs = stage_outputs,
+#'   validation_html = "results/validation/validation_ingest_20260205.html"
+#' )
+#' 
+#' # Access stored outputs
+#' master <- result$ingest_standardize$kpro_master
+#' all_reports <- result$validation_html_paths
+#' }
+#'
+#' @export
+store_stage_results <- function(result, 
+                                stage_key, 
+                                stage_outputs, 
+                                validation_html = NULL) {
+  
+  # Store stage outputs under stage key
+  result[[stage_key]] <- stage_outputs
+  
+  # Track validation HTML if provided
+  if (!is.null(validation_html) && nchar(validation_html) > 0) {
+    result$validation_html_paths <- c(result$validation_html_paths, validation_html)
+  }
+  
+  result
 }
 
 

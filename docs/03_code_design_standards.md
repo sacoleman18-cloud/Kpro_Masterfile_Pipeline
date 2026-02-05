@@ -265,6 +265,36 @@ registry <- save_and_register_rds(
 # Atomically: saves file, computes SHA256 hash, registers in artifact registry
 ```
 
+**Pattern: Store Stage Results (Multi-Stage Orchestrators)**
+```r
+# For orchestrators with multiple stages (e.g., run_finalize_to_report)
+# Consolidates stage outputs and tracks validation reports
+
+# Initialize result object
+result <- list(
+  validation_html_paths = character()
+)
+
+# After each stage, store outputs
+stage_outputs <- list(
+  data = processed_data,
+  metadata = list(n_rows = nrow(processed_data), stage_complete = TRUE),
+  artifact_id = artifact_id,
+  checkpoint_path = checkpoint_path
+)
+
+result <- store_stage_results(
+  result,
+  stage_key = "finalize_cpn",
+  stage_outputs = stage_outputs,
+  validation_html = validation_html_path
+)
+
+# Later stages can access previous outputs
+previous_data <- result$finalize_cpn$data
+all_validation_reports <- result$validation_html_paths
+```
+
 ---
 
 ## 3. ERROR HANDLING STANDARDS
@@ -980,4 +1010,28 @@ validation_context <- log_validation_event(
 validation_html <- complete_stage_validation(
   validation_context, validation_dir, "CHUNK 1", verbose
 )
+```
+
+**Multi-Stage Result Storage:**
+```r
+# [X] BAD: Manual result building across stages
+result <- list()
+result$stage1_data <- data1
+result$stage1_metadata <- meta1
+result$validation_paths <- c(html1)
+# ... manual tracking for each stage ...
+
+# [OK] GOOD: Use store_stage_results helper
+result <- list(validation_html_paths = character())
+
+result <- store_stage_results(
+  result,
+  stage_key = "finalize_cpn",
+  stage_outputs = list(data = cpn_final, metadata = list(...)),
+  validation_html = validation_html_path
+)
+
+# Clean access to stage outputs
+cpn <- result$finalize_cpn$data
+all_reports <- result$validation_html_paths
 ```
