@@ -340,6 +340,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   } else {
     if (verbose) message("  [!] Loading kpro_master from checkpoint...")
     
+    # Checkpoints follow 02_kpro_master_YYYYMMDD_HHMMSS.csv naming
     kpro_master <- load_most_recent_checkpoint("^02_kpro_master_.*\\.csv$")
     
     # Parse DateTime_local from CSV format back to POSIXct
@@ -366,7 +367,12 @@ run_finalize_to_report <- function(kpro_master = NULL,
     output_dir = outputs_dir,
     verbose = verbose
   )
-  template_original_file <- attr(template_original, "source_file") %||% "UNKNOWN_ORIGINAL"
+  # load_cpn_template returns a tibble only; validation context remains unchanged
+  template_original_file <- attr(template_original, "source_file")
+  if (is.null(template_original_file)) {
+    warning("source_file attribute missing for ORIGINAL template loaded via load_cpn_template; downstream logging may show NA paths")
+    template_original_file <- NA_character_
+  }
   
   if (verbose) {
     message(sprintf("  [DIAGNOSTIC] ORIGINAL template loaded: %d rows", nrow(template_original)))
@@ -399,10 +405,26 @@ run_finalize_to_report <- function(kpro_master = NULL,
       output_dir = outputs_dir,
       verbose = verbose
     )
-    edited_template_file <- attr(template_edited, "source_file") %||% "UNKNOWN_EDIT_THIS"
+    # validation context not modified by template loader
+    edited_template_file <- attr(template_edited, "source_file")
+    if (is.null(edited_template_file)) {
+      warning("source_file attribute missing for EDIT_THIS template loaded via load_cpn_template; downstream logging may show NA paths")
+      edited_template_file <- NA_character_
+    }
   } else {
-    assert_file_exists(edited_template_file, hint = "Check edited template path")
-    template_edited <- safe_read_csv(edited_template_file, verbose = verbose)
+    template_edited <- load_cpn_template(
+      type = "EDIT_THIS",
+      verbose = verbose,
+      file_path = edited_template_file
+    )
+    # output_dir not required when explicit file_path is provided
+    edited_template_attr <- attr(template_edited, "source_file")
+    if (is.null(edited_template_attr)) {
+      warning("source_file attribute missing for EDIT_THIS template loaded via load_cpn_template; downstream logging may show provided path")
+      # Keep provided path for downstream logging
+    } else {
+      edited_template_file <- edited_template_attr
+    }
   }
   
   if (verbose) {
