@@ -1,5 +1,5 @@
 # =============================================================================
-# MODULE: summarization.R - SUMMARY STATISTICS (LOCKED CONTRACT)
+# MODULE: summarization.R - SUMMARY STATISTICS (DETERMINISTIC)
 # =============================================================================
 # PURPOSE
 # -------
@@ -10,6 +10,27 @@
 # All functions are purely descriptive — no hypothesis testing or statistical
 # inference. Output is designed for use in reports, publications, and as input
 # to visualization functions.
+#
+# DETERMINISTIC DESIGN PHILOSOPHY
+# --------------------------------
+# This module strictly follows the pipeline's deterministic philosophy:
+#
+# 1. NO AMBIGUOUS PARAMETERS
+#    - Functions called once in the pipeline have ZERO configurable parameters
+#    - Column names are FIXED (species, Night, Hour_local, Detector)
+#    - No "what-if" logic or conditional branching
+#
+# 2. SCHEMA CONTRACT ENFORCEMENT
+#    - All functions expect columns created by upstream workflows
+#    - species column: created in Workflow 03 (run_cpn_template)
+#    - Hour_local column: created in Workflow 02 (run_ingest_standardize)
+#    - Night column: created in Workflow 02 (run_ingest_standardize)
+#
+# 3. HELPER FUNCTIONS VS WORKFLOW FUNCTIONS
+#    - Helper functions (reused multiple times): CAN have parameters
+#    - Workflow functions (called once): NO configurable parameters
+#    - save_master_with_timestamp() has parameters because it's a helper
+#    - All summary functions have NO parameters because they're called once
 #
 # SUMMARIZATION CONTRACT
 # ----------------------
@@ -43,6 +64,7 @@
 #   - Format tables for display (output/tables.R)
 #   - Make ecological interpretations
 #   - Read or write files directly
+#   - Have ambiguous parameters for single-use functions
 #
 # DEPENDENCIES
 # ------------
@@ -63,25 +85,33 @@
 #   - create_study_summary()               # Single-row study overview
 #   - calculate_variance_components()      # Between/within detector variance
 #
-# Species Analysis:
+# Species Analysis (DETERMINISTIC - no species_col parameter):
 #   - create_species_summary_by_detector() # Species composition per detector
 #   - create_species_accumulation_summary() # Species over time
 #
-# Temporal Analysis:
+# Temporal Analysis (DETERMINISTIC - no by_detector parameter):
 #   - create_hourly_activity_summary()     # Activity by hour of night
 #
-# File I/O:
+# File I/O (HELPER - keeps parameters for reusability):
 #   - save_master_with_timestamp()         # Save with timestamp in filename
 #
 # USAGE
 # -----
-# # After loading CallsPerNight final data
+# # After loading CallsPerNight final data and kpro_master
 # cpn_final <- load_cpn_final()
+# kpro_master <- load_most_recent_checkpoint("^02_kpro_master_.*\\.csv$")
 #
-# # Generate summaries
+# # CRITICAL: kpro_master must have these columns created upstream:
+# #   - species: created in Workflow 03 via create_unified_species_column()
+# #   - Hour_local: created in Workflow 02 via add_temporal_columns()
+# #   - Night: created in Workflow 02 via standardization
+#
+# # Generate summaries (deterministic - no parameters)
 # detector_summary <- create_detector_activity_summary(cpn_final)
 # study_summary <- create_study_summary(cpn_final)
 # species_summary <- create_species_summary_by_detector(kpro_master)
+# species_accum <- create_species_accumulation_summary(kpro_master)
+# hourly_summary <- create_hourly_activity_summary(kpro_master)
 #
 # # Format as GT tables
 # detector_gt <- format_detector_summary_gt(detector_summary)
@@ -89,19 +119,20 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DETERMINISTIC REFACTOR - Removed all ambiguous parameters
+#             - create_species_summary_by_detector(): removed species_col parameter
+#             - create_species_accumulation_summary(): removed species_col and date_col parameters
+#             - create_hourly_activity_summary(): removed by_detector parameter
+#             - Removed all conditional logic for column detection
+#             - Enforces schema contract: species, Night, Hour_local must exist
+#             - Updated module header with DETERMINISTIC DESIGN PHILOSOPHY section
+#             - All functions now expect deterministically-created columns from upstream
 # 2026-02-05: DOCUMENTATION FIX - Updated header to match 02_documentation_standards.md
-#             - Changed "analysis/summarization.R" to "MODULE: summarization.R"
-#             - Fixed em-dash to hyphen in header
-#             - Renamed "CONTENTS" section to "FUNCTIONS PROVIDED"
-#             - Renamed "USAGE EXAMPLE" section to "USAGE"
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
-# 2026-02-01: Confirmed usage in run_finalize_to_report.R (Chunk 3, Workflow 05)
 # 2024-12-29: Added new summary functions for Workflow 05
-# 2024-12-29: Refactored to use validation.R helpers
 # 2024-12-26: Initial CODING_STANDARDS compliant version
 #
 # =============================================================================
-
 
 # ==============================================================================
 # DETECTOR-LEVEL SUMMARIES
@@ -531,46 +562,61 @@ calculate_variance_components <- function(cpn_final) {
 #' Create Species Summary by Detector
 #'
 #' @description
-#' Summarizes species composition for each detector. Shows call counts
-#' and percentages for each species detected.
+#' Summarizes species composition for each detector using the unified 'species'
+#' column created by Workflow 03. Shows call counts and percentages for each
+#' species detected.
+#' 
+#' DETERMINISTIC DESIGN: This function has NO configurable parameters. It
+#' always uses the 'species' column created by create_unified_species_column()
+#' in Workflow 03, which deterministically applies priority: manual_id > auto_id > "NoID".
 #'
-#' @param master_data Data frame. Master file from Workflow 02.
-#'   Must contain Detector and auto_id columns.
-#' @param species_col Character. Column containing species ID.
-#'   Default: "auto_id"
-#' @param min_calls Integer. Minimum calls to include species.
-#'   Default: 1 (include all)
+#' @param master_data Data frame. Master file from Workflow 02 with unified
+#'   species column added by Workflow 03. Must contain Detector and species columns.
 #'
 #' @return Tibble with columns:
 #'   \describe{
 #'     \item{Detector}{Detector name}
-#'     \item{species}{Species code}
+#'     \item{species}{Species code from unified column}
 #'     \item{n_calls}{Number of calls}
 #'     \item{pct_of_detector}{Percent of detector's total calls}
 #'   }
 #'
 #' @section CONTRACT:
 #' - One row per detector-species combination
-#' - Excludes NoID/UNKNOWN unless they meet min_calls
+#' - Uses ONLY the 'species' column (no configurable column names)
+#' - Species column MUST pre-exist (created in Workflow 03)
+#' - Excludes NA species values
 #' - Percentages sum to 100 within each detector
 #' - Sorted by Detector, then n_calls descending
+#' - DETERMINISTIC: no configurable parameters, no conditional logic
 #'
 #' @section DOES NOT:
+#' - Create the species column (expects it pre-created in Workflow 03)
+#' - Accept alternate species column names (violates determinism)
 #' - Make species richness comparisons
 #' - Account for detection probability
+#' - Have any configurable behavior
+#'
+#' @examples
+#' \dontrun{
+#' # Species column must be created first by Workflow 03
+#' kpro_master <- create_unified_species_column(kpro_master)
+#' 
+#' # Then generate summary (no parameters needed)
+#' species_summary <- create_species_summary_by_detector(kpro_master)
+#' }
 #'
 #' @export
-create_species_summary_by_detector <- function(master_data,
-                                               species_col = "auto_id",
-                                               min_calls = 1) {
+create_species_summary_by_detector <- function(master_data) {
   
-  # Input validation
+  # Input validation - species column MUST exist
   validate_master_data(master_data)
-  assert_columns_exist(master_data, species_col)
+  assert_columns_exist(master_data, c("Detector", "species"))
   
+  # Summarize by detector and species (deterministic - no parameters)
   master_data %>%
-    dplyr::filter(!is.na(.data[[species_col]])) %>%
-    dplyr::group_by(Detector, species = .data[[species_col]]) %>%
+    dplyr::filter(!is.na(species)) %>%
+    dplyr::group_by(Detector, species) %>%
     dplyr::summarise(
       n_calls = dplyr::n(),
       .groups = "drop"
@@ -580,7 +626,6 @@ create_species_summary_by_detector <- function(master_data,
       pct_of_detector = round(100 * n_calls / sum(n_calls), 1)
     ) %>%
     dplyr::ungroup() %>%
-    dplyr::filter(n_calls >= min_calls) %>%
     dplyr::arrange(Detector, dplyr::desc(n_calls))
 }
 
@@ -588,14 +633,16 @@ create_species_summary_by_detector <- function(master_data,
 #' Create Species Accumulation Summary
 #'
 #' @description
-#' Shows cumulative species count over time. Useful for assessing
-#' whether sampling effort was sufficient to detect most species.
+#' Shows cumulative species count over time using the unified 'species' column
+#' created by Workflow 03 and the 'Night' column created by Workflow 02.
+#' Useful for assessing whether sampling effort was sufficient to detect most species.
+#' 
+#' DETERMINISTIC DESIGN: This function has NO configurable parameters. It
+#' always uses 'species' and 'Night' columns created deterministically by
+#' upstream workflows.
 #'
-#' @param master_data Data frame. Master file with DateTime or Night column and auto_id.
-#' @param species_col Character. Column containing species ID.
-#'   Default: "auto_id"
-#' @param date_col Character. Column containing date. Default: "Night"
-#'   Can also accept "DateTime" which will be converted to date.
+#' @param master_data Data frame. Master file with Night column and unified
+#'   species column. Must contain species and Night columns.
 #'
 #' @return Tibble with columns:
 #'   \describe{
@@ -607,56 +654,57 @@ create_species_summary_by_detector <- function(master_data,
 #'
 #' @section CONTRACT:
 #' - One row per date with detections
-#' - Excludes NoID/UNKNOWN from species counts
+#' - Uses ONLY 'species' and 'Night' columns (no configurable column names)
+#' - Both columns MUST pre-exist (created in Workflows 02-03)
+#' - Excludes NoID/UNKNOWN/NOISE from species counts
 #' - cumulative_species is monotonically increasing
-#' - Returns Night column (not date) for consistency with workflow
+#' - Returns Night column for consistency with workflow
+#' - DETERMINISTIC: no configurable parameters, no conditional logic
 #'
 #' @section DOES NOT:
+#' - Create the species or Night columns (expects them pre-created)
+#' - Accept alternate column names (violates determinism)
+#' - Check for column type (Night is always Date, not POSIXt)
 #' - Account for detection probability
 #' - Weight by effort
 #'
+#' @examples
+#' \dontrun{
+#' # Species and Night columns must exist from upstream workflows
+#' species_accum <- create_species_accumulation_summary(kpro_master)
+#' }
+#'
 #' @export
-create_species_accumulation_summary <- function(master_data,
-                                                species_col = "auto_id",
-                                                date_col = "Night") {
+create_species_accumulation_summary <- function(master_data) {
   
-  # Input validation
+  # Input validation - species and Night columns MUST exist
   validate_master_data(master_data)
-  assert_columns_exist(master_data, c(species_col, date_col))
+  assert_columns_exist(master_data, c("species", "Night"))
   
-  # Extract date from DateTime if needed
-  if (inherits(master_data[[date_col]], "POSIXt")) {
-    master_data <- master_data %>%
-      dplyr::mutate(.date = as.Date(.data[[date_col]]))
-  } else {
-    master_data <- master_data %>%
-      dplyr::mutate(.date = as.Date(.data[[date_col]]))
-  }
-  
-  # Exclude unidentified
+  # Exclude unidentified species (deterministic - no parameter)
   valid_species <- master_data %>%
     dplyr::filter(
-      !is.na(.data[[species_col]]),
-      !.data[[species_col]] %in% c("NoID", "UNKNOWN", "NOISE", "")
+      !is.na(species),
+      !species %in% c("NoID", "UNKNOWN", "NOISE", "")
     )
   
   # Get first detection date for each species
   first_detections <- valid_species %>%
-    dplyr::group_by(species = .data[[species_col]]) %>%
+    dplyr::group_by(species) %>%
     dplyr::summarise(
-      first_date = min(.date, na.rm = TRUE),
+      first_date = min(Night, na.rm = TRUE),
       .groups = "drop"
     )
   
   # Accumulate by date
   accumulation <- first_detections %>%
-    dplyr::group_by(Night = first_date) %>%  # ✅ Changed from date to Night
+    dplyr::group_by(Night = first_date) %>%
     dplyr::summarise(
       new_species = dplyr::n(),
       new_species_list = paste(species, collapse = ", "),
       .groups = "drop"
     ) %>%
-    dplyr::arrange(Night) %>%  # ✅ Changed from date to Night
+    dplyr::arrange(Night) %>%
     dplyr::mutate(
       cumulative_species = cumsum(new_species)
     )
@@ -673,75 +721,66 @@ create_species_accumulation_summary <- function(master_data,
 #' Create Hourly Activity Summary
 #'
 #' @description
-#' Summarizes bat activity by hour of the night. Can be calculated overall
-#' or per-detector. Useful for identifying peak activity periods.
+#' Summarizes bat activity by hour of the night using the Hour_local column
+#' created by Workflow 02. Provides study-wide hourly activity patterns.
+#' 
+#' DETERMINISTIC DESIGN: This function has NO configurable parameters. It
+#' always uses the 'Hour_local' column created deterministically in Workflow 02,
+#' and always returns study-wide summaries (not per-detector).
 #'
-#' @param master_data Data frame. Master file with DateTime or Hour column.
-#' @param by_detector Logical. Summarize by detector? Default: FALSE
+#' @param master_data Data frame. Master file with Hour_local column.
+#'   Must contain Hour_local column.
 #'
 #' @return Tibble with columns:
 #'   \describe{
-#'     \item{Hour}{Hour of day (0-23)}
-#'     \item{Detector}{(if by_detector=TRUE) Detector name}
+#'     \item{Hour_local}{Hour of day (0-23)}
 #'     \item{n_calls}{Number of calls in that hour}
 #'     \item{pct_of_total}{Percent of total calls}
 #'   }
 #'
 #' @section CONTRACT:
-#' - One row per hour (or per hour-detector)
-#' - Hour is 0-23 integer
-#' - Percentages sum to 100 (within detector if by_detector)
+#' - One row per hour (0-23)
+#' - Uses ONLY Hour_local column (no conditional DateTime extraction)
+#' - Hour_local MUST pre-exist (created in Workflow 02)
+#' - Returns study-wide summary (not per-detector)
+#' - Percentages sum to 100
+#' - DETERMINISTIC: no configurable parameters, no conditional logic
 #'
 #' @section DOES NOT:
+#' - Create Hour_local column (expects it pre-created in Workflow 02)
+#' - Extract hours from DateTime_local (Hour_local must exist)
+#' - Provide per-detector breakdown (single output schema only)
 #' - Account for recording effort differences between hours
 #' - Adjust for seasonal variation in night length
 #'
+#' @examples
+#' \dontrun{
+#' # Hour_local column must exist from Workflow 02
+#' hourly_summary <- create_hourly_activity_summary(kpro_master)
+#' 
+#' # Identify peak activity hours
+#' hourly_summary %>% filter(pct_of_total > 10)
+#' }
+#'
 #' @export
-create_hourly_activity_summary <- function(master_data,
-                                           by_detector = FALSE) {
+create_hourly_activity_summary <- function(master_data) {
   
-  # Input validation
+  # Input validation - Hour_local MUST exist
   validate_master_data(master_data)
+  assert_columns_exist(master_data, "Hour_local")
   
-  # Get hour from DateTime if Hour column doesn't exist
-  if (!"Hour_local" %in% names(master_data)) {
-    if ("DateTime_local" %in% names(master_data)) {
-      master_data <- master_data %>%
-        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
-    } else {
-      stop("master_data must have either 'Hour_local' or 'DateTime_local' column")
-    }
-  }
-  
-  if (by_detector) {
-    summary <- master_data %>%
-      dplyr::group_by(Detector, Hour_local) %>%
-      dplyr::summarise(
-        n_calls = dplyr::n(),
-        .groups = "drop"
-      ) %>%
-      dplyr::group_by(Detector) %>%
-      dplyr::mutate(
-        pct_of_total = round(100 * n_calls / sum(n_calls), 1)
-      ) %>%
-      dplyr::ungroup() %>%
-      dplyr::arrange(Detector, Hour_local)
-  } else {
-    summary <- master_data %>%
-      dplyr::group_by(Hour_local) %>%
-      dplyr::summarise(
-        n_calls = dplyr::n(),
-        .groups = "drop"
-      ) %>%
-      dplyr::mutate(
-        pct_of_total = round(100 * n_calls / sum(n_calls), 1)
-      ) %>%
-      dplyr::arrange(Hour_local)
-  }
-  
-  summary
+  # Calculate study-wide hourly summary (deterministic - no parameters)
+  master_data %>%
+    dplyr::group_by(Hour_local) %>%
+    dplyr::summarise(
+      n_calls = dplyr::n(),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      pct_of_total = round(100 * n_calls / sum(n_calls), 1)
+    ) %>%
+    dplyr::arrange(Hour_local)
 }
-
 
 # ==============================================================================
 # FILE I/O

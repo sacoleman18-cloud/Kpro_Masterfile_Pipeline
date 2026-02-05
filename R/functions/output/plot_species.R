@@ -469,12 +469,14 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #' Species-Specific Hourly Activity Profiles
 #'
 #' @description
-#' Shows when different species are most active during the night. Helps
-#' identify species-specific activity windows and temporal niche partitioning.
+#' Shows when different species are most active during the night.
+#' 
+#' DETERMINISTIC DESIGN: This function expects Hour_local column to exist,
+#' created deterministically by Workflow 02. No conditional column creation.
 #'
 #' @param master_data Data frame. Must contain columns:
 #'   - species: Character. Species identification code.
-#'   - DateTime: POSIXct. Timestamp of detection (or Hour: integer 0-23).
+#'   - Hour_local: Integer (0-23). Hour of detection.
 #' @param top_n Integer. Number of most common species to display.
 #'   Default is 6 to keep the plot readable.
 #' @param exclude_noid Logical. If TRUE (default), exclude NoID calls.
@@ -499,15 +501,19 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #' - Shows percentage (not count) of each species' activity by hour
 #' - Only top_n species displayed
 #' - All 24 hours shown on x-axis
+#' - Hour_local MUST pre-exist (created in Workflow 02)
+#' - DETERMINISTIC: no conditional column creation
 #'
 #' @section DOES NOT:
+#' - Create Hour_local column (expects it pre-created in Workflow 02)
+#' - Extract hours from DateTime_local (Hour_local must exist)
 #' - Account for variable sunset/sunrise times
 #' - Show confidence intervals
 #' - Normalize for recording effort differences by hour
 #'
 #' @examples
 #' \dontrun{
-#' # Default (top 6 species)
+#' # Hour_local must exist from Workflow 02
 #' p <- plot_species_hourly_profile(kpro_master)
 #'
 #' # More species
@@ -519,25 +525,16 @@ plot_species_hourly_profile <- function(master_data,
                                         top_n = 6,
                                         exclude_noid = TRUE) {
   
-  # Validate input
+  # Validate input - Hour_local MUST exist
   validate_plot_input(
     master_data,
-    required_cols = "species",
+    required_cols = c("species", "Hour_local"),
     df_name = "master_data"
   )
   
-  # Get Hour column from DateTime if not present
-  if (!"Hour_local" %in% names(master_data)) {
-    if ("DateTime_local" %in% names(master_data)) {
-      master_data <- master_data %>%
-        dplyr::mutate(Hour = lubridate::hour(DateTime_local))
-    } else {
-      stop(
-        "master_data must contain 'Hour_local' or 'DateTime_local' column",
-        call. = FALSE
-      )
-    }
-  }
+  # Ensure Hour_local is integer for consistent join operations
+  master_data <- master_data %>%
+    dplyr::mutate(Hour_local = as.integer(Hour_local))
   
   # Optionally filter out NoID
   if (exclude_noid) {
@@ -564,10 +561,11 @@ plot_species_hourly_profile <- function(master_data,
     dplyr::mutate(species = factor(species, levels = top_species))
   
   # Ensure all hours represented for each species
+  # Complete with integer sequence to match Hour_local type
   hourly_species <- hourly_species %>%
     tidyr::complete(
       species,
-      Hour_local = 0:23,
+      Hour_local = 0L:23L,  # Explicit integer sequence
       fill = list(n_calls = 0, pct = 0)
     )
   

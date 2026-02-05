@@ -2254,4 +2254,528 @@ artifacts:
         remove_noid: yes
         remove_zero_pulse_calls: yes
     data_hash_sha256: 9d1c181ab5bc3d1e66df12a36342c9973776a6b7dc3a246c984140f3fd5cd660
-last_modified_utc: '2026-02-05T03:51:05Z'
+  kpro_master_20260204_225229:
+    name: kpro_master_20260204_225229
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260204_225229.csv
+    file_hash_sha256: 528072827932c0cf6f09a54a9714655da09b36293e0a288062e22382d0af2f32
+    file_size_bytes: 591887.0
+    created_utc: '2026-02-05T04:52:29Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1468
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 540
+      n_rows_removed_zero_pulse: 0
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: yes
+        remove_zero_pulse_calls: yes
+    data_hash_sha256: 9d1c181ab5bc3d1e66df12a36342c9973776a6b7dc3a246c984140f3fd5cd660
+  kpro_master_20260204_230029:
+    name: kpro_master_20260204_230029
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260204_230029.csv
+    file_hash_sha256: 528072827932c0cf6f09a54a9714655da09b36293e0a288062e22382d0af2f32
+    file_size_bytes: 591887.0
+    created_utc: '2026-02-05T05:00:30Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1468
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 540
+      n_rows_removed_zero_pulse: 0
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: yes
+        remove_zero_pulse_calls: yes
+    data_hash_sha256: 9d1c181ab5bc3d1e66df12a36342c9973776a6b7dc3a246c984140f3fd5cd660
+  kpro_master_20260204_233152:
+    name: kpro_master_20260204_233152
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260204_233152.csv
+    file_hash_sha256: fc9c099a564e78a214c6ec221afe9b1817474d2b4a2366bcbdcfcf7f8e852ab3
+    file_size_bytes: 590419.0
+    created_utc: '2026-02-05T05:31:52Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1468
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 540
+      n_rows_removed_zero_pulse: 0
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: yes
+        remove_zero_pulse_calls: yes
+      datetime_timezone: America/Chicago
+    data_hash_sha256: 9d1c181ab5bc3d1e66df12a36342c9973776a6b7dc3a246c984140f3fd5cd660
+  kpro_master_20260204_235819:
+    name: kpro_master_20260204_235819
+    type: masterfile
+    workflow: ingest
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/checkpoints/02_kpro_master_20260204_235819.csv
+    file_hash_sha256: fc9c099a564e78a214c6ec221afe9b1817474d2b4a2366bcbdcfcf7f8e852ab3
+    file_size_bytes: 590419.0
+    created_utc: '2026-02-05T05:58:20Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows_final: 1468
+      n_rows_removed_invalid: 281228.0
+      n_rows_removed_duplicates: 123
+      n_rows_removed_noid: 540
+      n_rows_removed_zero_pulse: 0
+      n_detectors: 9
+      detectors:
+      - MCE
+      - LPO
+      - LPI
+      - LPE
+      - SME
+      - MCI
+      - MCO
+      - SMI
+      - SMO
+      timezone: America/Chicago
+      date_range_start: '2025-10-05'
+      date_range_end: '2025-11-01'
+      schema_distribution:
+        v1_legacy_single_column: 299
+        v2_transitional_4letter: 518
+        v3_modern_6letter: 1314
+      sources:
+        local_rows: 1217
+        external_rows: 914
+      data_filters:
+        remove_duplicates: yes
+        remove_noid: yes
+        remove_zero_pulse_calls: yes
+      datetime_timezone: America/Chicago
+    data_hash_sha256: 9d1c181ab5bc3d1e66df12a36342c9973776a6b7dc3a246c984140f3fd5cd660
+  cpn_template_original_20260204_235822:
+    name: cpn_template_original_20260204_235822
+    type: cpn_template
+    workflow: cpn_template
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/03_CallsPerNight_Template_20260204_235822_ORIGINAL.csv
+    file_hash_sha256: 518cc18eeab98d9935401d06c49bb8279fec8c185d234cac834c6e3b59d2ffdc
+    file_size_bytes: 23330.0
+    created_utc: '2026-02-05T05:58:22Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      n_nights: 28
+      template_type: ORIGINAL
+      recording_schedule: no
+  cpn_template_edit_20260204_235822:
+    name: cpn_template_edit_20260204_235822
+    type: cpn_template
+    workflow: cpn_template
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/outputs/03_CallsPerNight_Template_20260204_235822_EDIT_THIS.csv
+    file_hash_sha256: 518cc18eeab98d9935401d06c49bb8279fec8c185d234cac834c6e3b59d2ffdc
+    file_size_bytes: 23330.0
+    created_utc: '2026-02-05T05:58:22Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      n_nights: 28
+      template_type: EDIT_THIS
+      recording_schedule: no
+  CallsPerNight_final_20260205_002444:
+    name: CallsPerNight_final_20260205_002444
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_002444.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T06:24:44Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  summary_stats_20260205:
+    name: summary_stats_20260205
+    type: summary_stats
+    workflow: summary_stats
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/rds/summary_data_20260205.rds
+    file_hash_sha256: 4b720f7c1526294ca54f2289d9c15dc3708d4232712a2ba579f8316f21ceba01
+    file_size_bytes: 1989.0
+    created_utc: '2026-02-05T19:04:16Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_summaries: 7
+      has_species: yes
+      has_temporal: yes
+  plot_objects_20260205:
+    name: plot_objects_20260205
+    type: plot_objects
+    workflow: exploratory_plots
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/rds/plot_objects_20260205.rds
+    file_hash_sha256: 10e5669a17fc4096879da5c748cc5d6d6c3120606f56dde1f5c7e85948776efc
+    file_size_bytes: 1817636.0
+    created_utc: '2026-02-05T19:04:32Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      total_plots: 26.0
+      quality_plots: 8
+      detector_plots: 7
+      species_plots: 5
+      temporal_plots: 6
+  kpro_release_SchmeeckleBatStudy_20260205_002519:
+    name: kpro_release_SchmeeckleBatStudy_20260205_002519
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260205_002519.zip
+    file_hash_sha256: f0f9ad213cbe746ba0939ed1e2677de4d8f0ab8ca0b36739200a31af30550556
+    file_size_bytes: 3846070.0
+    created_utc: '2026-02-05T06:25:23Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - kpro_master
+    - cpn_final
+    metadata:
+      study_id: SchmeeckleBatStudy
+      n_files: 25
+      zip_size_bytes: 3846070.0
+  CallsPerNight_final_20260205_112516:
+    name: CallsPerNight_final_20260205_112516
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_112516.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T17:25:16Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  kpro_release_SchmeeckleBatStudy_20260205_112544:
+    name: kpro_release_SchmeeckleBatStudy_20260205_112544
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260205_112544.zip
+    file_hash_sha256: c81837b6451d079f1f353fcb79da90b190c7a39b141045c9c32d2658939370ee
+    file_size_bytes: 3848552.0
+    created_utc: '2026-02-05T17:25:49Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - kpro_master
+    - cpn_final
+    metadata:
+      study_id: SchmeeckleBatStudy
+      n_files: 25
+      zip_size_bytes: 3848552.0
+  CallsPerNight_final_20260205_112834:
+    name: CallsPerNight_final_20260205_112834
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_112834.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T17:28:34Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  kpro_release_SchmeeckleBatStudy_20260205_112904:
+    name: kpro_release_SchmeeckleBatStudy_20260205_112904
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260205_112904.zip
+    file_hash_sha256: 7a16fc802d503463dfe964f2da1131f24944237cd8dacf84c5e8bd6dc25fe240
+    file_size_bytes: 3851233.0
+    created_utc: '2026-02-05T17:29:08Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - kpro_master
+    - cpn_final
+    metadata:
+      study_id: SchmeeckleBatStudy
+      n_files: 25
+      zip_size_bytes: 3851233.0
+  CallsPerNight_final_20260205_120157:
+    name: CallsPerNight_final_20260205_120157
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_120157.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:01:57Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_123154:
+    name: CallsPerNight_final_20260205_123154
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_123154.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:31:54Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_123317:
+    name: CallsPerNight_final_20260205_123317
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_123317.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:33:17Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_124655:
+    name: CallsPerNight_final_20260205_124655
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_124655.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:46:55Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_125425:
+    name: CallsPerNight_final_20260205_125425
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_125425.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:54:25Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_125505:
+    name: CallsPerNight_final_20260205_125505
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_125505.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:55:05Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_125555:
+    name: CallsPerNight_final_20260205_125555
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_125555.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:55:55Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_125953:
+    name: CallsPerNight_final_20260205_125953
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_125953.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T18:59:53Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260205_130416:
+    name: CallsPerNight_final_20260205_130416
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260205_130416.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-05T19:04:16Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  kpro_release_SchmeeckleBatStudy_20260205_130503:
+    name: kpro_release_SchmeeckleBatStudy_20260205_130503
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260205_130503.zip
+    file_hash_sha256: 00631d73cb5382c4219de3f9bd413d596d0763ef7abd839af0b9aec5dd4a2f5a
+    file_size_bytes: 5141572.0
+    created_utc: '2026-02-05T19:05:10Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - kpro_master
+    - cpn_final
+    metadata:
+      study_id: SchmeeckleBatStudy
+      n_files: 34
+      zip_size_bytes: 5141572.0
+last_modified_utc: '2026-02-05T19:05:10Z'

@@ -276,15 +276,15 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 # WITHIN-NIGHT PATTERNS
 # =============================================================================
 
-#' Hourly Bat Activity Profile
+#' Study-Wide Hourly Activity Profile
 #'
 #' @description
-#' Displays bat activity by hour of night across the entire study. Shows
-#' when bats are most active, typically revealing peak activity in early
-#' evening hours after sunset.
+#' Shows the overall temporal pattern of bat activity across the entire study.
+#' 
+#' DETERMINISTIC DESIGN: This function expects Hour_local column to exist,
+#' created deterministically by Workflow 02. No conditional column creation.
 #'
-#' @param master_data Data frame. Must contain a `DateTime_local` column (POSIXct)
-#'   OR a pre-computed `Hour_local` column (integer 0-23).
+#' @param master_data Data frame. Must contain Hour_local column (integer 0-23).
 #' @param metric Character. One of "total" (sum of all calls) or "mean"
 #'   (average calls per hour per night). Default is "total".
 #'
@@ -307,9 +307,12 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 #' - Returns a ggplot object
 #' - All 24 hours shown (including zero-activity hours)
 #' - Peak hour annotated
-#' - Works with either DateTime_local or Hour_local column
+#' - Hour_local MUST pre-exist (created in Workflow 02)
+#' - DETERMINISTIC: no conditional column creation
 #'
 #' @section DOES NOT:
+#' - Create Hour_local column (expects it pre-created in Workflow 02)
+#' - Extract hours from DateTime_local (Hour_local must exist)
 #' - Separate by species (use plot_species_hourly_profile)
 #' - Account for sunset/sunrise time variation
 #' - Separate by detector
@@ -317,7 +320,7 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 #'
 #' @examples
 #' \dontrun{
-#' # Total calls by hour
+#' # Hour_local must exist from Workflow 02
 #' p <- plot_hourly_activity_profile(kpro_master)
 #'
 #' # Mean calls per hour per night
@@ -327,87 +330,76 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 #' @export
 plot_hourly_activity_profile <- function(master_data, metric = "total") {
   
-  # Validate input
+  # Validate input - Hour_local MUST exist
   validate_plot_input(
     master_data,
+    required_cols = "Hour_local",
     df_name = "master_data"
   )
   
   metric <- match.arg(metric, c("total", "mean"))
   
-  # Get Hour_local column from DateTime_local if not present
-  if (!"Hour_local" %in% names(master_data)) {
-    if ("DateTime_local" %in% names(master_data)) {
-      master_data <- master_data %>%
-        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
-    } else {
-      stop(
-        "master_data must contain 'Hour_local' or 'DateTime_local' column",
-        call. = FALSE
-      )
-    }
-  }
+  # Ensure Hour_local is integer for consistent operations
+  master_data <- master_data %>%
+    dplyr::mutate(Hour_local = as.integer(Hour_local))
   
-  # Count calls by hour
-  hourly <- master_data %>%
-    dplyr::count(Hour_local, name = "total_calls")
-  
-  # Calculate metric
-  if (metric == "mean") {
-    # Need to know number of nights
-    if ("DateTime_local" %in% names(master_data)) {
-      n_nights <- dplyr::n_distinct(as.Date(master_data$DateTime_local))
-    } else if ("Night" %in% names(master_data)) {
-      n_nights <- dplyr::n_distinct(master_data$Night)
-    } else {
-      stop("Cannot calculate mean without DateTime_local or Night column")
-    }
-    hourly <- hourly %>%
-      dplyr::mutate(value = total_calls / n_nights)
-    y_label <- "Mean Calls Per Night"
+  # Calculate activity by hour
+  if (metric == "total") {
+    hourly_activity <- master_data %>%
+      dplyr::count(Hour_local, name = "activity")
   } else {
-    hourly <- hourly %>%
-      dplyr::mutate(value = total_calls)
-    y_label <- "Total Calls"
+    # Mean: average calls per hour across all nights
+    hourly_activity <- master_data %>%
+      dplyr::mutate(Night = as.Date(DateTime_local)) %>%
+      dplyr::group_by(Night, Hour_local) %>%
+      dplyr::summarise(calls_that_hour = dplyr::n(), .groups = "drop") %>%
+      dplyr::group_by(Hour_local) %>%
+      dplyr::summarise(activity = mean(calls_that_hour), .groups = "drop")
   }
   
-  # Ensure all 24 hours present
-  hourly <- hourly %>%
-    tidyr::complete(Hour_local = 0:23, fill = list(value = 0, total_calls = 0))
+  # Ensure all 24 hours are present (fill with 0 if missing)
+  hourly_activity <- hourly_activity %>%
+    tidyr::complete(
+      Hour_local = 0L:23L,  # Explicit integer sequence
+      fill = list(activity = 0)
+    )
   
-  # Identify peak hour
-  peak <- hourly %>% dplyr::slice_max(value, n = 1)
+  # Find peak hour
+  peak_hour <- hourly_activity %>%
+    dplyr::slice_max(activity, n = 1) %>%
+    dplyr::pull(Hour_local) %>%
+    head(1)
   
   # Build plot
-  ggplot(hourly, aes(x = Hour_local, y = value)) +
-    geom_area(fill = "#56B4E9", alpha = 0.3) +
-    geom_line(color = "#0072B2", linewidth = 1) +
-    geom_point(color = "#0072B2", size = 2) +
+  ggplot(hourly_activity, aes(x = Hour_local, y = activity)) +
+    geom_area(fill = "#56B4E9", alpha = 0.4) +
+    geom_line(color = "#0072B2", linewidth = 1.2) +
     geom_vline(
-      xintercept = peak$Hour_local,
+      xintercept = peak_hour,
       linetype = "dashed",
-      color = "#D55E00"
+      color = "gray40"
     ) +
     annotate(
       "text",
-      x = peak$Hour_local,
-      y = peak$value,
-      label = sprintf("Peak: %02d:00", peak$Hour_local),
-      hjust = -0.1,
-      vjust = -0.5,
-      size = 3.5,
-      color = "#D55E00"
+      x = peak_hour,
+      y = max(hourly_activity$activity) * 0.95,
+      label = sprintf("Peak: %02d:00", peak_hour),
+      hjust = ifelse(peak_hour > 12, 1.1, -0.1),
+      size = 3.5
     ) +
-    scale_x_continuous(breaks = 0:23, labels = sprintf("%02d", 0:23)) +
-    scale_y_continuous(labels = scales::comma) +
+    scale_x_continuous(breaks = seq(0, 23, by = 2)) +
     labs(
-      title = "Hourly Bat Activity Profile",
+      title = "Hourly Activity Profile",
+      subtitle = if (metric == "total") {
+        "Total bat calls by hour of night"
+      } else {
+        "Mean calls per hour per night"
+      },
       x = "Hour of Night",
-      y = y_label
+      y = if (metric == "total") "Total Calls" else "Mean Calls per Night"
     ) +
     theme_kpro()
 }
-
 
 #' Distribution of Calls Per Hour
 #'

@@ -19,7 +19,7 @@ result2 <- run_cpn_template(
   verbose = TRUE
   )
 
-resultGiga2 <- run_finalize_to_report(
+resultGiga3 <- run_finalize_to_report(
   kpro_master = result2$kpro_master,
   verbose = TRUE
 )

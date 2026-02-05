@@ -684,8 +684,13 @@ format_study_summary_gt <- function(study_summary,
 #'
 #' @description
 #' Formats the output of create_hourly_activity_summary() as a GT table.
+#' 
+#' DETERMINISTIC DESIGN: This function expects a single, fixed schema from
+#' create_hourly_activity_summary() with columns: Hour_local, n_calls, pct_of_total.
+#' No branching logic for different formats.
 #'
-#' @param hourly_summary Tibble from create_hourly_activity_summary()
+#' @param hourly_summary Tibble from create_hourly_activity_summary().
+#'   Must contain: Hour_local, n_calls, pct_of_total.
 #' @param title Character. Table title. Default: "Hourly Activity Profile"
 #' @param subtitle Character. Table subtitle. Default: NULL
 #' @param highlight_peak Logical. If TRUE (default), highlight the peak
@@ -695,25 +700,28 @@ format_study_summary_gt <- function(study_summary,
 #'
 #' @details
 #' **Hour formatting:**
-#' - Hours displayed as "HH:00" format
+#' - Hour_local (0-23 integer) displayed as "HH:00" format
 #'
 #' **Peak highlighting:**
 #' - Row with maximum n_calls displayed in bold
 #'
 #' @section CONTRACT:
 #' - Expects output from create_hourly_activity_summary()
-#' - Handles both overall and per-detector formats
 #' - Returns gt object
+#' - Always study-wide format (no per-detector branching)
+#' - Highlights peak hour in bold
+#' - DETERMINISTIC: single input schema, single output format
 #'
 #' @section DOES NOT:
+#' - Handle per-detector format (removed - violates determinism)
 #' - Filter hours
 #' - Adjust for recording schedule
 #' - Create visualizations
 #'
 #' @examples
 #' \dontrun{
-#' hourly_overall <- create_hourly_activity_summary(master)
-#' gt_hourly <- format_hourly_summary_gt(hourly_overall)
+#' hourly_summary <- create_hourly_activity_summary(kpro_master)
+#' gt_hourly <- format_hourly_summary_gt(hourly_summary)
 #' }
 #'
 #' @export
@@ -730,6 +738,7 @@ format_hourly_summary_gt <- function(hourly_summary,
     stop("hourly_summary must be a data frame")
   }
   
+  # Expect fixed schema from create_hourly_activity_summary()
   required_cols <- c("Hour_local", "n_calls", "pct_of_total")
   missing_cols <- setdiff(required_cols, names(hourly_summary))
   
@@ -740,60 +749,35 @@ format_hourly_summary_gt <- function(hourly_summary,
     ))
   }
   
-  # Check if by_detector format
-  has_detector <- "Detector" %in% names(hourly_summary)
-  
   # -------------------------
-  # Format Hour as HH:00
+  # Format Hour as HH:00 (with robust type handling)
   # -------------------------
   
   display_df <- hourly_summary %>%
     dplyr::mutate(
-      Hour_display = sprintf("%02d:00", Hour_local)
+      # Ensure Hour_local is integer before sprintf
+      Hour_display = sprintf("%02d:00", as.integer(Hour_local))
     ) %>%
-    dplyr::select(-Hour_local) %>%
-    dplyr::rename(Hour = Hour_display)
-  
-  # Reorder columns
-  if (has_detector) {
-    display_df <- display_df %>%
-      dplyr::select(Detector, Hour, n_calls, pct_of_total)
-  } else {
-    display_df <- display_df %>%
-      dplyr::select(Hour, n_calls, pct_of_total)
-  }
+    dplyr::select(Hour = Hour_display, n_calls, pct_of_total)
   
   # -------------------------
   # Identify peak hours for highlighting
   # -------------------------
   
-  if (highlight_peak) {
-    if (has_detector) {
-      peak_rows <- display_df %>%
-        dplyr::group_by(Detector) %>%
-        dplyr::mutate(is_peak = n_calls == max(n_calls) & n_calls > 0) %>%
-        dplyr::ungroup() %>%
-        dplyr::pull(is_peak)
-    } else {
-      peak_rows <- display_df$n_calls == max(display_df$n_calls) & 
-        display_df$n_calls > 0
-    }
+  peak_rows <- if (highlight_peak) {
+    display_df$n_calls == max(display_df$n_calls, na.rm = TRUE) & 
+      display_df$n_calls > 0 & 
+      !is.na(display_df$n_calls)
+  } else {
+    rep(FALSE, nrow(display_df))
   }
   
   # -------------------------
   # Build GT table
   # -------------------------
   
-  if (has_detector) {
-    # Per-detector format with row groups
-    gt_table <- display_df %>%
-      gt::gt(groupname_col = "Detector")
-  } else {
-    gt_table <- display_df %>%
-      gt::gt()
-  }
-  
-  gt_table <- gt_table %>%
+  gt_table <- display_df %>%
+    gt::gt() %>%
     
     # Title
     gt::tab_header(
@@ -844,29 +828,14 @@ format_hourly_summary_gt <- function(hourly_summary,
     )
   
   # -------------------------
-  # Apply peak highlighting
+  # Apply peak highlighting (if any peak hours exist)
   # -------------------------
   
-  if (highlight_peak && any(peak_rows)) {
+  if (any(peak_rows)) {
     gt_table <- gt_table %>%
       gt::tab_style(
-        style = list(
-          gt::cell_fill(color = "#fff3cd"),
-          gt::cell_text(weight = "bold")
-        ),
+        style = gt::cell_text(weight = "bold"),
         locations = gt::cells_body(rows = peak_rows)
-      )
-  }
-  
-  # Add row groups styling if by_detector
-  if (has_detector) {
-    gt_table <- gt_table %>%
-      gt::tab_style(
-        style = list(
-          gt::cell_fill(color = "#e8e8e8"),
-          gt::cell_text(weight = "bold")
-        ),
-        locations = gt::cells_row_groups()
       )
   }
   
