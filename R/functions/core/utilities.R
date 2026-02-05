@@ -934,8 +934,14 @@ log_stage_start <- function(stage_num,
 #' per usage.
 #'
 #' @param data Data frame to save as CSV checkpoint.
-#' @param file_path Character. Full path to checkpoint file.
-#' @param artifact_name Character. Unique name for artifact registry.
+#' @param file_path Character. Full path to checkpoint file. If NULL, will be
+#'   constructed from checkpoint_name, output_dir, and timestamp. Default: NULL.
+#' @param checkpoint_name Character. Base name for checkpoint file (without extension).
+#'   Used to construct file_path if file_path is NULL. Default: NULL.
+#' @param output_dir Character. Output directory for checkpoint. Used with 
+#'   checkpoint_name to construct file_path if file_path is NULL. Default: "outputs/checkpoints".
+#' @param artifact_name Character. Unique name for artifact registry. If NULL,
+#'   will be generated from checkpoint_name. Default: NULL.
 #' @param artifact_type Character. Type of artifact (e.g., "checkpoint", "masterfile").
 #' @param workflow Character. Workflow that produced this artifact.
 #' @param metadata List. Additional metadata for registry entry. Default: list().
@@ -948,8 +954,10 @@ log_stage_start <- function(stage_num,
 #' @return List. Updated artifact registry (invisibly).
 #'
 #' @section CONTRACT:
+#' - Accepts either file_path (explicit) OR checkpoint_name + output_dir (constructed)
 #' - Creates output directory if needed
 #' - Writes data to CSV using readr::write_csv
+#' - Generates artifact_name if not provided
 #' - Initializes or loads artifact registry if not provided
 #' - Registers artifact with file hash and optional data hash
 #' - Prints confirmation if verbose = TRUE
@@ -963,36 +971,36 @@ log_stage_start <- function(stage_num,
 #'
 #' @examples
 #' \dontrun{
-#' # Save and register kpro_master checkpoint
+#' # Method 1: Explicit file_path
 #' registry <- save_checkpoint_and_register(
 #'   data = kpro_master,
 #'   file_path = here::here("outputs", "checkpoints", "02_kpro_master_20260205.csv"),
 #'   artifact_name = "kpro_master_20260205",
 #'   artifact_type = "masterfile",
 #'   workflow = "ingest",
-#'   metadata = list(n_rows = nrow(kpro_master), n_detectors = n_distinct(kpro_master$Detector)),
-#'   data_hash = hash_dataframe(kpro_master, sort_by = c("Detector", "DateTime_local")),
+#'   metadata = list(n_rows = nrow(kpro_master)),
 #'   verbose = TRUE
 #' )
-#' # Prints: "  [OK] Saved and registered: 02_kpro_master_20260205.csv"
 #'
-#' # Use existing registry
+#' # Method 2: Constructed from checkpoint_name + output_dir
 #' registry <- save_checkpoint_and_register(
-#'   data = cpn_template,
-#'   file_path = cpn_path,
-#'   artifact_name = "cpn_template_20260205",
-#'   artifact_type = "cpn_template",
-#'   workflow = "cpn_template",
-#'   metadata = list(n_detectors = n_detectors, n_nights = n_nights),
-#'   verbose = FALSE,
-#'   registry = registry
+#'   data = cpn_final,
+#'   checkpoint_name = "CallsPerNight_final",
+#'   output_dir = here::here("results", "csv"),
+#'   artifact_type = "cpn_final",
+#'   workflow = "finalize_cpn",
+#'   metadata = list(n_rows = nrow(cpn_final)),
+#'   verbose = TRUE
 #' )
+#' # Automatically generates timestamped filename and artifact_name
 #' }
 #'
 #' @export
 save_checkpoint_and_register <- function(data,
-                                        file_path,
-                                        artifact_name,
+                                        file_path = NULL,
+                                        checkpoint_name = NULL,
+                                        output_dir = "outputs/checkpoints",
+                                        artifact_name = NULL,
                                         artifact_type,
                                         workflow,
                                         metadata = list(),
@@ -1000,9 +1008,32 @@ save_checkpoint_and_register <- function(data,
                                         verbose = FALSE,
                                         registry = NULL) {
   
+  # Construct file_path if not provided
+  if (is.null(file_path)) {
+    if (is.null(checkpoint_name)) {
+      stop("Either file_path or checkpoint_name must be provided")
+    }
+    
+    # Generate timestamped filename
+    timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+    filename <- sprintf("%s_%s.csv", checkpoint_name, timestamp)
+    file_path <- file.path(output_dir, filename)
+  }
+  
+  # Generate artifact_name if not provided
+  if (is.null(artifact_name)) {
+    if (!is.null(checkpoint_name)) {
+      timestamp <- format(Sys.time(), "%Y%m%d")
+      artifact_name <- sprintf("%s_%s", checkpoint_name, timestamp)
+    } else {
+      # Extract from file_path
+      artifact_name <- tools::file_path_sans_ext(basename(file_path))
+    }
+  }
+  
   # Ensure output directory exists
-  output_dir <- dirname(file_path)
-  ensure_dir_exists(output_dir)
+  output_dir_actual <- dirname(file_path)
+  ensure_dir_exists(output_dir_actual)
   
   # Save CSV file
   readr::write_csv(data, file_path)

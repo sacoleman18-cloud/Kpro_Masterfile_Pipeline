@@ -759,7 +759,13 @@ run_finalize_to_report <- function(kpro_master = NULL,
     verbose = verbose
   )
   
-  cpn_final_path <- registry$artifacts[[length(registry$artifacts)]]$file_path
+  # Get the file path from the most recently added artifact
+  artifact_keys <- names(registry$artifacts)
+  if (length(artifact_keys) > 0) {
+    cpn_final_path <- registry$artifacts[[artifact_keys[length(artifact_keys)]]]$file_path
+  } else {
+    stop("Failed to register CPN final artifact")
+  }
   
   # Save edit log if edits were made
   if (total_edits > 0) {
