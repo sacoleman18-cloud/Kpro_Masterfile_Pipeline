@@ -297,6 +297,9 @@ run_cpn_template <- function(kpro_master = NULL,
     )
   )
   
+  # Get study timezone for parsing datetime columns from CSV
+  study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
+  
   # ===========================================================================
   # STAGE 2: LOAD MASTER DATA
   # ===========================================================================
@@ -447,8 +450,7 @@ run_cpn_template <- function(kpro_master = NULL,
   
   log_stage_start("4", "Calculate Study Nights", verbose = verbose)
   
-  # Get timezone and recording start from YAML
-  study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
+  # Get recording start from YAML (study_tz already loaded in Stage 1)
   recording_start <- study_params$processing_options$recording_start %||% "18:00:00"
   cutoff_hour <- as.numeric(substr(recording_start, 1, 2))
   
@@ -633,7 +635,7 @@ run_cpn_template <- function(kpro_master = NULL,
   
   # Convert StartTime/EndTime to full DateTime values with readable formatting
   # StartTime is on the Night date, EndTime is typically next morning
-  study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
+  # (study_tz already loaded in Stage 1)
   
   cpn_template <- cpn_template %>%
     dplyr::mutate(
