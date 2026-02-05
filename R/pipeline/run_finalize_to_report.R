@@ -34,7 +34,7 @@
 #   Stage 7: Generate detector activity summary
 #   Stage 8: Generate study-wide summary
 #   Stage 9: Calculate variance components
-#   Stage 10: Generate species composition (if applicable)
+#   Stage 10: Generate species composition
 #   Stage 11: Calculate species accumulation
 #   Stage 12: Generate hourly activity profiles
 #   Stage 13: Format GT tables and export
@@ -44,7 +44,7 @@
 #   Stage 15: Configure plot settings
 #   Stage 16: Generate quality plots (8)
 #   Stage 17: Generate detector plots (7)
-#   Stage 18: Generate species plots (5, if applicable)
+#   Stage 18: Generate species plots (5)
 #   Stage 19: Generate temporal plots (6)
 #   Stage 20: Export plots (PNG/SVG)
 #   Stage 21: Save plot objects RDS
@@ -220,15 +220,15 @@
 #' - Detector-level: effort, activity, variability
 #' - Study-wide: totals, means, success rates
 #' - Variance decomposition (between/within detector)
-#' - Species composition (if species column exists)
-#' - Hourly activity profiles (if temporal data exists)
+#' - Species composition
+#' - Hourly activity profiles
 #' - Exports GT tables (PNG, HTML, Excel)
 #'
 #' @section PLOTTING DETAILS:
 #' Creates exploratory visualizations (26 total):
 #' - Quality (8): recording status, completeness, effort
 #' - Detector (7): activity, correlation, synchrony
-#' - Species (5): composition, diversity (if species data exists)
+#' - Species (5): composition, diversity
 #' - Temporal (6): trends, hourly, weekly, monthly
 #' - Exports PNG (300 DPI) + optional SVG + RDS objects
 #'
@@ -320,7 +320,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   validation_context_finalize_cpn <- init_stage_validation("finalize_cpn", study_params)
   
-  if (verbose) message("  [OK] Loaded study_parameters.yaml")
+  message("  [OK] Loaded study_parameters.yaml")
   
   # Get uniform schedule for status classification
   advanced_scheduling <- study_params$processing_options$advanced_scheduling %||% "no"
@@ -355,11 +355,19 @@ run_finalize_to_report <- function(kpro_master = NULL,
     count = nrow(kpro_master)
   )
   
-  # Validate species column exists
-  if (!"species" %in% names(kpro_master)) {
-    warning("'species' column not found in kpro_master - creating from auto_id")
-    kpro_master$species <- kpro_master$auto_id
+  # Validate required schema - fail fast if columns are missing
+  required_columns <- c("species", "Hour_local", "DateTime_local")
+  missing_columns <- setdiff(required_columns, names(kpro_master))
+  
+  if (length(missing_columns) > 0) {
+    stop(sprintf(
+      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream workflows (Chunk 1 & 2).\n  Please verify that run_ingest_standardize() and run_cpn_template() completed successfully.",
+      paste(missing_columns, collapse = ", ")
+    ))
   }
+  
+  message(sprintf("  [OK] Schema validation passed: all required columns present (%s)", 
+                  paste(required_columns, collapse = ", ")))
   
   # Load original template for comparison
   template_original <- load_cpn_template(
@@ -827,7 +835,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     count = nrow(detector_summary)
   )
   
-  if (verbose) message(sprintf("  [OK] Created detector summary: %d detectors", 
+  message(sprintf("  [OK] Created detector summary: %d detectors", 
                                nrow(detector_summary)))
   
   # ---------------------------------------------------------------------------
@@ -845,7 +853,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     description = "Study-wide summary created"
   )
   
-  if (verbose) message("  [OK] Created study-wide summary")
+  message("  [OK] Created study-wide summary")
   
   # ---------------------------------------------------------------------------
   # Stage 9: Variance Components (Optional - skip if function not available)
@@ -866,70 +874,55 @@ run_finalize_to_report <- function(kpro_master = NULL,
   }
   
   # ---------------------------------------------------------------------------
-  # Stage 10: Species Composition Summary (Conditional on species column)
+  # Stage 10: Species Composition Summary
   # ---------------------------------------------------------------------------
-  # Creates species composition summary by detector if species column exists.
-  # Skipped if kpro_master does not contain a 'species' column.
+  # Creates species composition summary by detector.
+  # Required: species column must exist in kpro_master (validated in Stage 2).
   
   log_stage_start("10", "Species Composition Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
-  has_species <- "species" %in% names(kpro_master)
-  has_temporal <- "Hour_local" %in% names(kpro_master) || "DateTime_local" %in% names(kpro_master)
+  species_summary <- tryCatch({
+    create_species_summary_by_detector(kpro_master, calls_per_night_final)
+  }, error = function(e) {
+    stop(sprintf("Failed to create species summary: %s", e$message))
+  })
   
-  if (has_species) {
-    species_summary <- tryCatch({
-      create_species_summary_by_detector(kpro_master, calls_per_night_final)
-    }, error = function(e) NULL)
-    
-    if (!is.null(species_summary)) {
-      all_summaries$species_summary <- species_summary
-      if (verbose) message("  [OK] Created species summary")
-    }
-  } else {
-    if (verbose) message("  [!] Species summary skipped (no species column)")
-  }
+  all_summaries$species_summary <- species_summary
+  message("  [OK] Created species summary")
   
   # ---------------------------------------------------------------------------
-  # Stage 11: Species Accumulation Summary (Conditional on species column)
+  # Stage 11: Species Accumulation Summary
   # ---------------------------------------------------------------------------
-  # Creates species accumulation over time if species column exists.
-  # Skipped if kpro_master does not contain a 'species' column.
+  # Creates species accumulation over time.
+  # Required: species column must exist in kpro_master (validated in Stage 2).
   
   log_stage_start("11", "Species Accumulation Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
-  if (has_species) {
-    species_accumulation <- tryCatch({
-      create_species_accumulation_summary(kpro_master, calls_per_night_final)
-    }, error = function(e) NULL)
-    
-    if (!is.null(species_accumulation)) {
-      all_summaries$species_accumulation <- species_accumulation
-      if (verbose) message("  [OK] Created species accumulation")
-    }
-  } else {
-    if (verbose) message("  [!] Species accumulation skipped (no species column)")
-  }
+  species_accumulation <- tryCatch({
+    create_species_accumulation_summary(kpro_master, calls_per_night_final)
+  }, error = function(e) {
+    stop(sprintf("Failed to create species accumulation: %s", e$message))
+  })
+  
+  all_summaries$species_accumulation <- species_accumulation
+  message("  [OK] Created species accumulation")
   
   # ---------------------------------------------------------------------------
-  # Stage 12: Hourly Activity Summary (Conditional on temporal columns)
+  # Stage 12: Hourly Activity Summary
   # ---------------------------------------------------------------------------
-  # Creates hourly activity summary if Hour_local or DateTime_local columns exist.
-  # Skipped if kpro_master does not contain temporal columns.
+  # Creates hourly activity summary using Hour_local or DateTime_local columns.
+  # Required: Hour_local and DateTime_local must exist in kpro_master (validated in Stage 2).
   
   log_stage_start("12", "Hourly Activity Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
-  if (has_temporal) {
-    hourly_summary <- tryCatch({
-      create_hourly_activity_summary(kpro_master, calls_per_night_final)
-    }, error = function(e) NULL)
-    
-    if (!is.null(hourly_summary)) {
-      all_summaries$hourly_summary <- hourly_summary
-      if (verbose) message("  [OK] Created hourly activity summary")
-    }
-  } else {
-    if (verbose) message("  [!] Hourly activity summary skipped (no temporal columns)")
-  }
+  hourly_summary <- tryCatch({
+    create_hourly_activity_summary(kpro_master, calls_per_night_final)
+  }, error = function(e) {
+    stop(sprintf("Failed to create hourly activity summary: %s", e$message))
+  })
+  
+  all_summaries$hourly_summary <- hourly_summary
+  message("  [OK] Created hourly activity summary")
   
   # ---------------------------------------------------------------------------
   # Stage 13: Save Summary RDS
@@ -1002,29 +995,27 @@ run_finalize_to_report <- function(kpro_master = NULL,
     })
   }
   
-  # Export species summary table (if applicable)
-  if (has_species && !is.null(all_summaries$species_summary)) {
-    tryCatch({
-      species_gt <- format_species_summary_gt(all_summaries$species_summary)
-      save_gt_table(species_gt, "species_summary", 
-                   output_dir = table_output_dir, format = "png")
-      tables_exported <- tables_exported + 1
-    }, error = function(e) {
-      warning(sprintf("Failed to export species summary table: %s", e$message))
-    })
-  }
+  # Export species summary table
+  tryCatch({
+    species_gt <- format_species_summary_gt(all_summaries$species_summary)
+    save_gt_table(species_gt, "species_summary", 
+                 output_dir = table_output_dir, format = "png")
+    tables_exported <- tables_exported + 1
+    message("  [OK] Exported species summary table")
+  }, error = function(e) {
+    stop(sprintf("Failed to export species summary table: %s", e$message))
+  })
   
-  # Export hourly activity summary table (if applicable)
-  if (has_temporal && !is.null(all_summaries$hourly_summary)) {
-    tryCatch({
-      hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary)
-      save_gt_table(hourly_gt, "hourly_activity_summary", 
-                   output_dir = table_output_dir, format = "png")
-      tables_exported <- tables_exported + 1
-    }, error = function(e) {
-      warning(sprintf("Failed to export hourly activity table: %s", e$message))
-    })
-  }
+  # Export hourly activity summary table
+  tryCatch({
+    hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary)
+    save_gt_table(hourly_gt, "hourly_activity_summary", 
+                 output_dir = table_output_dir, format = "png")
+    tables_exported <- tables_exported + 1
+    message("  [OK] Exported hourly activity summary table")
+  }, error = function(e) {
+    stop(sprintf("Failed to export hourly activity table: %s", e$message))
+  })
   
   if (verbose) message(sprintf("  [OK] Exported %d summary tables", tables_exported))
   
@@ -1137,29 +1128,25 @@ run_finalize_to_report <- function(kpro_master = NULL,
   all_plots$detector <- detector_plots
   
   # ---------------------------------------------------------------------------
-  # Stage 18: Species Plots (5 plots, conditional)
+  # Stage 18: Species Plots (5 plots)
   # ---------------------------------------------------------------------------
+  # Required: species column must exist in kpro_master (validated in Stage 2).
   
   log_stage_start("18", "Generate Species Plots", verbose = verbose, workflow_prefix = "Plots")
   
   species_plots <- list()
   
-  if (has_species) {
-    tryCatch({
-      species_plots$species_composition_bar <- plot_species_composition_bar(kpro_master)
-      species_plots$species_by_detector_heatmap <- plot_species_by_detector_heatmap(kpro_master)
-      species_plots$species_accumulation_curve <- plot_species_accumulation_curve(kpro_master)
-      species_plots$species_hourly_profile <- plot_species_hourly_profile(kpro_master)
-      species_plots$noid_proportion <- plot_noid_proportion(kpro_master)
-      
-      if (verbose) message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
-    }, error = function(e) {
-      warning(sprintf("Species plots failed: %s", e$message))
-      species_plots <- list()
-    })
-  } else {
-    if (verbose) message("  [!] Species plots skipped (no species column)")
-  }
+  tryCatch({
+    species_plots$species_composition_bar <- plot_species_composition_bar(kpro_master)
+    species_plots$species_by_detector_heatmap <- plot_species_by_detector_heatmap(kpro_master)
+    species_plots$species_accumulation_curve <- plot_species_accumulation_curve(kpro_master)
+    species_plots$species_hourly_profile <- plot_species_hourly_profile(kpro_master)
+    species_plots$noid_proportion <- plot_noid_proportion(kpro_master)
+    
+    message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
+  }, error = function(e) {
+    stop(sprintf("Species plots failed: %s", e$message))
+  })
   
   all_plots$species <- species_plots
   
