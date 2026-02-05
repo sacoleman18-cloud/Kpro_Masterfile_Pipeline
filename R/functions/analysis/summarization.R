@@ -707,7 +707,7 @@ create_hourly_activity_summary <- function(master_data,
   if (!"Hour_local" %in% names(master_data)) {
     if ("DateTime_local" %in% names(master_data)) {
       master_data <- master_data %>%
-        dplyr::mutate(Hour_local = lubridate::hour(DateTime_local))
+        dplyr::mutate(Hour_local = as.integer(lubridate::hour(DateTime_local)))
     } else {
       stop("master_data must have either 'Hour_local' or 'DateTime_local' column")
     }
