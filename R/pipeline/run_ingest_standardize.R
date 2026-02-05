@@ -59,7 +59,7 @@
 # ------------
 #   Custom functions (via load_all.R):
 #     - ingestion.R: load_local_raw_data, load_external_raw_data
-#     - schema_detection.R: detect_row_schema
+#     - schema_helpers.R: detect_row_schema, get_dominant_schema, get_schema_summary
 #     - standardization.R: standardize_kpro_schema
 #     - datetime_conversion.R: convert_datetime_to_local
 #     - validation.R: enforce_unified_schema, finalize_master_columns,

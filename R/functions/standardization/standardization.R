@@ -57,7 +57,7 @@
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
-#   - Perform schema detection (core/schema_detection.R)
+#   - Perform schema detection (standardization/schema_helpers.R)
 #   - Perform data quality checks (validation/validation.R)
 #   - Enforce master schema types (validation/validation.R)
 #   - Calculate recording hours or CallsPerNight (analysis/)
@@ -69,7 +69,7 @@
 # DEPENDENCIES
 # ------------
 #   - validation/validation.R: assert_data_frame, assert_not_empty, assert_columns_exist
-#   - core/schema_detection.R: detect_row_schema (provides schema_version column)
+#   - standardization/schema_helpers.R: detect_row_schema (provides schema_version column)
 #   - dplyr: mutate, case_when, select, bind_rows, coalesce
 #   - purrr: map_chr (for splitting alternates)
 #
@@ -104,6 +104,9 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DEPENDENCIES UPDATE - Updated schema_helpers.R reference
+#             - Changed core/schema_detection.R to standardization/schema_helpers.R
+#             - Reflects module reorganization (schema detection moved to standardization)
 # 2026-02-04: MODULE SPLIT - Added create_unified_species_column()
 #             - Moved from utilities.R for domain-specific logic
 #             - Species unification is data transformation, not utility

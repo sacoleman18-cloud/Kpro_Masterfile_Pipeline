@@ -71,8 +71,7 @@ message("  └── Layer 1 loaded")
 # =============================================================================
 message("[2/7] Loading Layer 2: ingestion/")
 
-source_module(file.path("R", "functions", "ingestion", "ingestion.R"),        "ingestion.R        (raw data loading)")
-source_module(file.path("R", "functions", "ingestion", "schema_detection.R"), "schema_detection.R (row-level schema detection)")
+source_module(file.path("R", "functions", "ingestion", "ingestion.R"), "ingestion.R (raw data loading)")
 
 message("  └── Layer 2 loaded")
 
@@ -82,8 +81,9 @@ message("  └── Layer 2 loaded")
 # =============================================================================
 message("[3/7] Loading Layer 3: standardization/")
 
-source_module(file.path("R", "functions", "standardization", "standardization.R"),      "standardization.R     (schema transformation)")
-source_module(file.path("R", "functions", "standardization", "datetime_helpers.R"), "datetime_helpers.R (timezone handling)")
+source_module(file.path("R", "functions", "standardization", "schema_helpers.R"),   "schema_helpers.R       (schema version detection)")
+source_module(file.path("R", "functions", "standardization", "standardization.R"),  "standardization.R      (schema transformation)")
+source_module(file.path("R", "functions", "standardization", "datetime_helpers.R"), "datetime_helpers.R     (timezone handling)")
 
 message("  └── Layer 3 loaded")
 

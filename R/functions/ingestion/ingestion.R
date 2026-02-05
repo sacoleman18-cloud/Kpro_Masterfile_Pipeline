@@ -57,19 +57,23 @@
 # DEPENDENCIES
 # ------------
 #   - core/utilities.R: safe_read_csv, log_message
-#   - core/schema_detection.R: detect_row_schema
+#   - standardization/schema_helpers.R: detect_row_schema, get_dominant_schema, get_schema_summary
 #   - validation/validation.R: assert_data_frame, assert_not_empty
 #   - janitor: clean_names
 #   - dplyr: filter, bind_rows, mutate
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 #   - apply_intro_standardization()  [internal helper]
 #   - load_local_raw_data()          [returns combined tibble or assigns to envir]
 #   - load_external_raw_data()       [returns combined tibble]
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DEPENDENCIES UPDATE - Updated schema_helpers.R reference
+#             - Changed core/schema_detection.R to standardization/schema_helpers.R
+#             - Reflects module reorganization (schema detection moved to standardization)
+#             - Fixed CONTENTS → FUNCTIONS PROVIDED per documentation standards
 # 2026-01-30: Refactored to use centralized assert_* functions from validation.R
 # 2026-01-27: Refactored load_local_raw_data() to return combined tibble by default
 #             Added return_combined parameter (TRUE = tibble, FALSE = legacy global objects)
