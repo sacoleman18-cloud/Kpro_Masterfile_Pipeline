@@ -79,6 +79,11 @@
 #   - generate_timestamped_filename()
 #   - store_stage_results()
 #
+# Orchestrator Convenience Functions:
+#   - log_stage_start()
+#   - save_checkpoint_and_register()
+#   - finalize_stage_validation_report()
+#
 # Path Generation:
 #   - make_output_path()
 #   - make_versioned_path()
@@ -108,6 +113,12 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: Added orchestrator convenience functions to reduce code duplication
+#             - Added log_stage_start() to consolidate print_stage_header + log_message
+#             - Added save_checkpoint_and_register() to consolidate CSV save + artifact registration
+#             - Added finalize_stage_validation_report() to consolidate validation HTML generation
+#             - Reduces ~100-150 lines of boilerplate per orchestrator file
+#             - Updated FUNCTIONS PROVIDED section
 # 2026-02-05: Added store_stage_results() orchestrator helper
 #             - Consolidates stage output storage in result object
 #             - Tracks validation HTML paths across multiple stages
@@ -839,4 +850,295 @@ fill_readme_template <- function(template_path,
   writeLines(filled_text, output_path)
   
   invisible(TRUE)
+}
+
+
+# ==============================================================================
+# ORCHESTRATOR CONVENIENCE FUNCTIONS
+# ==============================================================================
+
+
+#' Log Stage Start with Console and File Output
+#'
+#' @description
+#' Consolidates the common pattern of printing a stage header to console
+#' and logging a stage message to file. Reduces boilerplate in orchestrator
+#' functions by combining print_stage_header() + log_message() into one call.
+#'
+#' @param stage_num Character. Stage number (e.g., "1", "2.3", "7.1")
+#' @param title Character. Stage title (e.g., "Load Configuration")
+#' @param verbose Logical. Print to console? Default: FALSE
+#' @param log_path Character. Path to log file. Default: "logs/pipeline_log.txt"
+#' @param workflow_prefix Character. Optional prefix for log messages
+#'   (e.g., "Finalize CPN"). Default: ""
+#'
+#' @return Invisible NULL.
+#'
+#' @section CONTRACT:
+#' - Prints stage header box to console if verbose = TRUE
+#' - Always logs to file (respects CODING_STANDARDS gating pattern)
+#' - Formats log message as "[Stage X] Title" or "[Prefix - Stage X] Title"
+#' - Returns invisibly
+#'
+#' @section DOES NOT:
+#' - Validate stage number format
+#' - Check if log file is writable
+#' - Track validation events (use log_validation_event separately)
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage
+#' log_stage_start("1", "Load Configuration", verbose = TRUE)
+#' # Console: +----STAGE 1: Load Configuration----+
+#' # Log:     [2026-02-05 12:34:56] [Stage 1] Load Configuration
+#'
+#' # With workflow prefix
+#' log_stage_start("2", "Generate Template", verbose = FALSE,
+#'                workflow_prefix = "Finalize CPN")
+#' # Console: (silent)
+#' # Log:     [2026-02-05 12:34:56] [Finalize CPN - Stage 2] Generate Template
+#' }
+#'
+#' @export
+log_stage_start <- function(stage_num,
+                           title,
+                           verbose = FALSE,
+                           log_path = "logs/pipeline_log.txt",
+                           workflow_prefix = "") {
+  
+  # Print to console if verbose
+  if (verbose) {
+    print_stage_header(stage_num, title)
+  }
+  
+  # Build log message
+  if (nchar(workflow_prefix) > 0) {
+    log_msg <- sprintf("[%s - Stage %s] %s", workflow_prefix, stage_num, title)
+  } else {
+    log_msg <- sprintf("[Stage %s] %s", stage_num, title)
+  }
+  
+  # Always log to file (per CODING_STANDARDS)
+  log_message(log_msg, log_path = log_path)
+  
+  invisible(NULL)
+}
+
+
+#' Save Checkpoint and Register as Artifact
+#'
+#' @description
+#' Consolidates the common pattern of saving a CSV checkpoint and registering
+#' it in the artifact registry. Atomically performs write_csv → init_artifact_registry
+#' → register_artifact sequence in one call. Reduces ~35 lines of boilerplate
+#' per usage.
+#'
+#' @param data Data frame to save as CSV checkpoint.
+#' @param file_path Character. Full path to checkpoint file. If NULL, will be
+#'   constructed from checkpoint_name, output_dir, and timestamp. Default: NULL.
+#' @param checkpoint_name Character. Base name for checkpoint file (without extension).
+#'   Used to construct file_path if file_path is NULL. Default: NULL.
+#' @param output_dir Character. Output directory for checkpoint. Used with 
+#'   checkpoint_name to construct file_path if file_path is NULL. Default: "outputs/checkpoints".
+#' @param artifact_name Character. Unique name for artifact registry. If NULL,
+#'   will be generated from checkpoint_name. Default: NULL.
+#' @param artifact_type Character. Type of artifact (e.g., "checkpoint", "masterfile").
+#' @param workflow Character. Workflow that produced this artifact.
+#' @param metadata List. Additional metadata for registry entry. Default: list().
+#' @param data_hash Character. Optional data frame hash for reproducibility.
+#'   Default: NULL.
+#' @param verbose Logical. Print confirmation messages? Default: FALSE.
+#' @param registry List. Optional existing registry to use. If NULL, loads/creates
+#'   registry automatically. Default: NULL.
+#'
+#' @return List. Updated artifact registry (invisibly).
+#'
+#' @section CONTRACT:
+#' - Accepts either file_path (explicit) OR checkpoint_name + output_dir (constructed)
+#' - Creates output directory if needed
+#' - Writes data to CSV using readr::write_csv
+#' - Generates artifact_name if not provided
+#' - Initializes or loads artifact registry if not provided
+#' - Registers artifact with file hash and optional data hash
+#' - Prints confirmation if verbose = TRUE
+#' - Returns updated registry invisibly
+#'
+#' @section DOES NOT:
+#' - Validate data frame schema
+#' - Check if file already exists (overwrites)
+#' - Log to pipeline log (use log_message separately if needed)
+#' - Handle errors in CSV writing (caller should wrap in tryCatch if needed)
+#'
+#' @examples
+#' \dontrun{
+#' # Method 1: Explicit file_path
+#' registry <- save_checkpoint_and_register(
+#'   data = kpro_master,
+#'   file_path = here::here("outputs", "checkpoints", "02_kpro_master_20260205.csv"),
+#'   artifact_name = "kpro_master_20260205",
+#'   artifact_type = "masterfile",
+#'   workflow = "ingest",
+#'   metadata = list(n_rows = nrow(kpro_master)),
+#'   verbose = TRUE
+#' )
+#'
+#' # Method 2: Constructed from checkpoint_name + output_dir
+#' registry <- save_checkpoint_and_register(
+#'   data = cpn_final,
+#'   checkpoint_name = "CallsPerNight_final",
+#'   output_dir = here::here("results", "csv"),
+#'   artifact_type = "cpn_final",
+#'   workflow = "finalize_cpn",
+#'   metadata = list(n_rows = nrow(cpn_final)),
+#'   verbose = TRUE
+#' )
+#' # Automatically generates timestamped filename and artifact_name
+#' }
+#'
+#' @export
+save_checkpoint_and_register <- function(data,
+                                        file_path = NULL,
+                                        checkpoint_name = NULL,
+                                        output_dir = "outputs/checkpoints",
+                                        artifact_name = NULL,
+                                        artifact_type,
+                                        workflow,
+                                        metadata = list(),
+                                        data_hash = NULL,
+                                        verbose = FALSE,
+                                        registry = NULL) {
+  
+  # Construct file_path if not provided
+  if (is.null(file_path)) {
+    if (is.null(checkpoint_name)) {
+      stop("Either file_path or checkpoint_name must be provided")
+    }
+    
+    # Generate timestamped filename
+    timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+    filename <- sprintf("%s_%s.csv", checkpoint_name, timestamp)
+    file_path <- file.path(output_dir, filename)
+  }
+  
+  # Generate artifact_name if not provided
+  if (is.null(artifact_name)) {
+    if (!is.null(checkpoint_name)) {
+      timestamp <- format(Sys.time(), "%Y%m%d")
+      artifact_name <- sprintf("%s_%s", checkpoint_name, timestamp)
+    } else {
+      # Extract from file_path
+      artifact_name <- tools::file_path_sans_ext(basename(file_path))
+    }
+  }
+  
+  # Ensure output directory exists
+  output_dir_actual <- dirname(file_path)
+  ensure_dir_exists(output_dir_actual)
+  
+  # Save CSV file
+  readr::write_csv(data, file_path)
+  
+  # Initialize or use existing registry
+  if (is.null(registry)) {
+    registry <- init_artifact_registry()
+  }
+  
+  # Register artifact (computes file hash automatically)
+  registry <- register_artifact(
+    registry = registry,
+    artifact_name = artifact_name,
+    artifact_type = artifact_type,
+    workflow = workflow,
+    file_path = file_path,
+    metadata = metadata,
+    data_hash = data_hash,
+    quiet = !verbose
+  )
+  
+  # Print confirmation if verbose
+  if (verbose) {
+    message(sprintf("  [OK] Saved and registered: %s", basename(file_path)))
+  }
+  
+  invisible(registry)
+}
+
+
+#' Finalize Stage Validation Report
+#'
+#' @description
+#' Consolidates the common pattern of creating validation directory and
+#' finalizing validation HTML report. Reduces ~10 lines of boilerplate
+#' per orchestrator function.
+#'
+#' @param validation_context List. Validation context from create_validation_context().
+#' @param stage_name Character. Optional stage name for display in report.
+#'   Default: NULL (uses workflow from context).
+#' @param verbose Logical. Print confirmation message? Default: FALSE.
+#' @param output_dir Character. Directory for validation HTML.
+#'   Default: "results/validation"
+#'
+#' @return Character. Path to generated validation HTML file.
+#'
+#' @section CONTRACT:
+#' - Creates output directory if it doesn't exist
+#' - Calls finalize_validation_report() or complete_stage_validation()
+#' - Returns path to generated HTML file
+#' - Prints confirmation if verbose = TRUE
+#'
+#' @section DOES NOT:
+#' - Validate context structure (assumes well-formed)
+#' - Open browser to view report
+#' - Log to pipeline log (use log_message separately if needed)
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage
+#' validation_html_path <- finalize_stage_validation_report(
+#'   validation_context,
+#'   verbose = TRUE
+#' )
+#' # Prints: "  [OK] Validation report: validation_cpn_template_20260205.html"
+#'
+#' # With stage name
+#' validation_html_path <- finalize_stage_validation_report(
+#'   validation_context,
+#'   stage_name = "INGEST & STANDARDIZE",
+#'   verbose = TRUE,
+#'   output_dir = here::here("results", "validation")
+#' )
+#' }
+#'
+#' @export
+finalize_stage_validation_report <- function(validation_context,
+                                            stage_name = NULL,
+                                            verbose = FALSE,
+                                            output_dir = "results/validation") {
+  
+  # Ensure output directory exists
+  ensure_dir_exists(output_dir)
+  
+  # Generate validation HTML report
+  # Check if complete_stage_validation exists (newer function)
+  if (exists("complete_stage_validation", mode = "function")) {
+    validation_html_path <- complete_stage_validation(
+      validation_context,
+      validation_dir = output_dir,
+      stage_name = stage_name,
+      verbose = verbose
+    )
+  } else {
+    # Fall back to finalize_validation_report
+    validation_html_path <- finalize_validation_report(
+      validation_context,
+      output_dir = output_dir
+    )
+  }
+  
+  # Print confirmation if verbose
+  if (verbose && !is.null(validation_html_path)) {
+    message(sprintf("  [OK] Validation report: %s", basename(validation_html_path)))
+  }
+  
+  validation_html_path
 }

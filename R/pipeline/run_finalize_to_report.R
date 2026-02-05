@@ -98,14 +98,19 @@
 #       save_callspernight_with_version, create_detector_activity_summary,
 #       create_study_summary, generate_quality_plots, generate_detector_plots,
 #       generate_species_plots, generate_temporal_plots, create_release_bundle,
-#       init_artifact_registry, register_artifact,
 #       print_stage_banner, init_stage_validation,
-#       complete_stage_validation, save_and_register_rds,
-#       store_stage_results, find_most_recent_checkpoint,
-#       load_cpn_template
+#       save_and_register_rds, store_stage_results, find_most_recent_checkpoint,
+#       load_cpn_template, initialize_pipeline_log, log_stage_start,
+#       save_checkpoint_and_register, finalize_stage_validation_report
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: Refactored to use new utilities.R helper functions
+#             - Added initialize_pipeline_log() after print_stage_banner
+#             - Replaced print_stage_header + log_message patterns with log_stage_start()
+#             - Replaced manual CSV save + artifact registration with save_checkpoint_and_register()
+#             - Replaced assert_directory_exists + complete_stage_validation with finalize_stage_validation_report()
+#             - Updated dependencies to reflect new helper functions
 # 2026-02-04: Standardized stage helpers and documentation refresh
 #             - Replaced custom banners with print_stage_banner()
 #             - Swapped validation init/finalize with init_stage_validation()/
@@ -302,12 +307,13 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # ===========================================================================
   
   print_stage_banner("FINALIZE CPN", verbose = verbose)
+  initialize_pipeline_log()
   
   # ---------------------------------------------------------------------------
   # Stage 1: Load Configuration
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("1", "Load Configuration")
+  log_stage_start("1", "Load Configuration", verbose = verbose, workflow_prefix = "Finalize CPN")
   
   assert_file_exists(yaml_path, hint = "Configure study parameters first.")
   study_params <- load_study_parameters(yaml_path)
@@ -322,13 +328,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
   uniform_end <- study_params$processing_options$recording_end %||% NA
   intended_hours <- study_params$processing_options$intended_hours %||% NA
   
-  log_message("[Finalize CPN - Stage 1] Configuration loaded")
-  
   # ---------------------------------------------------------------------------
   # Stage 2: Load Master Data and Templates
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("2", "Load Data and Templates")
+  log_stage_start("2", "Load Data and Templates", verbose = verbose, workflow_prefix = "Finalize CPN")
   
   # Load master data
   if (!is.null(kpro_master)) {
@@ -492,7 +496,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 3: Track Manual Edits (POSIXct Parsing with Tolerance)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("3", "Track Manual Edits")
+  log_stage_start("3", "Track Manual Edits", verbose = verbose, workflow_prefix = "Finalize CPN")
   
   # Initialize tracking variables
   total_edits <- 0
@@ -627,13 +631,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
     message(sprintf("  [OK] Tracked %d manual edits", total_edits))
   }
   
-  log_message(sprintf("[Finalize CPN - Stage 3] Tracked %d manual edits (POSIXct comparison with 1-sec tolerance)", total_edits))
-  
   # ---------------------------------------------------------------------------
   # Stage 4: Calculate RecordingHours
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("4", "Calculate Recording Hours")
+  log_stage_start("4", "Calculate Recording Hours", verbose = verbose, workflow_prefix = "Finalize CPN")
   
   # Recalculate RecordingHours from edited times
   if ("StartDateTime" %in% names(template_edited) && 
@@ -657,13 +659,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) message("  [OK] Recalculated recording hours")
   
-  log_message("[Finalize CPN - Stage 4] RecordingHours calculated")
-  
   # ---------------------------------------------------------------------------
   # Stage 5: Classify Status and Calculate Metrics
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("5", "Classify Status & Calculate Metrics")
+  log_stage_start("5", "Classify Status & Calculate Metrics", verbose = verbose, workflow_prefix = "Finalize CPN")
   
   # Classify recording status
   calls_per_night_final <- template_edited %>%
@@ -738,36 +738,29 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 6: Save Final CPN
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("6", "Save Final CPN")
+  log_stage_start("6", "Save Final CPN", verbose = verbose, workflow_prefix = "Finalize CPN")
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   
-  cpn_final_path <- save_callspernight_with_version(
-    calls_per_night_final,
-    base_name = "CallsPerNight_final",
-    output_dir = here::here("results", "csv")
-  )
+  # Construct file path for CPN final
+  cpn_final_filename <- sprintf("CallsPerNight_final_%s.csv", timestamp)
+  cpn_final_path <- here::here("results", "csv", cpn_final_filename)
   
-  # Register artifact
-  registry <- init_artifact_registry()
-  artifact_id_cpn <- sprintf("cpn_final_%s", timestamp)
-  
-  registry <- register_artifact(
-    registry = registry,
-    artifact_name = artifact_id_cpn,
+  # Save and register artifact
+  registry <- save_checkpoint_and_register(
+    data = calls_per_night_final,
+    file_path = cpn_final_path,
     artifact_type = "cpn_final",
     workflow = "finalize_cpn",
-    file_path = cpn_final_path,
     metadata = list(
       n_rows = nrow(calls_per_night_final),
       n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
       total_edits = total_edits,
       status_distribution = as.list(status_dist),
       dead_nights_retained = dead_nights
-    )
+    ),
+    verbose = verbose
   )
-  
-  if (verbose) message(sprintf("  [OK] Saved: %s", basename(cpn_final_path)))
   
   # Save edit log if edits were made
   if (total_edits > 0) {
@@ -787,13 +780,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
     if (verbose) message(sprintf("  [OK] Saved edit log: %s", basename(edit_log_path)))
   }
   
-  # Finalize validation
-  validation_dir <- here::here("results", "validation")
-  assert_directory_exists(validation_dir, create = TRUE)
-  
-  validation_html_finalize_cpn <- complete_stage_validation(
-    validation_context_finalize_cpn,
-    validation_dir = validation_dir,
+  validation_html_finalize_cpn <- finalize_stage_validation_report(
+    validation_context = validation_context_finalize_cpn,
     stage_name = "FINALIZE CPN",
     verbose = verbose
   )
@@ -828,7 +816,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 7: Detector Activity Summary
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("7", "Detector Activity Summary")
+  log_stage_start("7", "Detector Activity Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
   detector_summary <- create_detector_activity_summary(calls_per_night_final)
   all_summaries$detector_summary <- detector_summary
@@ -843,13 +831,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Created detector summary: %d detectors", 
                                nrow(detector_summary)))
   
-  log_message("[Summary Stats - Stage 7] Detector summary created")
-  
   # ---------------------------------------------------------------------------
   # Stage 8: Study-Wide Summary
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("8", "Study-Wide Summary")
+  log_stage_start("8", "Study-Wide Summary", verbose = verbose, workflow_prefix = "Summary Stats")
   
   study_summary <- create_study_summary(calls_per_night_final)
   all_summaries$study_summary <- study_summary
@@ -862,13 +848,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   if (verbose) message("  [OK] Created study-wide summary")
   
-  log_message("[Summary Stats - Stage 8] Study summary created")
-  
   # ---------------------------------------------------------------------------
   # Stage 9: Variance Components (Optional - skip if function not available)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("9", "Variance Components")
+  log_stage_start("9", "Variance Components", verbose = verbose, workflow_prefix = "Summary Stats")
   
   variance_components <- tryCatch({
     calculate_variance_components(calls_per_night_final)
@@ -880,14 +864,13 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (!is.null(variance_components)) {
     all_summaries$variance_components <- variance_components
     if (verbose) message("  [OK] Calculated variance components")
-    log_message("[Summary Stats - Stage 9] Variance components calculated")
   }
   
   # ---------------------------------------------------------------------------
   # Stage 10-12: Species and Temporal Summaries (Conditional)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("10", "Species & Temporal Summaries")
+  log_stage_start("10", "Species & Temporal Summaries", verbose = verbose, workflow_prefix = "Summary Stats")
   
   has_species <- "species" %in% names(kpro_master)
   has_temporal <- "Hour_local" %in% names(kpro_master) || "DateTime_local" %in% names(kpro_master)
@@ -923,13 +906,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
     }
   }
   
-  log_message("[Summary Stats - Stages 10-12] Optional summaries completed")
-  
   # ---------------------------------------------------------------------------
   # Stage 13-14: Save Summary RDS and Export Tables
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("13", "Save Summary RDS")
+  log_stage_start("13", "Save Summary RDS", verbose = verbose, workflow_prefix = "Summary Stats")
   
   timestamp_05 <- format(Sys.time(), "%Y%m%d")
   summary_rds_path <- here::here("results", "rds", sprintf("summary_data_%s.rds", timestamp_05))
@@ -960,9 +941,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
   )
   
   # Finalize validation
-  validation_html_summary_stats <- complete_stage_validation(
-    validation_context_summary_stats,
-    validation_dir = validation_dir,
+  validation_html_summary_stats <- finalize_stage_validation_report(
+    validation_context = validation_context_summary_stats,
     stage_name = "SUMMARY STATISTICS",
     verbose = verbose
   )
@@ -1003,7 +983,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stages 15-19: Generate Plot Categories
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("15", "Configure Plot Settings")
+  log_stage_start("15", "Configure Plot Settings", verbose = verbose, workflow_prefix = "Plots")
   
   # Create plot output directories
   plot_dirs <- c("quality", "detector", "species", "temporal")
@@ -1020,7 +1000,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 16: Quality Plots (8 plots)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("16", "Generate Quality Plots")
+  log_stage_start("16", "Generate Quality Plots", verbose = verbose, workflow_prefix = "Plots")
   
   quality_plots <- list()
   
@@ -1046,7 +1026,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 17: Detector Plots (7 plots)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("17", "Generate Detector Plots")
+  log_stage_start("17", "Generate Detector Plots", verbose = verbose, workflow_prefix = "Plots")
   
   detector_plots <- list()
   
@@ -1071,7 +1051,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 18: Species Plots (5 plots, conditional)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("18", "Generate Species Plots")
+  log_stage_start("18", "Generate Species Plots", verbose = verbose, workflow_prefix = "Plots")
   
   species_plots <- list()
   
@@ -1098,7 +1078,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 19: Temporal Plots (6 plots)
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("19", "Generate Temporal Plots")
+  log_stage_start("19", "Generate Temporal Plots", verbose = verbose, workflow_prefix = "Plots")
   
   temporal_plots <- list()
   
@@ -1118,15 +1098,11 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   all_plots$temporal <- temporal_plots
   
-  log_message(sprintf("[Plotting - Stages 15-19] Generated %d total plots",
-                      length(quality_plots) + length(detector_plots) + 
-                        length(species_plots) + length(temporal_plots)))
-  
   # ---------------------------------------------------------------------------
   # Stage 20-21: Export Plots and Save RDS
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("20", "Export Plots")
+  log_stage_start("20", "Export Plots", verbose = verbose, workflow_prefix = "Plots")
   
   # Export all plots as PNG (simplified - full implementation uses export_plots_png)
   total_plots_exported <- 0
@@ -1152,7 +1128,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   if (verbose) message(sprintf("  [OK] Exported %d plot PNG files", total_plots_exported))
   
   # Save plot objects RDS
-  if (verbose) print_stage_header("21", "Save Plot Objects RDS")
+  log_stage_start("21", "Save Plot Objects RDS", verbose = verbose, workflow_prefix = "Plots")
   
   timestamp_06 <- format(Sys.time(), "%Y%m%d")
   plots_rds_path <- here::here("results", "rds", sprintf("plot_objects_%s.rds", timestamp_06))
@@ -1174,9 +1150,8 @@ run_finalize_to_report <- function(kpro_master = NULL,
   )
   
   # Finalize validation
-  validation_html_plotting <- complete_stage_validation(
-    validation_context_plotting,
-    validation_dir = validation_dir,
+  validation_html_plotting <- finalize_stage_validation_report(
+    validation_context = validation_context_plotting,
     stage_name = "PLOTTING",
     verbose = verbose
   )
@@ -1211,7 +1186,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 22: Verify RDS Artifacts
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("22", "Verify RDS Artifacts")
+  log_stage_start("22", "Verify RDS Artifacts", verbose = verbose, workflow_prefix = "Report & Release")
   
   # Origin: 07_generate_report.R L284-323, Standards: 07_artifact_release_standards.md
   # Use robust RDS discovery and validation like legacy workflow
@@ -1263,7 +1238,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 23: Render Quarto Report
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("23", "Render Quarto Report")
+  log_stage_start("23", "Render Quarto Report", verbose = verbose, workflow_prefix = "Report & Release")
   
   qmd_template <- here::here("reports", "bat_activity_report.qmd")
   
@@ -1329,7 +1304,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 24: Create Release Bundle
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("24", "Create Release Bundle")
+  log_stage_start("24", "Create Release Bundle", verbose = verbose, workflow_prefix = "Report & Release")
   
   release_zip_path <- NULL
   
@@ -1381,11 +1356,10 @@ run_finalize_to_report <- function(kpro_master = NULL,
   # Stage 25: Finalize Validation
   # ---------------------------------------------------------------------------
   
-  if (verbose) print_stage_header("25", "Finalize Validation")
+  log_stage_start("25", "Finalize Validation", verbose = verbose, workflow_prefix = "Report & Release")
   
-  validation_html_report_release <- complete_stage_validation(
-    validation_context_report_release,
-    validation_dir = validation_dir,
+  validation_html_report_release <- finalize_stage_validation_report(
+    validation_context = validation_context_report_release,
     stage_name = "REPORT & RELEASE",
     verbose = verbose
   )

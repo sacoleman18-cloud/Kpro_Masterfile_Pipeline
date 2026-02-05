@@ -65,17 +65,27 @@
 # ------------
 #   Custom functions (via load_all.R):
 #     - config.R: load_study_parameters, get_schedule_config
-#     - utilities.R: log_message, print_stage_header, print_stage_banner, safe_read_csv, %||%,
-#                    setup_pipeline_context, load_most_recent_checkpoint,
-#                    generate_timestamped_filename, create_unified_species_column
+#     - logging.R: initialize_pipeline_log, log_message
+#     - console.R: print_stage_banner
+#     - utilities.R: setup_pipeline_context, load_most_recent_checkpoint,
+#                    generate_timestamped_filename, create_unified_species_column,
+#                    log_stage_start, save_checkpoint_and_register, 
+#                    finalize_stage_validation_report, safe_read_csv, %||%
 #     - callspernight.R: generate_calls_per_night_template
-#     - validation.R: create_validation_context, log_validation_event,
-#                     finalize_validation_report, assert_file_exists,
-#                     assert_directory_exists, assert_not_empty, assert_columns_exist
-#     - artifacts.R: init_artifact_registry, register_artifact
+#     - validation.R: log_validation_event, assert_columns_exist
+#     - artifacts.R: (used internally by save_checkpoint_and_register)
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: REFACTORING - Enhanced helper function utilization
+#             - Added initialize_pipeline_log() at startup for proper log initialization
+#             - Replaced all print_stage_header + log_message pairs with log_stage_start()
+#             - Replaced manual CSV save + artifact registration with save_checkpoint_and_register()
+#             - Replaced manual validation HTML finalization with finalize_stage_validation_report()
+#             - Removed direct calls to assert_directory_exists (handled by helper functions)
+#             - Savings: ~60 lines of boilerplate code
+#             - Improved consistency across all orchestration modules
+#             - Updated DEPENDENCIES section to reflect new helper functions
 # 2026-02-02: CRITICAL FIX - Timezone handling in Night calculation (CallsPerNight accuracy)
 #             - Stage 4 now forces timezone on DateTime_local using lubridate::force_tz()
 #             - When CSV reloaded, POSIXct loses timezone → interpreted as UTC → wrong hours
@@ -246,13 +256,15 @@ run_cpn_template <- function(kpro_master = NULL,
   
   print_stage_banner("CPN TEMPLATE GENERATION", verbose = verbose)
   
+  # Initialize pipeline log with header
+  initialize_pipeline_log()
   log_message("=== CHUNK 2: Generate CallsPerNight Template - START ===")
   
   # ===========================================================================
   # STAGE 1: LOAD CONFIGURATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("1", "Load Configuration")
+  log_stage_start("1", "Load Configuration", verbose = verbose)
   
   # Use utility to setup pipeline context (DETERMINISTIC - no parameters)
   ctx <- setup_pipeline_context("cpn_template")
@@ -285,13 +297,11 @@ run_cpn_template <- function(kpro_master = NULL,
     )
   )
   
-  log_message("[Stage 1] Configuration loaded")
-  
   # ===========================================================================
   # STAGE 2: LOAD MASTER DATA
   # ===========================================================================
   
-  if (verbose) print_stage_header("2", "Load Master Data")
+  log_stage_start("2", "Load Master Data", verbose = verbose)
   
   manual_id_used <- FALSE
   
@@ -359,7 +369,7 @@ run_cpn_template <- function(kpro_master = NULL,
   # STAGE 3: OPTIONAL MANUAL ID INTEGRATION
   # ===========================================================================
   
-  if (verbose) print_stage_header("3", "Species Column Integration")
+  log_stage_start("3", "Species Column Integration", verbose = verbose)
   
   # Add manual_id column if missing (for consistency)
   if (!"manual_id" %in% names(kpro_master)) {
@@ -428,7 +438,7 @@ run_cpn_template <- function(kpro_master = NULL,
   # STAGE 4: CALCULATE STUDY NIGHTS
   # ===========================================================================
   
-  if (verbose) print_stage_header("4", "Calculate Study Nights")
+  log_stage_start("4", "Calculate Study Nights", verbose = verbose)
   
   # Get timezone and recording start from YAML
   study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
@@ -495,7 +505,7 @@ run_cpn_template <- function(kpro_master = NULL,
   # STAGE 5: GENERATE TEMPLATE GRID
   # ===========================================================================
   
-  if (verbose) print_stage_header("5", "Generate Template Grid")
+  log_stage_start("5", "Generate Template Grid", verbose = verbose)
   
   # Get recording schedule configuration using utility (DETERMINISTIC)
   # Handles TRUE/FALSE/"yes"/"no" for detector_specific_schedules with FIXED defaults
@@ -559,7 +569,7 @@ run_cpn_template <- function(kpro_master = NULL,
   # STAGE 6: VERIFY RECORDING SCHEDULE
   # ===========================================================================
   
-  if (verbose) print_stage_header("6", "Verify Recording Schedule")
+  log_stage_start("6", "Verify Recording Schedule", verbose = verbose)
   
   # Schedule was already applied in Stage 5 by generate_calls_per_night_template()
   # This stage validates and reports the schedule configuration
@@ -599,7 +609,7 @@ run_cpn_template <- function(kpro_master = NULL,
   # STAGE 7: FORMAT TEMPLATE FOR EXCEL
   # ===========================================================================
   
-  if (verbose) print_stage_header("7", "Format Template for Excel")
+  log_stage_start("7", "Format Template for Excel", verbose = verbose)
   
   # Remove Warning column (not needed in final template)
   if ("Warning" %in% names(cpn_template)) {
@@ -686,87 +696,74 @@ run_cpn_template <- function(kpro_master = NULL,
   # STAGE 8: SAVE TEMPLATES & REGISTER
   # ===========================================================================
   
-  if (verbose) print_stage_header("8", "Save Templates & Register")
+  log_stage_start("8", "Save Templates & Register", verbose = verbose)
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  
-  # Create output directory
-  assert_directory_exists(outputs_dir, create = TRUE)
   
   # Save ORIGINAL template (for tracking)
   original_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "ORIGINAL")
   original_path <- here::here("outputs", original_filename)
-  readr::write_csv(cpn_template, original_path)
   
-  if (verbose) message(sprintf("  [OK] Saved ORIGINAL: %s", basename(original_path)))
-  
-  # Save EDIT_THIS template (for user editing)
-  edit_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "EDIT_THIS")
-  edit_path <- here::here("outputs", edit_filename)
-  readr::write_csv(cpn_template, edit_path)
-  
-  if (verbose) message(sprintf("  [OK] Saved EDIT_THIS: %s", basename(edit_path)))
-  
-  # Register artifacts
-  registry <- init_artifact_registry()
-  
-  # Generate artifact IDs using utility (DETERMINISTIC)
+  # Save and register ORIGINAL template
   artifact_id_original <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_original"))
-  registry <- register_artifact(
-    registry = registry,
+  registry <- save_checkpoint_and_register(
+    data = cpn_template,
+    file_path = original_path,
     artifact_name = artifact_id_original,
     artifact_type = "cpn_template",
     workflow = "cpn_template",
-    file_path = original_path,
     metadata = list(
       n_rows = nrow(cpn_template),
       n_detectors = length(detectors),
       n_nights = n_nights,
       template_type = "ORIGINAL",
       recording_schedule = is_advanced_scheduling
-    )
+    ),
+    verbose = verbose
   )
   
-  # Generate artifact ID for EDIT_THIS template using utility (DETERMINISTIC)
+  if (verbose) message(sprintf("  [OK] Saved ORIGINAL: %s", basename(original_path)))
+  
+  # Save and register EDIT_THIS template (for user editing)
+  edit_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "EDIT_THIS")
+  edit_path <- here::here("outputs", edit_filename)
+  
   artifact_id_edit <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_edit"))
-  registry <- register_artifact(
-    registry = registry,
+  registry <- save_checkpoint_and_register(
+    data = cpn_template,
+    file_path = edit_path,
     artifact_name = artifact_id_edit,
     artifact_type = "cpn_template",
     workflow = "cpn_template",
-    file_path = edit_path,
     metadata = list(
       n_rows = nrow(cpn_template),
       n_detectors = length(detectors),
       n_nights = n_nights,
       template_type = "EDIT_THIS",
       recording_schedule = is_advanced_scheduling
-    )
+    ),
+    verbose = verbose,
+    registry = registry
   )
   
-  if (verbose) message("  [OK] Artifacts registered")
-  
-  log_message(sprintf("[Stage 8] Templates saved and registered"))
+  if (verbose) message(sprintf("  [OK] Saved EDIT_THIS: %s", basename(edit_path)))
   
   # ===========================================================================
   # STAGE 9: RENDER VALIDATION HTML
   # ===========================================================================
   
-  if (verbose) print_stage_header("9", "Render Validation Report")
+  log_stage_start("9", "Render Validation Report", verbose = verbose)
   
   validation_context$summary$rows_processed <- nrow(cpn_template)
   validation_context$summary$n_detectors <- length(detectors)
   validation_context$summary$n_nights <- n_nights
   
-  validation_dir <- here::here("results", "validation")
-  assert_directory_exists(validation_dir, create = TRUE)
-  
-  validation_html_path <- finalize_validation_report(
+  # Use helper function to finalize validation report
+  validation_html_path <- finalize_stage_validation_report(
     validation_context,
-    output_dir = validation_dir
+    verbose = verbose,
+    output_dir = here::here("results", "validation")
   )
-  
-  if (verbose) message(sprintf("  [OK] Validation report: %s", basename(validation_html_path)))
   
   log_message(sprintf("[Stage 9] Validation report: %s", basename(validation_html_path)))
   
