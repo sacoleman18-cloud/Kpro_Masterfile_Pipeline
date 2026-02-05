@@ -742,13 +742,16 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   
+  # Construct file path for CPN final
+  cpn_final_filename <- sprintf("CallsPerNight_final_%s.csv", timestamp)
+  cpn_final_path <- here::here("results", "csv", cpn_final_filename)
+  
   # Save and register artifact
   registry <- save_checkpoint_and_register(
     data = calls_per_night_final,
-    checkpoint_name = "CallsPerNight_final",
+    file_path = cpn_final_path,
     artifact_type = "cpn_final",
     workflow = "finalize_cpn",
-    output_dir = here::here("results", "csv"),
     metadata = list(
       n_rows = nrow(calls_per_night_final),
       n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
@@ -758,14 +761,6 @@ run_finalize_to_report <- function(kpro_master = NULL,
     ),
     verbose = verbose
   )
-  
-  # Get the file path from the most recently added artifact
-  artifact_keys <- names(registry$artifacts)
-  if (length(artifact_keys) > 0) {
-    cpn_final_path <- registry$artifacts[[artifact_keys[length(artifact_keys)]]]$file_path
-  } else {
-    stop("Failed to register CPN final artifact")
-  }
   
   # Save edit log if edits were made
   if (total_edits > 0) {
