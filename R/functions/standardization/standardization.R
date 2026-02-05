@@ -1,5 +1,5 @@
 # =============================================================================
-# standardization.R - SCHEMA TRANSFORMATION (LOCKED CONTRACT)
+# MODULE: standardization.R - SCHEMA TRANSFORMATION (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
@@ -57,7 +57,7 @@
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
 # This module MUST NOT:
-#   - Perform schema detection (core/schema_detection.R)
+#   - Perform schema detection (standardization/schema_helpers.R)
 #   - Perform data quality checks (validation/validation.R)
 #   - Enforce master schema types (validation/validation.R)
 #   - Calculate recording hours or CallsPerNight (analysis/)
@@ -69,7 +69,7 @@
 # DEPENDENCIES
 # ------------
 #   - validation/validation.R: assert_data_frame, assert_not_empty, assert_columns_exist
-#   - core/schema_detection.R: detect_row_schema (provides schema_version column)
+#   - standardization/schema_helpers.R: detect_row_schema (provides schema_version column)
 #   - dplyr: mutate, case_when, select, bind_rows, coalesce
 #   - purrr: map_chr (for splitting alternates)
 #
@@ -82,8 +82,8 @@
 #   4. validated_data -> finalize_master_columns() -> kpro_master
 #   5. kpro_master -> create_unified_species_column() -> [ready for CPN template]
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Constants:
 #   - SPECIES_CODE_MAP_4_TO_6            # 60+ species 4-letter -> 6-letter lookup
 #
@@ -102,8 +102,28 @@
 # Species Unification:
 #   - create_unified_species_column()    # Unified species with priority logic (manual > auto > NoID)
 #
+# USAGE
+# -----
+# # Load module
+# source("R/functions/standardization/standardization.R")
+#
+# # Transform mixed schema data
+# df_with_schemas <- detect_row_schema(raw_combined)
+# unified_data <- standardize_kpro_schema(df_with_schemas, verbose = TRUE)
+#
+# # Create unified species column for analysis
+# cpn_data <- create_unified_species_column(kpro_master)
+#
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION & STANDARDS - Fixed header and section naming
+#             - Updated header to MODULE: format per documentation standards
+#             - Renamed CONTENTS → FUNCTIONS PROVIDED
+#             - Added USAGE section with examples
+#             - Updated schema_helpers.R reference (moved from ingestion/)
+# 2026-02-05: DEPENDENCIES UPDATE - Updated schema_helpers.R reference
+#             - Changed core/schema_detection.R to standardization/schema_helpers.R
+#             - Reflects module reorganization (schema detection moved to standardization)
 # 2026-02-04: MODULE SPLIT - Added create_unified_species_column()
 #             - Moved from utilities.R for domain-specific logic
 #             - Species unification is data transformation, not utility

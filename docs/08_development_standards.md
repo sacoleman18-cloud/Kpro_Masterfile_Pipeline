@@ -136,7 +136,7 @@ git config --global core.safecrlf true
 tests/
 ├── test_validation.R
 ├── test_assertions.R        # NEW: Centralized assertions
-├── test_schema_detection.R
+├── test_schema_helpers.R
 ├── test_datetime_conversion.R
 ├── test_callspernight.R
 ├── test_plot_functions.R

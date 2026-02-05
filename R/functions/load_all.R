@@ -58,10 +58,12 @@ source_module <- function(path, label = NULL, optional = FALSE) {
 # =============================================================================
 message("[1/7] Loading Layer 1: core/")
 
-source_module(file.path("R", "functions", "core", "utilities.R"), "utilities.R  (logging, I/O, checkpoints, paths)")
-source_module(file.path("R", "functions", "core", "config.R"),    "config.R     (YAML parameter management)")
-source_module(file.path("R", "functions", "core", "artifacts.R"), "artifacts.R  (artifact registry & provenance)")
-source_module(file.path("R", "functions", "core", "release.R"),   "release.R    (release bundle generator)")
+source_module(file.path("R", "functions", "core", "utilities.R"), "utilities.R (I/O, checkpoints, paths)")
+source_module(file.path("R", "functions", "core", "logging.R"),   "logging.R   (file logging)")
+source_module(file.path("R", "functions", "core", "console.R"),   "console.R   (console formatting)")
+source_module(file.path("R", "functions", "core", "config.R"),    "config.R    (YAML parameter management)")
+source_module(file.path("R", "functions", "core", "artifacts.R"), "artifacts.R (artifact registry & provenance)")
+source_module(file.path("R", "functions", "core", "release.R"),   "release.R   (release bundle generator)")
 
 message("  └── Layer 1 loaded")
 
@@ -71,8 +73,7 @@ message("  └── Layer 1 loaded")
 # =============================================================================
 message("[2/7] Loading Layer 2: ingestion/")
 
-source_module(file.path("R", "functions", "ingestion", "ingestion.R"),        "ingestion.R        (raw data loading)")
-source_module(file.path("R", "functions", "ingestion", "schema_detection.R"), "schema_detection.R (row-level schema detection)")
+source_module(file.path("R", "functions", "ingestion", "ingestion.R"), "ingestion.R (raw data loading)")
 
 message("  └── Layer 2 loaded")
 
@@ -82,8 +83,9 @@ message("  └── Layer 2 loaded")
 # =============================================================================
 message("[3/7] Loading Layer 3: standardization/")
 
-source_module(file.path("R", "functions", "standardization", "standardization.R"),      "standardization.R     (schema transformation)")
-source_module(file.path("R", "functions", "standardization", "datetime_helpers.R"), "datetime_helpers.R (timezone handling)")
+source_module(file.path("R", "functions", "standardization", "schema_helpers.R"),   "schema_helpers.R       (schema version detection)")
+source_module(file.path("R", "functions", "standardization", "standardization.R"),  "standardization.R      (schema transformation)")
+source_module(file.path("R", "functions", "standardization", "datetime_helpers.R"), "datetime_helpers.R     (timezone handling)")
 
 message("  └── Layer 3 loaded")
 
@@ -163,12 +165,23 @@ message("
 ================================================================================
 
  Layer 1: core/
-          ├─ utilities.R ............  Logging, I/O, checkpoints, paths
-          │                            (15 functions total)
-          │                            • Directory: 1 | Logging: 2
-          │                            • Safe I/O: 2 | File Discovery: 1
-          │                            • Checkpoints: 5 | Paths: 2
-          │                            • Templates: 1 | Operators: 1
+          ├─ utilities.R ............  I/O, checkpoints, paths
+          │                            (12 functions total)
+          │                            • Directory: 1 | Safe I/O: 2
+          │                            • File Discovery: 1 | Checkpoints: 5
+          │                            • Paths: 2 | Templates: 1
+          │                            • Operators: 1 (excludes logging)
+          ├─ logging.R ..............  File logging
+          │                            (2 functions + 1 internal helper)
+          │                            • log_message()
+          │                            • initialize_pipeline_log()
+          ├─ console.R ..............  Console formatting
+          │                            (5 functions)
+          │                            • center_text()
+          │                            • print_stage_header()
+          │                            • print_stage_banner()
+          │                            • print_workflow_summary()
+          │                            • print_pipeline_complete()
           ├─ config.R ...............  YAML parameter management
           │                            (7 functions)
           ├─ artifacts.R ............  Artifact registry & provenance
@@ -181,18 +194,18 @@ message("
                                        (3 functions: 2 public + 1 internal)
 
  Layer 2: ingestion/
-          ├─ ingestion.R ............  Raw data loading + intro-standardization
-          │                            (3 functions: 2 public + 1 internal)
-          └─ schema_detection.R .....  Row-level KPro version detection
-                                       (5 functions)
+          └─ ingestion.R ............  Raw data loading + intro-standardization
+                                       (3 functions: 2 public + 1 internal)
 
  Layer 3: standardization/
+          ├─ schema_helpers.R .......  Schema version detection
+          │                            (3 functions)
           ├─ standardization.R ......  Schema transformation + species codes
           │                            (8 functions + 1 constant)
           │                            • Constant(s): 1
           │                            • Functions: 8
-          └─ datetime_helpers.R ..  Timezone handling
-                                       (3 functions)
+          └─ datetime_helpers.R .....  Timezone handling + date/time parsing
+                                       (8 functions)
 
  Layer 4: validation/
           ├─ validation.R ...........  Assertions, validators, enforcement
@@ -243,7 +256,7 @@ message("
               └─ [run_finalize_to_report.R - PLANNED for Chunk 3]
 
 ================================================================================
- TOTAL LOADED: 104 functions + 1 constant across 19 modules
+ TOTAL LOADED: 113 functions + 1 constant across 21 modules
  VALIDATION: 2-module system (data validation + execution reporting)
  ORCHESTRATION: 1 of 3 chunks implemented
 ================================================================================

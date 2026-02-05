@@ -62,6 +62,9 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Removed duplicate CHANGELOG and orphaned text
+#             - Removed lines 89-116 (duplicate CHANGELOG section + orphaned validation text)
+#             - Single CHANGELOG now maintained per documentation standards
 # 2026-02-03: Moved validation tracking/reporting to validation_reporting.R
 #             - Removed create_validation_context() → validation_reporting.R
 #             - Removed log_validation_event() → validation_reporting.R
@@ -74,34 +77,6 @@
 #             - Added save_and_register_rds() to consolidate RDS save + registration
 #             - Atomically saves RDS file and registers with SHA256 hash
 #             - Reduces ~20 lines of boilerplate per usage (Summary Stats, Plotting stages)
-#             - Added Internal Dependencies section to DEPENDENCIES
-# 2026-02-01: Restored hash_dataframe() with enhanced documentation for 3-chunk system
-#             - Added deterministic sorting recommendations for kpro_master and CPN data
-#             - Enhanced CONTRACT and RECOMMENDED USAGE sections
-#             - Ensures reproducibility tracking for all data artifacts
-# 2026-01-30: Added filter_noid and filter_zero_pulses event tracking
-# 2026-01-30: Enhanced Summary Metrics card with collapsible breakdown
-# 2026-01-30: Added CSS styling for details/summary elements
-# 2026-01-12: Enhanced HTML reports with collapsible details and workflow-specific sections
-# 2026-01-12: Added additional summary metrics (files_loaded, schema_unknown, etc.)
-# 2026-01-12: Initial version
-# =============================================================================
-#   - rows_processed: Total rows in final output
-#   - source_breakdown: Local vs external data contribution
-#   - schema_detection: Schema version detection results
-#
-# Status:
-#   - warning: Non-fatal issues
-#   - error: Fatal issues
-#
-# CHANGELOG
-# ---------
-# 2026-02-03: Added RDS management helper for orchestrator functions
-#             - Added save_and_register_rds() to consolidate RDS save + registration
-#             - Atomically saves RDS file and registers with SHA256 hash
-#             - Reduces ~20 lines of boilerplate per usage (Summary Stats, Plotting stages)
-#             - Updated FUNCTIONS PROVIDED with new RDS Management category
-#             - Enhanced USAGE examples with orchestrator helper pattern
 #             - Added Internal Dependencies section to DEPENDENCIES
 # 2026-02-01: Restored hash_dataframe() with enhanced documentation for 3-chunk system
 #             - Added deterministic sorting recommendations for kpro_master and CPN data

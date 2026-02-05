@@ -1,8 +1,8 @@
 # ==============================================================================
 # ARCHITECTURE STANDARDS
 # ==============================================================================
-# VERSION: 2.3
-# LAST UPDATED: 2026-01-31
+# VERSION: 2.4
+# LAST UPDATED: 2026-02-05
 # PURPOSE: Project structure, file naming, paths, and workflow organization
 # ==============================================================================
 
@@ -31,9 +31,9 @@ project_root/
 │       │   ├── release.R            # Release bundle creation
 │       │   └── load_all.R
 │       ├── ingestion/
-│       │   ├── ingestion.R
-│       │   └── schema_detection.R
+│       │   └── ingestion.R
 │       ├── standardization/
+│       │   ├── schema_helpers.R       # Schema version detection
 │       │   ├── standardization.R
 │       │   └── datetime_conversion.R
 │       ├── validation/
@@ -124,7 +124,7 @@ Format: `##_verb_noun.R` (numbered, descriptive, snake_case)
 ### 2.3 Function Files
 
 ```
-schema_detection.R
+schema_helpers.R
 datetime_conversion.R
 recording_hours.R
 artifacts.R

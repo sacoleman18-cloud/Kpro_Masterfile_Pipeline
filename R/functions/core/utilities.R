@@ -61,8 +61,8 @@
 #   - dplyr: mutate, across, all_of
 #   - base R: file operations
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Directory Management:
 #   - ensure_dir_exists()
 #
@@ -107,6 +107,11 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION & BUG FIX - Standards compliance improvements
+#             - Renamed "CONTENTS" section to "FUNCTIONS PROVIDED"
+#             - Fixed load_most_recent_checkpoint() to use find_most_recent_file()
+#             - Eliminates code duplication (timestamp extraction logic)
+#             - Ensures consistent file sorting behavior across functions
 # 2026-02-04: MODULE SPLIT - Reduced file size for LLM compatibility
 #             - Moved logging functions to core/logging.R (2 functions)
 #             - Moved console formatting to core/console.R (4 functions)
@@ -541,17 +546,13 @@ load_most_recent_checkpoint <- function(pattern) {
     stop(sprintf("Checkpoint directory not found: %s\n  Run previous chunk first.", checkpoint_dir))
   }
   
-  files <- list.files(checkpoint_dir, pattern = pattern, full.names = TRUE)
-  
-  if (length(files) == 0) {
-    stop(sprintf(
-      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  Run previous chunk first.",
-      pattern, checkpoint_dir
-    ))
-  }
-  
-  # Get most recent (last in sorted list)
-  most_recent <- files[length(files)]
+  # Use find_most_recent_file() to handle timestamp sorting
+  most_recent <- find_most_recent_file(
+    directory = checkpoint_dir,
+    pattern = pattern,
+    error_if_none = TRUE,
+    hint = "Run previous chunk first."
+  )
   
   safe_read_csv(most_recent)
 }

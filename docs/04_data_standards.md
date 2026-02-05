@@ -488,7 +488,7 @@ The following event types are recognized and auto-accumulate in summaries:
 |------------|-------------|------------------|
 | `rows_processed` | Total rows in final output | count |
 | `source_breakdown` | Local vs external data contribution | - |
-| `schema_detection` | Schema version detection results | - |
+| `schema_helpers` | Schema version detection results | - |
 | `data_filters_config` | User-configured filter settings | - |
 
 **Status:**
@@ -512,7 +512,7 @@ validation_context <- log_validation_event(
 # Event with details
 validation_context <- log_validation_event(
   validation_context,
-  event_type = "schema_detection",
+  event_type = "schema_helpers",
   description = "Detected schema versions",
   details = list(
     v1_legacy = 299,

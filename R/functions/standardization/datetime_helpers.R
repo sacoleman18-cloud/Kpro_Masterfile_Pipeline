@@ -1,5 +1,5 @@
 # ==============================================================================
-# standardization/datetime_helpers.R - DATETIME UTILITIES (LOCKED CONTRACT)
+# MODULE: datetime_helpers.R - DATETIME UTILITIES (LOCKED CONTRACT)
 # ==============================================================================
 # PURPOSE
 # -------
@@ -62,8 +62,8 @@
 #   - Workflow 04 (CPN Finalization): parse_datetime_safe(), extract_time(), parse_date_safe()
 #   - Edit tracking: format_datetime_for_log()
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Timezone Conversion (for master data):
 #   - convert_datetime_to_local()      # Main UTC -> local timezone conversion
 #   - is_valid_timezone()              # Timezone validation (internal)
@@ -84,6 +84,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Standards compliance update
+#             - Fixed MODULE header format (removed path prefix)
+#             - Renamed "CONTENTS" to "FUNCTIONS PROVIDED"
+#             - Updated to match documentation standards template
 # 2026-02-04: MODULE CONSOLIDATION - Created comprehensive datetime helpers module
 #             - Moved convert_datetime_to_local() from datetime_conversion.R
 #             - Moved 5 template helper functions from callspernight.R:

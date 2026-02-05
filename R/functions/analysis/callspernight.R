@@ -1,5 +1,5 @@
 # =============================================================================
-# analysis/callspernight.R - CALLSPERNIGHT WORKFLOW (LOCKED CONTRACT)
+# MODULE: callspernight.R - CALLSPERNIGHT WORKFLOW (LOCKED CONTRACT)
 # =============================================================================
 # PURPOSE
 # -------
@@ -60,8 +60,8 @@
 #   - hms: time-only parsing
 #   - here: path management
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Recording Hours Calculation:
 #   - calculate_recording_hours()          # Recording duration calculation (vectorized)
 #
@@ -76,6 +76,26 @@
 #   - load_cpn_template()                  # Load ORIGINAL or EDIT_THIS template
 #   - extract_template_timestamp()         # Extract timestamp from filename (internal)
 #
+# USAGE
+# -----
+# source("R/functions/analysis/callspernight.R")
+#
+# # Generate template
+# template <- generate_calls_per_night_template(
+#   master_data, 
+#   start_date = "2025-10-01", 
+#   end_date = "2025-10-31"
+# )
+#
+# # Calculate recording hours
+# template$RecordingHours <- calculate_recording_hours(
+#   template$StartTime, 
+#   template$EndTime
+# )
+#
+# # Load template for finalization
+# cpn_template <- load_cpn_template(type = "EDIT_THIS")
+#
 # EXCEL FORMULA FOR RECORDINGHOURS
 # --------------------------------
 #   =(VALUE(E2)-VALUE(D2))*24
@@ -84,6 +104,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Updated header to match 02_documentation_standards.md
+#             - Changed "analysis/callspernight.R" to "MODULE: callspernight.R"
+#             - Renamed "CONTENTS" section to "FUNCTIONS PROVIDED"
+#             - Added missing "USAGE" section with examples
 # 2026-02-04: MODULE SPLIT - Moved datetime helpers to datetime_helpers.R
 #             - Moved 5 functions to standardization/datetime_helpers.R:
 #               * is.Date(), parse_datetime_safe(), extract_time()

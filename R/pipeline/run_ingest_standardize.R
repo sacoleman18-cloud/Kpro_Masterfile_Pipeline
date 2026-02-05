@@ -59,9 +59,9 @@
 # ------------
 #   Custom functions (via load_all.R):
 #     - ingestion.R: load_local_raw_data, load_external_raw_data
-#     - schema_detection.R: detect_row_schema
+#     - schema_helpers.R: detect_row_schema, get_dominant_schema, get_schema_summary
 #     - standardization.R: standardize_kpro_schema
-#     - datetime_conversion.R: convert_datetime_to_local
+#     - datetime_helpers.R: convert_datetime_to_local
 #     - validation.R: enforce_unified_schema, finalize_master_columns,
 #                     create_validation_context, log_validation_event,
 #                     finalize_validation_report, assert_file_exists,
@@ -73,6 +73,9 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Updated DEPENDENCIES reference
+#             - Changed datetime_conversion.R → datetime_helpers.R
+#             - Reflects module consolidation and renaming
 # 2026-02-01: Integrated new utility functions to eliminate code duplication
 #             - Added setup_pipeline_context() for YAML/validation setup (saves ~20 lines)
 #             - Added generate_timestamped_filename() for timestamps (saves ~10 lines)

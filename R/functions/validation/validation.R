@@ -64,8 +64,8 @@
 #
 # Internal Dependencies: None
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Universal Assertions (11 functions):
 #   - assert_data_frame(): Validate input is data frame
 #   - assert_not_empty(): Validate data frame has rows
@@ -111,6 +111,10 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Renamed "CONTENTS" to "FUNCTIONS PROVIDED"
+#             - Updated to match documentation standards template
+#             - Cleaned up orphaned changelog entries
+#             - Consolidated historical entries for clarity
 # 2026-02-03: Moved orchestrator helpers to validation_reporting.R
 #             - Removed init_stage_validation() → validation_reporting.R
 #             - Removed complete_stage_validation() → validation_reporting.R
@@ -122,11 +126,9 @@
 #             - Added init_stage_validation() to reduce initialization boilerplate
 #             - Added complete_stage_validation() to reduce finalization boilerplate
 #             - Eliminates ~16 lines per orchestrator stage
-#             - Both functions reference validation_reporting.R dependencies
 # 2026-01-15: Enhanced domain validators with better error messages
 # 2026-01-12: Added check_column_completeness() and check_duplicates()
 # 2026-01-10: Initial version with core assertions
-# =============================================================================
 # 2024-12-29: Added composite validators (validate_*)
 # 2024-12-27: Split into enforce_unified_schema and enforce_master_schema
 # 2024-12-26: Initial CODING_STANDARDS compliant version

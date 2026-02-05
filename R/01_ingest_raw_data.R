@@ -63,7 +63,7 @@
 #   Custom functions:
 #     - core/utilities.R: log_message, initialize_pipeline_log
 #     - ingestion/ingestion.R: load_local_raw_data, load_external_raw_data
-#     - core/schema_detection.R: detect_row_schema
+#     - standardization/schema_helpers.R: detect_row_schema
 #     - core/config.R: load_study_parameters, ensure_study_parameters
 #     - core/artifacts.R: init_artifact_registry, register_artifact,
 #                        create_validation_context, log_validation_event,

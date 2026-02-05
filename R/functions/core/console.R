@@ -40,13 +40,14 @@
 # External only:
 #   - base R: sprintf, strrep, message, nchar, floor, ceiling
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Text Helpers:
 #   - center_text()
 #
 # Stage Formatting:
 #   - print_stage_header()
+#   - print_stage_banner()
 #
 # Summary Formatting:
 #   - print_workflow_summary()
@@ -54,6 +55,11 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION & FEATURE - Standards compliance + print_stage_banner
+#             - Renamed "CONTENTS" section to "FUNCTIONS PROVIDED"
+#             - Added print_stage_banner() for orchestrator stage headers
+#             - Implements verbose parameter gating pattern
+#             - Completes console formatting API for run_* orchestrators
 # 2026-02-04: Initial creation - split from utilities.R
 #             - Moved center_text(), print_stage_header()
 #             - Moved print_workflow_summary(), print_pipeline_complete()
@@ -155,6 +161,77 @@ print_stage_header <- function(stage_num, title, width = 65) {
   message(sprintf("\n+%s+", strrep("-", width)))
   message(sprintf("|%s|", centered))
   message(sprintf("+%s+\n", strrep("-", width)))
+  
+  invisible(NULL)
+}
+
+
+#' Print Stage Banner (for Orchestrators)
+#'
+#' @description
+#' Prints a large, prominent banner for major pipeline stages in orchestrator
+#' functions (run_* files). Uses double-line ASCII box for visual prominence.
+#' Supports verbose parameter gating for Shiny integration.
+#'
+#' @param stage_name Character. Stage name (e.g., "INGEST & STANDARDIZE",
+#'   "FINALIZE CPN", "SUMMARY STATISTICS")
+#' @param verbose Logical. Print banner to console? Default: FALSE
+#'   When FALSE, function returns silently (for Shiny UI mode)
+#' @param width Integer. Total width of box interior. Default: 65
+#'
+#' @return Invisible NULL.
+#'
+#' @section CONTRACT:
+#' - Uses double-line ASCII box characters (+|=)
+#' - Gated by verbose parameter for Shiny compatibility
+#' - Consistent width across all orchestrators
+#' - Auto-centers stage name
+#'
+#' @section DOES NOT:
+#' - Write to log file (use log_message separately)
+#' - Validate stage name format
+#' - Display stage numbers (use print_stage_header for numbered stages)
+#'
+#' @section GATING PATTERN:
+#' Per CODING_STANDARDS, console output should be gated by verbose:
+#' ```r
+#' # In orchestrator functions:
+#' print_stage_banner("FINALIZE CPN", verbose = verbose)
+#' 
+#' # User controls verbosity:
+#' result <- run_finalize_to_report(verbose = TRUE)   # Shows banners
+#' result <- run_finalize_to_report(verbose = FALSE)  # Silent (Shiny mode)
+#' ```
+#'
+#' @examples
+#' \dontrun{
+#' # In orchestrator function
+#' print_stage_banner("INGEST & STANDARDIZE", verbose = TRUE)
+#' # Output:
+#' # +==================================================================+
+#' # ||                  INGEST & STANDARDIZE                         ||
+#' # +==================================================================+
+#'
+#' # Silent mode for Shiny
+#' print_stage_banner("FINALIZE CPN", verbose = FALSE)
+#' # No output
+#' }
+#'
+#' @export
+print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
+  
+  # Gate by verbose parameter
+  if (!verbose) {
+    return(invisible(NULL))
+  }
+  
+  # Center text
+  centered <- center_text(stage_name, width)
+  
+  # Print double-line box
+  message(sprintf("\n+%s+", strrep("=", width)))
+  message(sprintf("||%s||", centered))
+  message(sprintf("+%s+\n", strrep("=", width)))
   
   invisible(NULL)
 }

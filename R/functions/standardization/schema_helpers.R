@@ -1,11 +1,15 @@
-# ==============================================================================
-# schema_detection.R - KPRO SCHEMA VERSION DETECTION (LOCKED CONTRACT)
-# ==============================================================================
+# =============================================================================
+# MODULE: schema_helpers.R - KPRO SCHEMA VERSION DETECTION & HELPERS
+# =============================================================================
 # PURPOSE
 # -------
-# Detects Kaleidoscope Pro schema version at the ROW level. Handles files
-# containing mixed data from different KPro versions through simple, fast
-# detection logic based on column existence and species code length.
+# Detects Kaleidoscope Pro schema version at the ROW level and provides helper
+# functions for schema analysis. Handles files containing mixed data from
+# different KPro versions through simple, fast detection logic based on column
+# existence and species code length.
+#
+# This module provides schema detection utilities used during standardization
+# to properly route rows through appropriate transformation functions.
 #
 # SCHEMA DETECTION CONTRACT
 # -------------------------
@@ -35,7 +39,7 @@
 #    - Only adds schema_version column
 #    - Input data frame structure preserved
 #
-# 3. Schema summary functions
+# 5. Schema summary functions
 #    - get_dominant_schema() returns single most common version
 #    - get_schema_summary() returns data frame of counts (with optional verbose)
 #
@@ -56,20 +60,24 @@
 #   - dplyr: mutate, case_when
 #   - base R: nchar, trimws, table
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Primary function:
 #   - detect_row_schema()         # Main workhorse - adds schema_version column
 #
-# This module provides the following functions:
-# --------------------------
+# Helper functions:
+#   - get_dominant_schema()       # Returns most common schema version
+#   - get_schema_summary()        # Returns detailed schema distribution
+#
+# SCHEMA VERSIONS
+# ---------------
 #   v1_legacy_single_column   : Has 'alternates' column (semicolon-delimited)
 #   v2_transitional_4letter   : Has 'alternate_1', auto_id is 4 characters
 #   v3_modern_6letter         : Has 'alternate_1', auto_id is 6 characters
 #   unknown                   : Could not determine schema version
 #
-# USAGE EXAMPLE
-# -------------
+# USAGE
+# -----
 # # Add schema version to each row
 # df <- detect_row_schema(raw_data)
 #
@@ -81,11 +89,16 @@
 #
 # # Get dominant for logging
 # message(sprintf("Primary schema: %s", get_dominant_schema(df)))
-#   warning("Some rows have unknown schema")
-# }
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: MODULE REORGANIZATION & STANDARDS - Complete module refactor
+#             - Renamed from schema_detection.R to schema_helpers.R
+#             - Moved from ingestion/ to standardization/ folder
+#             - Schema detection is a transformation/standardization activity
+#             - Updated MODULE header format (proper dashes and prefix)
+#             - Fixed CONTENTS → FUNCTIONS PROVIDED per documentation standards
+#             - Updated USAGE examples to match actual function signatures
 # 2026-01-30: Refactored to use centralized assert_* functions from validation.R
 # 2026-01-30: Consolidated summarize_schema_distribution into get_schema_summary
 # 2026-01-26: Added verbose parameter to detect_row_schema() (default: FALSE)
@@ -93,7 +106,7 @@
 # 2026-01-26: Gated all console messages with if (verbose)
 # 2026-01-26: Fixed emoji encoding (ASCII replacements)
 #
-# ==============================================================================
+# =============================================================================
 
 # ------------------------------------------------------------------------------
 # Core Function: Detect Row Schema (UPDATED - Handles Semicolons)

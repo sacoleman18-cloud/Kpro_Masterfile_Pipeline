@@ -750,27 +750,26 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 ### 5.2 Ingestion Module (`R/functions/ingestion/`)
 
 **ingestion.R** (3 functions)
-- `load_raw_data()`: Load CSV files from directory
-- `apply_intro_standardization()`: Apply initial standardization
-- `combine_raw_files()`: Combine multiple CSVs
-
-**schema_detection.R** (5+ functions)
-- `detect_schema_version()`: Identify KPro schema version
-- `transform_schema_v1()`: Transform v1 legacy schema
-- `transform_schema_v2()`: Transform v2 transitional schema
-- `transform_schema_v3()`: Transform v3 modern schema
-- `apply_schema_transformation()`: Apply appropriate transformation
+- `apply_intro_standardization()`: Apply initial standardization (internal)
+- `load_local_raw_data()`: Load CSV files from local directory
+- `load_external_raw_data()`: Load CSV files from external sources
 
 ### 5.3 Standardization Module (`R/functions/standardization/`)
 
-**standardization.R** (7 functions)
+**schema_helpers.R** (3 functions)
+- `detect_row_schema()`: Detect KPro schema version per row
+- `get_dominant_schema()`: Get most common schema version
+- `get_schema_summary()`: Get schema distribution statistics
+
+**standardization.R** (8 functions)
 - `convert_4letter_to_6letter()`: Convert 4-letter species codes to 6-letter
 - `harmonize_column_names()`: Normalize column names (out_file -> out_file_fs)
 - `transform_v1_to_unified()`: Transform v1 legacy schema to unified
 - `transform_v2_to_unified()`: Transform v2 transitional schema to unified
-- `transform_v3_to_unified()`: Transform v3 modern schema to unified
-- `standardize_kpro_schema()`: Main orchestrator for schema transformation
-- `create_unified_species_column()`: Create unified species field (manual_id > auto_id > NoID)
+- `transform_v3_to_unified()`: Transform v3 modern schema to unified (passthrough)
+- `standardize_kpro_schema()`: Main orchestrator - splits by schema and transforms
+- `create_unified_species_column()`: Create unified species column with priority logic
+- Constants: `SPECIES_CODE_MAP_4_TO_6` (60+ species mapping)
 
 **datetime_helpers.R** (8 functions)
 - `convert_datetime_to_local()`: Convert UTC to local timezone with DST handling
@@ -905,7 +904,7 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 | Core | artifacts.R | 11 |
 | Core | release.R | 4+ |
 | Ingestion | ingestion.R | 3 |
-| Ingestion | schema_detection.R | 5+ |
+| Standardization | schema_helpers.R | 3 |
 | Standardization | standardization.R | 7 |
 | Standardization | datetime_helpers.R | 8 |
 | Validation | validation.R | 19 |

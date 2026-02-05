@@ -61,8 +61,8 @@
 #   - yaml: read_yaml, write_yaml
 #   - lubridate: ymd (for date parsing)
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Core functions:
 #   - load_study_parameters()        # Read YAML, return list or NULL
 #   - save_study_parameters()        # Write list to YAML
@@ -100,6 +100,8 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Renamed "CONTENTS" to "FUNCTIONS PROVIDED"
+#             - Updated to match documentation standards template
 # 2026-02-01: Added get_schedule_config() - moved from utilities.R
 #             - Properly belongs in config module (parses YAML, has domain knowledge)
 #             - Updated to support detector_specific_schedules (renamed from advanced_scheduling)

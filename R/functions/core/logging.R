@@ -38,8 +38,8 @@
 # External only:
 #   - base R: cat, paste0, Sys.time, file, dirname, dir.exists, dir.create
 #
-# CONTENTS
-# --------
+# FUNCTIONS PROVIDED
+# ------------------
 # Directory Helper:
 #   - ensure_log_dir_exists() (internal)
 #
@@ -49,6 +49,8 @@
 #
 # CHANGELOG
 # ---------
+# 2026-02-05: DOCUMENTATION FIX - Renamed "CONTENTS" to "FUNCTIONS PROVIDED"
+#             - Updated to match documentation standards template
 # 2026-02-04: Initial creation - split from utilities.R
 #             - Moved log_message(), initialize_pipeline_log()
 #             - Added internal ensure_log_dir_exists() helper
