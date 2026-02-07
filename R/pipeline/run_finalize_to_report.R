@@ -930,7 +930,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     ))
   })
   
-  all_summaries$hourly_summary <- hourly_summary
+  all_summaries$hourly_summary_overall <- hourly_summary
   message("  [OK] Created hourly activity summary")
   
   # ---------------------------------------------------------------------------
@@ -1017,7 +1017,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Export hourly activity summary table
   tryCatch({
-    hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary)
+    hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary_overall)
     save_gt_table(hourly_gt, "hourly_activity_summary", 
                   output_dir = table_output_dir, format = "png")
     tables_exported <- tables_exported + 1
