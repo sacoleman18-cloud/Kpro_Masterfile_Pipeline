@@ -1073,17 +1073,6 @@ run_finalize_to_report <- function(kpro_master = NULL,
         openxlsx::writeData(wb, "Hourly Profile", all_summaries$hourly_summary_overall)
       }
       
-      # Add variance components sheet (if available)
-      if (!is.null(all_summaries$variance_components)) {
-        openxlsx::addWorksheet(wb, "Variance Components")
-        # Convert list to data frame for Excel export
-        vc_df <- data.frame(
-          Component = names(all_summaries$variance_components),
-          Value = as.character(all_summaries$variance_components)
-        )
-        openxlsx::writeData(wb, "Variance Components", vc_df)
-      }
-      
       openxlsx::saveWorkbook(wb, xlsx_file, overwrite = TRUE)
       message(sprintf("  [OK] Exported Excel workbook: %s", basename(xlsx_file)))
       
