@@ -851,8 +851,8 @@ plot_recording_effort_heatmap <- function(calls_per_night) {
   # Build heatmap
   ggplot(complete_grid, aes(x = Night, y = Detector, fill = RecordingHours)) +
     geom_tile(color = "white", linewidth = 0.2) +
-    scale_fill_viridis_c(
-      option = "viridis",
+    scale_fill_gradientn(
+      colours = c("#d73027", "#fee08b", "#1a9850"),
       na.value = "gray80",
       name = "Hours"
     ) +
