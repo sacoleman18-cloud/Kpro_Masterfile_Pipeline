@@ -37,16 +37,15 @@
 #   Stage 10: Generate species composition
 #   Stage 11: Calculate species accumulation
 #   Stage 12: Generate hourly activity profiles
-#   Stage 13: Format GT tables and export
-#   Stage 14: Save summary RDS
+#   Stage 13: Save summary RDS
+#   Stage 14: Export GT tables as PNG
+#   Stage 15: Export Excel workbook (optional)
 #
 #   [PLOTTING]
-#   Stage 15: Configure plot settings
-#   Stage 16: Generate quality plots (8)
-#   Stage 17: Generate detector plots (7)
-#   Stage 18: Generate species plots (5)
-#   Stage 19: Generate temporal plots (6)
-#   Stage 20: Export plots (PNG/SVG)
+#   Stage 16: Quality plots (8)
+#   Stage 17: Detector plots (7)
+#   Stage 18: Species plots (5)
+#   Stage 19: Temporal plots (6)
 #   Stage 21: Save plot objects RDS
 #
 #   [REPORT & RELEASE]
@@ -930,7 +929,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
     ))
   })
   
-  all_summaries$hourly_summary <- hourly_summary
+  all_summaries$hourly_summary_overall <- hourly_summary
   message("  [OK] Created hourly activity summary")
   
   # ---------------------------------------------------------------------------
@@ -1017,7 +1016,7 @@ run_finalize_to_report <- function(kpro_master = NULL,
   
   # Export hourly activity summary table
   tryCatch({
-    hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary)
+    hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary_overall)
     save_gt_table(hourly_gt, "hourly_activity_summary", 
                   output_dir = table_output_dir, format = "png")
     tables_exported <- tables_exported + 1
@@ -1027,6 +1026,77 @@ run_finalize_to_report <- function(kpro_master = NULL,
   })
   
   if (verbose) message(sprintf("  [OK] Exported %d summary tables", tables_exported))
+  
+  # ---------------------------------------------------------------------------
+  # Stage 15: Export Summary Statistics Excel Workbook (Optional)
+  # ---------------------------------------------------------------------------
+  # Export all summaries to a multi-sheet Excel workbook for external analysis.
+  # This is optional and only runs if openxlsx is installed.
+  
+  log_stage_start("15", "Export Excel Workbook (Optional)", verbose = verbose, workflow_prefix = "Summary Stats")
+  
+  has_openxlsx <- requireNamespace("openxlsx", quietly = TRUE)
+  
+  if (has_openxlsx) {
+    xlsx_file <- here::here("results", "tables", sprintf("summary_statistics_%s.xlsx", timestamp_05))
+    
+    tryCatch({
+      wb <- openxlsx::createWorkbook()
+      
+      # Add detector summary sheet
+      if (!is.null(all_summaries$detector_summary)) {
+        openxlsx::addWorksheet(wb, "Detector Summary")
+        openxlsx::writeData(wb, "Detector Summary", all_summaries$detector_summary)
+      }
+      
+      # Add study summary sheet
+      if (!is.null(all_summaries$study_summary)) {
+        openxlsx::addWorksheet(wb, "Study Summary")
+        openxlsx::writeData(wb, "Study Summary", as.data.frame(all_summaries$study_summary))
+      }
+      
+      # Add species summary sheet
+      if (!is.null(all_summaries$species_summary)) {
+        openxlsx::addWorksheet(wb, "Species by Detector")
+        openxlsx::writeData(wb, "Species by Detector", all_summaries$species_summary)
+      }
+      
+      # Add species accumulation sheet
+      if (!is.null(all_summaries$species_accumulation)) {
+        openxlsx::addWorksheet(wb, "Species Accumulation")
+        openxlsx::writeData(wb, "Species Accumulation", all_summaries$species_accumulation)
+      }
+      
+      # Add hourly profile sheet
+      if (!is.null(all_summaries$hourly_summary_overall)) {
+        openxlsx::addWorksheet(wb, "Hourly Profile")
+        openxlsx::writeData(wb, "Hourly Profile", all_summaries$hourly_summary_overall)
+      }
+      
+      openxlsx::saveWorkbook(wb, xlsx_file, overwrite = TRUE)
+      message(sprintf("  [OK] Exported Excel workbook: %s", basename(xlsx_file)))
+      
+      # Register Excel file with artifact system
+      registry <- register_artifact(
+        registry = registry,
+        artifact_type = "summary_stats_excel",
+        file_path = xlsx_file,
+        workflow = "summary_stats",
+        metadata = list(
+          n_sheets = length(wb$sheet_names),
+          summaries_included = names(all_summaries)[!names(all_summaries) %in% c("metadata")]
+        ),
+        verbose = verbose
+      )
+      
+    }, error = function(e) {
+      warning(sprintf("Failed to export Excel workbook: %s", e$message))
+      message("  [SKIP] Excel export failed - continuing with pipeline")
+    })
+  } else {
+    message("  [SKIP] openxlsx not installed - Excel export skipped")
+    message("         Install with: install.packages('openxlsx')")
+  }
   
   # Finalize validation
   validation_html_summary_stats <- finalize_stage_validation_report(
