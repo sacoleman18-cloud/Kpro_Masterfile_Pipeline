@@ -933,471 +933,172 @@ run_finalize_to_report <- function(kpro_master = NULL,
   message("  [OK] Created hourly activity summary")
   
   # ---------------------------------------------------------------------------
-  # Stage 13: Export Individual CSV Files (CSV-First Architecture)
+  # Stage 13: Save Summary RDS
   # ---------------------------------------------------------------------------
-  # NEW: Export each summary statistic as an individual CSV file.
-  # These CSVs are then used to build the Excel workbook, ensuring consistency.
-  # Each CSV is registered as a separate artifact with SHA256 hash.
+  # Saves all computed summaries to RDS file for later use in reports.
   
-  log_stage_start("13", "Export Individual CSV Files", verbose = verbose, workflow_prefix = "Summary Stats")
-  
-  # Load configuration for artifact outputs
-  artifact_config <- study_params$artifact_outputs
-  
-  # If no artifact config, use defaults (all enabled)
-  if (is.null(artifact_config)) {
-    if (verbose) message("  [i] No artifact_outputs configuration found - using defaults (all enabled)")
-    artifact_config <- list(
-      csv_detector_summary = TRUE,
-      csv_study_summary = TRUE,
-      csv_species_summary = TRUE,
-      csv_species_accumulation = TRUE,
-      csv_hourly_summary_overall = TRUE,
-      csv_variance_components = TRUE,
-      summary_stats_excel = TRUE,
-      png_detector_summary = TRUE,
-      png_study_summary = TRUE,
-      png_species_summary = TRUE,
-      png_hourly_summary_overall = TRUE,
-      html_detector_summary = TRUE,
-      html_study_summary = TRUE,
-      html_species_summary = TRUE,
-      html_hourly_summary_overall = TRUE,
-      rds_summary_data = TRUE
-    )
-  }
-  
-  # Helper function to check if artifact should be generated
-  should_export <- function(config_key) {
-    result <- isTRUE(artifact_config[[config_key]]) || 
-              (is.character(artifact_config[[config_key]]) && 
-               tolower(artifact_config[[config_key]]) == "yes")
-    return(result)
-  }
-  
-  # Create CSV output directory
-  csv_output_dir <- here::here("results", "csv", "summary_stats")
-  assert_directory_exists(csv_output_dir, create = TRUE)
+  log_stage_start("13", "Save Summary RDS", verbose = verbose, workflow_prefix = "Summary Stats")
   
   timestamp_05 <- format(Sys.time(), "%Y%m%d")
-  csv_files <- c()  # Track CSV files for Excel compilation
-  csv_exports <- 0
+  summary_rds_path <- here::here("results", "rds", sprintf("summary_data_%s.rds", timestamp_05))
   
-  # 1. Detector Summary CSV
-  if (should_export("csv_detector_summary")) {
-    csv_file <- sprintf("detector_summary_%s.csv", timestamp_05)
-    registry <- save_summary_csv(
-      all_summaries$detector_summary,
-      csv_file,
-      output_dir = csv_output_dir,
-      registry = registry,
-      artifact_name = sprintf("csv_detector_summary_%s", timestamp_05),
-      metadata = list(n_detectors = nrow(all_summaries$detector_summary)),
-      verbose = verbose
-    )
-    csv_path <- attr(registry, "file_path")
-    csv_files["Detector Summary"] <- csv_path
-    csv_exports <- csv_exports + 1
-  } else {
-    if (verbose) message("  [SKIP] Detector summary CSV (disabled in config)")
-  }
+  # Origin: 05_summary_stats.R, Standards: 07_artifact_release_standards.md
+  # Add metadata element required by validate_rds_structure()
+  all_summaries$metadata <- list(
+    generated = Sys.time(),
+    study_name = study_params$study_parameters$study_name %||% "Unknown",
+    n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
+    n_nights = dplyr::n_distinct(calls_per_night_final$Night),
+    has_species = TRUE,  # Guaranteed by schema validation in Stage 2
+    has_temporal = TRUE  # Guaranteed by schema validation in Stage 2
+  )
   
-  # 2. Study Summary CSV
-  if (should_export("csv_study_summary")) {
-    study_summary_df <- as.data.frame(t(as.matrix(all_summaries$study_summary)))
-    csv_file <- sprintf("study_summary_%s.csv", timestamp_05)
-    registry <- save_summary_csv(
-      study_summary_df,
-      csv_file,
-      output_dir = csv_output_dir,
-      registry = registry,
-      artifact_name = sprintf("csv_study_summary_%s", timestamp_05),
-      metadata = list(
-        n_detectors = all_summaries$study_summary$n_detectors,
-        total_calls = all_summaries$study_summary$total_calls
-      ),
-      verbose = verbose
-    )
-    csv_path <- attr(registry, "file_path")
-    csv_files["Study Summary"] <- csv_path
-    csv_exports <- csv_exports + 1
-  } else {
-    if (verbose) message("  [SKIP] Study summary CSV (disabled in config)")
-  }
-  
-  # 3. Species Summary CSV
-  if (!is.null(all_summaries$species_summary) && should_export("csv_species_summary")) {
-    csv_file <- sprintf("species_summary_%s.csv", timestamp_05)
-    registry <- save_summary_csv(
-      all_summaries$species_summary,
-      csv_file,
-      output_dir = csv_output_dir,
-      registry = registry,
-      artifact_name = sprintf("csv_species_summary_%s", timestamp_05),
-      metadata = list(
-        n_species = length(unique(all_summaries$species_summary$species)),
-        n_detectors = length(unique(all_summaries$species_summary$Detector))
-      ),
-      verbose = verbose
-    )
-    csv_path <- attr(registry, "file_path")
-    csv_files["Species by Detector"] <- csv_path
-    csv_exports <- csv_exports + 1
-  } else if (is.null(all_summaries$species_summary)) {
-    if (verbose) message("  [SKIP] Species summary CSV (data not available)")
-  } else {
-    if (verbose) message("  [SKIP] Species summary CSV (disabled in config)")
-  }
-  
-  # 4. Species Accumulation CSV (PARITY WITH OTHER SUMMARIES)
-  if (!is.null(all_summaries$species_accumulation) && should_export("csv_species_accumulation")) {
-    csv_file <- sprintf("species_accumulation_%s.csv", timestamp_05)
-    registry <- save_summary_csv(
-      all_summaries$species_accumulation,
-      csv_file,
-      output_dir = csv_output_dir,
-      registry = registry,
-      artifact_name = sprintf("csv_species_accumulation_%s", timestamp_05),
-      metadata = list(
-        final_richness = max(all_summaries$species_accumulation$cumulative_species, na.rm = TRUE),
-        n_nights = nrow(all_summaries$species_accumulation)
-      ),
-      verbose = verbose
-    )
-    csv_path <- attr(registry, "file_path")
-    csv_files["Species Accumulation"] <- csv_path
-    csv_exports <- csv_exports + 1
-    
-    # Log validation event for species accumulation export
-    validation_context_summary_stats <- log_validation_event(
-      validation_context_summary_stats,
-      event_type = "files_exported",
-      description = "Exported species accumulation CSV",
-      details = list(
-        export_format = "csv",
-        file = basename(csv_path),
-        final_richness = max(all_summaries$species_accumulation$cumulative_species, na.rm = TRUE)
-      )
-    )
-  } else if (is.null(all_summaries$species_accumulation)) {
-    if (verbose) message("  [SKIP] Species accumulation CSV (data not available)")
-  } else {
-    if (verbose) message("  [SKIP] Species accumulation CSV (disabled in config)")
-  }
-  
-  # 5. Hourly Summary CSV
-  if (!is.null(all_summaries$hourly_summary_overall) && should_export("csv_hourly_summary_overall")) {
-    csv_file <- sprintf("hourly_summary_overall_%s.csv", timestamp_05)
-    registry <- save_summary_csv(
-      all_summaries$hourly_summary_overall,
-      csv_file,
-      output_dir = csv_output_dir,
-      registry = registry,
-      artifact_name = sprintf("csv_hourly_summary_%s", timestamp_05),
-      metadata = list(n_hours = nrow(all_summaries$hourly_summary_overall)),
-      verbose = verbose
-    )
-    csv_path <- attr(registry, "file_path")
-    csv_files["Hourly Profile"] <- csv_path
-    csv_exports <- csv_exports + 1
-  } else if (is.null(all_summaries$hourly_summary_overall)) {
-    if (verbose) message("  [SKIP] Hourly summary CSV (data not available)")
-  } else {
-    if (verbose) message("  [SKIP] Hourly summary CSV (disabled in config)")
-  }
-  
-  # 6. Variance Components CSV
-  if (!is.null(all_summaries$variance_components) && should_export("csv_variance_components")) {
-    variance_df <- data.frame(
-      component = names(all_summaries$variance_components),
-      value = unlist(all_summaries$variance_components),
-      row.names = NULL
-    )
-    csv_file <- sprintf("variance_components_%s.csv", timestamp_05)
-    registry <- save_summary_csv(
-      variance_df,
-      csv_file,
-      output_dir = csv_output_dir,
-      registry = registry,
-      artifact_name = sprintf("csv_variance_components_%s", timestamp_05),
-      metadata = list(n_components = length(all_summaries$variance_components)),
-      verbose = verbose
-    )
-    csv_exports <- csv_exports + 1
-    # Don't add to excel sheets (optional component)
-  } else if (is.null(all_summaries$variance_components)) {
-    if (verbose) message("  [SKIP] Variance components CSV (data not available)")
-  } else {
-    if (verbose) message("  [SKIP] Variance components CSV (disabled in config)")
-  }
-  
-  if (verbose) message(sprintf("  [OK] Exported %d CSV files", csv_exports))
+  registry <- save_and_register_rds(
+    object = all_summaries,
+    file_path = summary_rds_path,
+    artifact_type = "summary_stats",
+    workflow = "summary_stats",
+    registry = registry,
+    metadata = list(
+      n_summaries = length(all_summaries),
+      has_species = TRUE,  # Guaranteed by schema validation in Stage 2
+      has_temporal = TRUE  # Guaranteed by schema validation in Stage 2
+    ),
+    verbose = verbose
+  )
   
   # ---------------------------------------------------------------------------
-  # Stage 14: Build Excel Workbook from CSV Artifacts
-  # ---------------------------------------------------------------------------
-  # Build Excel workbook FROM the individual CSV files (not from memory).
-  # This ensures consistency between CSV and Excel formats.
-  
-  log_stage_start("14", "Build Excel Workbook from CSV Artifacts", verbose = verbose, workflow_prefix = "Summary Stats")
-  
-  has_openxlsx <- requireNamespace("openxlsx", quietly = TRUE)
-  
-  if (has_openxlsx && should_export("summary_stats_excel") && length(csv_files) > 0) {
-    xlsx_file <- here::here("results", "xlsx", sprintf("summary_stats_%s.xlsx", timestamp_05))
-    
-    # Ensure xlsx directory exists
-    xlsx_dir <- dirname(xlsx_file)
-    assert_directory_exists(xlsx_dir, create = TRUE)
-    
-    registry <- build_excel_from_csv(
-      csv_files,
-      output_file = xlsx_file,
-      registry = registry,
-      artifact_name = sprintf("summary_stats_xlsx_%s", timestamp_05),
-      workflow = "summary_stats",
-      metadata = list(
-        n_sheets = length(csv_files),
-        generated_from = "csv_artifacts"
-      ),
-      verbose = verbose
-    )
-    
-    # Log Excel compilation
-    validation_context_summary_stats <- log_validation_event(
-      validation_context_summary_stats,
-      event_type = "files_exported",
-      description = sprintf("Compiled Excel workbook from %d CSV files", length(csv_files)),
-      details = list(
-        export_format = "xlsx",
-        n_sheets = length(csv_files),
-        source_csvs = unname(csv_files)
-      )
-    )
-  } else if (!has_openxlsx) {
-    if (verbose) message("  [SKIP] openxlsx not installed - Excel export skipped")
-  } else if (!should_export("summary_stats_excel")) {
-    if (verbose) message("  [SKIP] Excel workbook (disabled in config)")
-  } else {
-    if (verbose) message("  [SKIP] Excel workbook (no CSV files to compile)")
-  }
-  
-  # ---------------------------------------------------------------------------
-  # Stage 15: Export Summary Tables (PNG/HTML)
+  # Stage 14: Export Summary Tables
   # ---------------------------------------------------------------------------
   # Export formatted summary tables as PNG/HTML for inclusion in reports.
   # Tables are generated from the summaries created in Stages 7-12.
   
-  log_stage_start("15", "Export Summary Tables (PNG/HTML)", verbose = verbose, workflow_prefix = "Summary Stats")
+  log_stage_start("14", "Export Summary Tables", verbose = verbose, workflow_prefix = "Summary Stats")
   
   tables_exported <- 0
-  png_exports <- 0
-  html_exports <- 0
-  table_output_dir <- here::here("results", "figures")
+  table_output_dir <- here::here("results", "figures", "tables")
   assert_directory_exists(table_output_dir, create = TRUE)
   
-  # Check for webshot2 availability for PNG exports
-  has_webshot2 <- requireNamespace("webshot2", quietly = TRUE)
-  
   # Export detector activity summary table
-  if (!is.null(all_summaries$detector_summary)) {
-    
-    # PNG export
-    if (has_webshot2 && should_export("png_detector_summary")) {
-      tryCatch({
-        detector_gt <- format_detector_summary_gt(all_summaries$detector_summary)
-        save_gt_table(detector_gt, sprintf("detector_summary_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "png")
-        png_exports <- png_exports + 1
-      }, error = function(e) {
-        warning(sprintf("Failed to export detector activity PNG: %s", e$message))
-      })
-    }
-    
-    # HTML export
-    if (should_export("html_detector_summary")) {
-      tryCatch({
-        detector_gt <- format_detector_summary_gt(all_summaries$detector_summary)
-        save_gt_table(detector_gt, sprintf("detector_summary_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "html")
-        html_exports <- html_exports + 1
-      }, error = function(e) {
-        warning(sprintf("Failed to export detector activity HTML: %s", e$message))
-      })
-    }
+  if (!is.null(all_summaries$detector_activity)) {
+    tryCatch({
+      detector_gt <- format_detector_summary_gt(all_summaries$detector_activity)
+      save_gt_table(detector_gt, "detector_activity_summary", 
+                    output_dir = table_output_dir, format = "png")
+      tables_exported <- tables_exported + 1
+    }, error = function(e) {
+      warning(sprintf("Failed to export detector activity table: %s", e$message))
+    })
   }
   
   # Export study-wide summary table
   if (!is.null(all_summaries$study_summary)) {
-    
-    # PNG export
-    if (has_webshot2 && should_export("png_study_summary")) {
-      tryCatch({
-        study_gt <- format_study_summary_gt(all_summaries$study_summary)
-        save_gt_table(study_gt, sprintf("study_summary_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "png")
-        png_exports <- png_exports + 1
-      }, error = function(e) {
-        warning(sprintf("Failed to export study summary PNG: %s", e$message))
-      })
-    }
-    
-    # HTML export
-    if (should_export("html_study_summary")) {
-      tryCatch({
-        study_gt <- format_study_summary_gt(all_summaries$study_summary)
-        save_gt_table(study_gt, sprintf("study_summary_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "html")
-        html_exports <- html_exports + 1
-      }, error = function(e) {
-        warning(sprintf("Failed to export study summary HTML: %s", e$message))
-      })
-    }
+    tryCatch({
+      study_gt <- format_study_summary_gt(all_summaries$study_summary)
+      save_gt_table(study_gt, "study_summary", 
+                    output_dir = table_output_dir, format = "png")
+      tables_exported <- tables_exported + 1
+    }, error = function(e) {
+      warning(sprintf("Failed to export study summary table: %s", e$message))
+    })
   }
   
   # Export species summary table
-  if (!is.null(all_summaries$species_summary)) {
-    
-    # PNG export
-    if (has_webshot2 && should_export("png_species_summary")) {
-      tryCatch({
-        species_gt <- format_species_summary_gt(all_summaries$species_summary)
-        save_gt_table(species_gt, sprintf("species_summary_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "png")
-        png_exports <- png_exports + 1
-        if (verbose) message("  [OK] Exported species summary PNG")
-      }, error = function(e) {
-        warning(sprintf("Failed to export species summary PNG: %s", e$message))
-      })
-    }
-    
-    # HTML export
-    if (should_export("html_species_summary")) {
-      tryCatch({
-        species_gt <- format_species_summary_gt(all_summaries$species_summary)
-        save_gt_table(species_gt, sprintf("species_summary_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "html")
-        html_exports <- html_exports + 1
-      }, error = function(e) {
-        warning(sprintf("Failed to export species summary HTML: %s", e$message))
-      })
-    }
-  }
+  tryCatch({
+    species_gt <- format_species_summary_gt(all_summaries$species_summary)
+    save_gt_table(species_gt, "species_summary", 
+                  output_dir = table_output_dir, format = "png")
+    tables_exported <- tables_exported + 1
+    message("  [OK] Exported species summary table")
+  }, error = function(e) {
+    stop(sprintf("Failed to export species summary table: %s", e$message))
+  })
   
   # Export hourly activity summary table
-  if (!is.null(all_summaries$hourly_summary_overall)) {
-    
-    # PNG export
-    if (has_webshot2 && should_export("png_hourly_summary_overall")) {
-      tryCatch({
-        hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary_overall)
-        save_gt_table(hourly_gt, sprintf("hourly_summary_overall_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "png")
-        png_exports <- png_exports + 1
-        if (verbose) message("  [OK] Exported hourly activity summary PNG")
-      }, error = function(e) {
-        warning(sprintf("Failed to export hourly activity PNG: %s", e$message))
-      })
-    }
-    
-    # HTML export
-    if (should_export("html_hourly_summary_overall")) {
-      tryCatch({
-        hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary_overall)
-        save_gt_table(hourly_gt, sprintf("hourly_summary_overall_%s", timestamp_05), 
-                      output_dir = table_output_dir, format = "html")
-        html_exports <- html_exports + 1
-      }, error = function(e) {
-        warning(sprintf("Failed to export hourly activity HTML: %s", e$message))
-      })
-    }
-  }
+  tryCatch({
+    hourly_gt <- format_hourly_summary_gt(all_summaries$hourly_summary_overall)
+    save_gt_table(hourly_gt, "hourly_activity_summary", 
+                  output_dir = table_output_dir, format = "png")
+    tables_exported <- tables_exported + 1
+    message("  [OK] Exported hourly activity summary table")
+  }, error = function(e) {
+    stop(sprintf("Failed to export hourly activity table: %s", e$message))
+  })
   
-  tables_exported <- png_exports + html_exports
-  
-  if (verbose) {
-    message(sprintf("  [OK] Exported %d PNG tables", png_exports))
-    message(sprintf("  [OK] Exported %d HTML tables", html_exports))
-  }
-  
-  # Log PNG exports
-  if (png_exports > 0) {
-    validation_context_summary_stats <- log_validation_event(
-      validation_context_summary_stats,
-      event_type = "files_exported",
-      description = sprintf("Exported %d PNG files", png_exports),
-      count = png_exports,
-      details = list(export_format = "png")
-    )
-  }
-  
-  # Log HTML exports
-  if (html_exports > 0) {
-    validation_context_summary_stats <- log_validation_event(
-      validation_context_summary_stats,
-      event_type = "files_exported",
-      description = sprintf("Exported %d HTML files", html_exports),
-      count = html_exports,
-      details = list(export_format = "html")
-    )
-  }
+  if (verbose) message(sprintf("  [OK] Exported %d summary tables", tables_exported))
   
   # ---------------------------------------------------------------------------
-  # Stage 16: Save Summary RDS Archive
+  # Stage 15: Export Summary Statistics Excel Workbook (Optional)
   # ---------------------------------------------------------------------------
-  # Saves all computed summaries to RDS file for later use in reports.
+  # Export all summaries to a multi-sheet Excel workbook for external analysis.
+  # This is optional and only runs if openxlsx is installed.
   
-  log_stage_start("16", "Save Summary RDS Archive", verbose = verbose, workflow_prefix = "Summary Stats")
+  log_stage_start("15", "Export Excel Workbook (Optional)", verbose = verbose, workflow_prefix = "Summary Stats")
   
-  if (should_export("rds_summary_data")) {
-    summary_rds_path <- here::here("results", "rds", sprintf("summary_data_%s.rds", timestamp_05))
+  has_openxlsx <- requireNamespace("openxlsx", quietly = TRUE)
+  
+  if (has_openxlsx) {
+    xlsx_file <- here::here("results", "tables", sprintf("summary_statistics_%s.xlsx", timestamp_05))
     
-    # Origin: 05_summary_stats.R, Standards: 07_artifact_release_standards.md
-    # Add metadata element required by validate_rds_structure()
-    all_summaries$metadata <- list(
-      generated = Sys.time(),
-      study_name = study_params$study_parameters$study_name %||% "Unknown",
-      n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
-      n_nights = dplyr::n_distinct(calls_per_night_final$Night),
-      has_species = TRUE,  # Guaranteed by schema validation in Stage 2
-      has_temporal = TRUE  # Guaranteed by schema validation in Stage 2
-    )
-    
-    registry <- save_and_register_rds(
-      object = all_summaries,
-      file_path = summary_rds_path,
-      artifact_type = "summary_stats",
-      workflow = "summary_stats",
-      registry = registry,
-      metadata = list(
-        n_summaries = length(all_summaries),
-        has_species = TRUE,  # Guaranteed by schema validation in Stage 2
-        has_temporal = TRUE,  # Guaranteed by schema validation in Stage 2
-        csv_artifacts_count = length(csv_files)
-      ),
-      verbose = verbose
-    )
-    
-    # Log RDS export
-    validation_context_summary_stats <- log_validation_event(
-      validation_context_summary_stats,
-      event_type = "files_exported",
-      description = "Exported RDS file with all summaries",
-      details = list(
-        export_format = "rds",
-        file = basename(summary_rds_path),
-        summaries_included = names(all_summaries)
+    tryCatch({
+      wb <- openxlsx::createWorkbook()
+      
+      # Add detector summary sheet
+      if (!is.null(all_summaries$detector_summary)) {
+        openxlsx::addWorksheet(wb, "Detector Summary")
+        openxlsx::writeData(wb, "Detector Summary", all_summaries$detector_summary)
+      }
+      
+      # Add study summary sheet
+      if (!is.null(all_summaries$study_summary)) {
+        openxlsx::addWorksheet(wb, "Study Summary")
+        openxlsx::writeData(wb, "Study Summary", as.data.frame(all_summaries$study_summary))
+      }
+      
+      # Add species summary sheet
+      if (!is.null(all_summaries$species_summary)) {
+        openxlsx::addWorksheet(wb, "Species by Detector")
+        openxlsx::writeData(wb, "Species by Detector", all_summaries$species_summary)
+      }
+      
+      # Add species accumulation sheet
+      if (!is.null(all_summaries$species_accumulation)) {
+        openxlsx::addWorksheet(wb, "Species Accumulation")
+        openxlsx::writeData(wb, "Species Accumulation", all_summaries$species_accumulation)
+      }
+      
+      # Add hourly profile sheet
+      if (!is.null(all_summaries$hourly_summary_overall)) {
+        openxlsx::addWorksheet(wb, "Hourly Profile")
+        openxlsx::writeData(wb, "Hourly Profile", all_summaries$hourly_summary_overall)
+      }
+      
+      openxlsx::saveWorkbook(wb, xlsx_file, overwrite = TRUE)
+      message(sprintf("  [OK] Exported Excel workbook: %s", basename(xlsx_file)))
+      
+      # Register Excel file with artifact system
+      registry <- register_artifact(
+        registry = registry,
+        artifact_type = "summary_stats_excel",
+        file_path = xlsx_file,
+        workflow = "summary_stats",
+        metadata = list(
+          n_sheets = length(wb$sheet_names),
+          summaries_included = names(all_summaries)[!names(all_summaries) %in% c("metadata")]
+        ),
+        verbose = verbose
       )
-    )
+      
+    }, error = function(e) {
+      warning(sprintf("Failed to export Excel workbook: %s", e$message))
+      message("  [SKIP] Excel export failed - continuing with pipeline")
+    })
   } else {
-    if (verbose) message("  [SKIP] RDS archive (disabled in config)")
-    summary_rds_path <- NULL
+    message("  [SKIP] openxlsx not installed - Excel export skipped")
+    message("         Install with: install.packages('openxlsx')")
   }
   
-  if (verbose) message("  [OK] All CSV artifacts registered individually with SHA256 hashes")
-  
-  # ---------------------------------------------------------------------------
-  # Stage 17: Finalize Summary Statistics Validation
+  # Finalize validation
   validation_html_summary_stats <- finalize_stage_validation_report(
     validation_context = validation_context_summary_stats,
     stage_name = "SUMMARY STATISTICS",
