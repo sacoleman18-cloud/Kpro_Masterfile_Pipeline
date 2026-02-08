@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: release.R -- Study Release Bundle Generator
+# UTILITY: release.R - Study Release Bundle Generator
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Generates portable release bundles for downstream projects
+# - Used by modules in R/modules/
 # PURPOSE
 # -------
 # Creates portable, self-contained release bundles (zip files) that can be

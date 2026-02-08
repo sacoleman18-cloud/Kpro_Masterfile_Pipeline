@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: report.R — Quarto Report Generation
+# UTILITY: report.R - Quarto Report Generation
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Renders Quarto markdown reports with parameterized data
+# - Used by modules in R/modules/
 # PURPOSE
 # -------
 # Provides a single function to generate the final Quarto report from

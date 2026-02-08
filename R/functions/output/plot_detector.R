@@ -1,6 +1,8 @@
 # =============================================================================
-# output/plot_detector.R — DETECTOR ACTIVITY VISUALIZATIONS
+# UTILITY: plot_detector.R - Detector Activity Visualizations
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Provides visualization functions focused on detector-level bat activity

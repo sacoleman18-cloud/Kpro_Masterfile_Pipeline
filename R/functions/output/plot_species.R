@@ -1,6 +1,8 @@
 # =============================================================================
-# output/plot_species.R — SPECIES COMPOSITION VISUALIZATIONS
+# UTILITY: plot_species.R - Species Composition Visualizations
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Provides visualization functions focused on species-level bat activity

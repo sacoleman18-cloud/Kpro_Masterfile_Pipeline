@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: summarization.R - SUMMARY STATISTICS (DETERMINISTIC)
+# UTILITY: summarization.R - Summary Statistics Generators (DETERMINISTIC)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Provides statistical summary calculation functions
+# - Used by modules in R/modules/
 # PURPOSE
 # -------
 # Generates comprehensive summary statistics and tables for exploratory

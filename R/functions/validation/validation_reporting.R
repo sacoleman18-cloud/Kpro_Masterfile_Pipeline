@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: validation_reporting.R - Execution Tracking & Validation Reporting
+# UTILITY: validation_reporting.R - Validation Event Tracking & Reporting
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Tracks validation events and generates HTML reports
+# - Used by all modules and workflows
 # PURPOSE
 # -------
 # Tracks execution events during pipeline runs and generates comprehensive

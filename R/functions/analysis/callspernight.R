@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: callspernight.R - CALLSPERNIGHT WORKFLOW (LOCKED CONTRACT)
+# UTILITY: callspernight.R - CallsPerNight Template Management (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Provides template loading, recording hour calculations, edit tracking
+# - Used by modules in R/modules/
 # PURPOSE
 # -------
 # Generates CallsPerNight templates, handles user edits, calculates recording
@@ -983,6 +987,320 @@ extract_template_timestamp <- function(filename) {
   }
   
   match
+}
+
+
+#' Load and Normalize CPN Template
+#'
+#' @description
+#' Loads a CallsPerNight template (ORIGINAL or EDIT_THIS) and normalizes column
+#' types for consistent processing. Handles both ISO 8601 dates (ORIGINAL) and
+#' Excel-reformatted dates (EDIT_THIS) with flexible parsing.
+#'
+#' **DRY Helper Function** — Extracted during Phase 1 refactoring to eliminate
+#' duplication in finalize_cpn module (Stage 2).
+#'
+#' @param template_type Character. "ORIGINAL" or "EDIT_THIS".
+#' @param output_dir Character. Directory to search for template if file_path is NULL.
+#' @param file_path Character. Explicit path to template file (optional).
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return Tibble with normalized columns and `source_file` attribute:
+#'   - Night: Date
+#'   - Detector: Character
+#'   - CallsPerNight: Numeric
+#'   - RecordingHours: Numeric (0 replaces NA/negative)
+#'   - StartDateTime: Character (if present)
+#'   - EndDateTime: Character (if present)
+#'
+#' @section CONTRACT:
+#' - ORIGINAL templates: Expects ISO 8601 dates ("YYYY-MM-DD")
+#' - EDIT_THIS templates: Flexibly parses Excel-reformatted dates (YMD or MDY)
+#' - Normalizes datetime columns to character strings
+#' - Preserves source_file attribute for tracking
+#' - Handles templates with or without StartDateTime/EndDateTime columns
+#'
+#' @section DOES NOT:
+#' - Validate data quality (use validation/ functions)
+#' - Track edits between templates (use track_template_edits())
+#' - Calculate recording hours (use calculate_recording_hours())
+#'
+#' @examples
+#' \dontrun{
+#' # Load ORIGINAL template
+#' template_orig <- load_and_normalize_template(
+#'   template_type = "ORIGINAL",
+#'   output_dir = here::here("outputs"),
+#'   verbose = TRUE
+#' )
+#'
+#' # Load EDIT_THIS template with explicit path
+#' template_edit <- load_and_normalize_template(
+#'   template_type = "EDIT_THIS",
+#'   file_path = "outputs/03_CallsPerNight_Template_EDIT_THIS_20260201_143022.csv",
+#'   verbose = TRUE
+#' )
+#'
+#' # Check source file
+#' attr(template_edit, "source_file")
+#' }
+#'
+#' @seealso
+#' - \code{\link{load_cpn_template}} for underlying file discovery
+#' - \code{\link{track_template_edits}} for comparing templates
+#'
+#' @export
+load_and_normalize_template <- function(template_type,
+                                         output_dir = NULL,
+                                         file_path = NULL,
+                                         verbose = FALSE) {
+  
+  # Load template using existing helper
+  template <- if (!is.null(file_path)) {
+    load_cpn_template(type = template_type, file_path = file_path, verbose = verbose)
+  } else {
+    load_cpn_template(type = template_type, output_dir = output_dir, verbose = verbose)
+  }
+  
+  template_file <- attr(template, "source_file") %||% NA_character_
+  
+  # Normalize column types
+  template <- template %>%
+    dplyr::mutate(
+      Night = if (template_type == "ORIGINAL") {
+        as.Date(Night)  # ISO 8601 format
+      } else {
+        # EDIT_THIS: Handle Excel reformatting with flexible parsing
+        lubridate::as_date(lubridate::parse_date_time(Night, orders = c("ymd", "mdy")))
+      },
+      Detector = as.character(Detector),
+      CallsPerNight = as.numeric(CallsPerNight),
+      RecordingHours = suppressWarnings(as.numeric(RecordingHours))
+    )
+  
+  # Handle datetime columns if present (normalize to character)
+  if ("StartDateTime" %in% names(template)) {
+    template <- template %>%
+      dplyr::mutate(
+        StartDateTime = dplyr::if_else(
+          !is.na(StartDateTime) & StartDateTime != "",
+          as.character(StartDateTime),
+          NA_character_
+        )
+      )
+  }
+  
+  if ("EndDateTime" %in% names(template)) {
+    template <- template %>%
+      dplyr::mutate(
+        EndDateTime = dplyr::if_else(
+          !is.na(EndDateTime) & EndDateTime != "",
+          as.character(EndDateTime),
+          NA_character_
+        )
+      )
+  }
+  
+  # Reattach source file attribute
+  structure(template, source_file = template_file)
+}
+
+
+#' Track Template Edits
+#'
+#' @description
+#' Compares ORIGINAL vs EDIT_THIS CallsPerNight templates and generates a detailed
+#' edit log with all manual changes to StartDateTime and EndDateTime fields.
+#' Handles Excel reformatting and detects 6 types of edits: changes, additions,
+#' and removals for both datetime fields.
+#'
+#' **DRY Helper Function** — Extracted during Phase 1 refactoring to encapsulate
+#' complex POSIXct comparison logic (finalize_cpn module Stage 3).
+#'
+#' @param template_original Tibble. ORIGINAL template from load_and_normalize_template().
+#' @param template_edited Tibble. EDIT_THIS template from load_and_normalize_template().
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return List with elements:
+#'   - total_edits: Numeric count of edited rows
+#'   - edit_log_lines: Character vector of detailed edit descriptions
+#'   - comparison: Tibble with row-by-row change tracking
+#'
+#' @section CONTRACT:
+#' - Parses datetime strings to POSIXct for precise comparison (1-second tolerance)
+#' - Detects 6 edit types: StartDateTime/EndDateTime changed/added/removed
+#' - Generates human-readable edit log with original/edited values
+#' - Returns empty log if no datetime columns present
+#' - Handles NA datetime values gracefully
+#'
+#' @section DOES NOT:
+#' - Modify input templates (read-only operation)
+#' - Save edit log to file (caller's responsibility)
+#' - Track changes to CallsPerNight or RecordingHours
+#'
+#' @examples
+#' \dontrun{
+#' template_orig <- load_and_normalize_template("ORIGINAL", output_dir = "outputs")
+#' template_edit <- load_and_normalize_template("EDIT_THIS", output_dir = "outputs")
+#'
+#' edit_tracking <- track_template_edits(
+#'   template_original = template_orig,
+#'   template_edited = template_edit,
+#'   verbose = TRUE
+#' )
+#'
+#' cat(sprintf("Total edits: %d\n", edit_tracking$total_edits))
+#'
+#' # Print edit log
+#' writeLines(edit_tracking$edit_log_lines)
+#' }
+#'
+#' @seealso
+#' - \code{\link{load_and_normalize_template}} for loading templates
+#' - \code{\link{parse_datetime_safe}} for datetime parsing (datetime_helpers.R)
+#' - \code{\link{format_datetime_for_log}} for log formatting
+#'
+#' @export
+track_template_edits <- function(template_original,
+                                 template_edited,
+                                 verbose = FALSE) {
+  
+  total_edits <- 0
+  edit_log_lines <- character()
+  comparison <- NULL
+  
+  # Only attempt edit tracking if datetime columns exist in both templates
+  if (!("StartDateTime" %in% names(template_original)) ||
+      !("StartDateTime" %in% names(template_edited))) {
+    
+    if (verbose) {
+      message("  [SKIP] Edit tracking: datetime columns not present in both templates")
+    }
+    
+    return(list(
+      total_edits = 0,
+      edit_log_lines = character(),
+      comparison = tibble::tibble()
+    ))
+  }
+  
+  # Parse ORIGINAL template datetimes to POSIXct objects
+  template_orig_parsed <- template_original %>%
+    dplyr::select(Detector, Night, 
+                  StartDateTime_orig_str = StartDateTime,
+                  EndDateTime_orig_str = EndDateTime) %>%
+    dplyr::mutate(
+      StartDateTime_orig = sapply(StartDateTime_orig_str, parse_datetime_safe) %>% 
+        as.POSIXct(origin = "1970-01-01"),
+      EndDateTime_orig = sapply(EndDateTime_orig_str, parse_datetime_safe) %>% 
+        as.POSIXct(origin = "1970-01-01")
+    )
+  
+  # Parse EDITED template datetimes to POSIXct objects
+  template_edit_parsed <- template_edited %>%
+    dplyr::select(Detector, Night,
+                  StartDateTime_edit_str = StartDateTime,
+                  EndDateTime_edit_str = EndDateTime,
+                  RecordingHours_edit = RecordingHours) %>%
+    dplyr::mutate(
+      StartDateTime_edit = sapply(StartDateTime_edit_str, parse_datetime_safe) %>% 
+        as.POSIXct(origin = "1970-01-01"),
+      EndDateTime_edit = sapply(EndDateTime_edit_str, parse_datetime_safe) %>% 
+        as.POSIXct(origin = "1970-01-01")
+    )
+  
+  # Join and compare with 1-second tolerance
+  comparison <- template_orig_parsed %>%
+    dplyr::inner_join(template_edit_parsed, by = c("Detector", "Night")) %>%
+    dplyr::mutate(
+      StartDateTime_changed = !is.na(StartDateTime_orig) & 
+        !is.na(StartDateTime_edit) & 
+        abs(difftime(StartDateTime_orig, StartDateTime_edit, units = "secs")) > 1,
+      
+      EndDateTime_changed = !is.na(EndDateTime_orig) & 
+        !is.na(EndDateTime_edit) & 
+        abs(difftime(EndDateTime_orig, EndDateTime_edit, units = "secs")) > 1,
+      
+      StartDateTime_added = is.na(StartDateTime_orig) & !is.na(StartDateTime_edit),
+      StartDateTime_removed = !is.na(StartDateTime_orig) & is.na(StartDateTime_edit),
+      
+      EndDateTime_added = is.na(EndDateTime_orig) & !is.na(EndDateTime_edit),
+      EndDateTime_removed = !is.na(EndDateTime_orig) & is.na(EndDateTime_edit),
+      
+      Any_change = StartDateTime_changed | EndDateTime_changed |
+        StartDateTime_added | StartDateTime_removed |
+        EndDateTime_added | EndDateTime_removed
+    )
+  
+  # Count total edits
+  total_edits <- sum(comparison$Any_change, na.rm = TRUE)
+  
+  # Generate detailed edit log if edits exist
+  if (total_edits > 0) {
+    edit_log <- comparison %>%
+      dplyr::filter(Any_change) %>%
+      dplyr::arrange(Detector, Night)
+    
+    # Build detailed log entries
+    for (i in seq_len(nrow(edit_log))) {
+      row <- edit_log[i, ]
+      
+      log_entry <- sprintf("[%d] %s | %s", i, row$Detector, row$Night)
+      
+      # StartDateTime changes
+      if (row$StartDateTime_changed) {
+        log_entry <- paste0(log_entry, sprintf(
+          "\n    StartDateTime CHANGED: %s -> %s",
+          format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str),
+          format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
+        ))
+      } else if (row$StartDateTime_added) {
+        log_entry <- paste0(log_entry, sprintf(
+          "\n    StartDateTime ADDED: <blank> -> %s",
+          format_datetime_for_log(row$StartDateTime_edit, row$StartDateTime_edit_str)
+        ))
+      } else if (row$StartDateTime_removed) {
+        log_entry <- paste0(log_entry, sprintf(
+          "\n    StartDateTime REMOVED: %s -> <blank>",
+          format_datetime_for_log(row$StartDateTime_orig, row$StartDateTime_orig_str)
+        ))
+      }
+      
+      # EndDateTime changes
+      if (row$EndDateTime_changed) {
+        log_entry <- paste0(log_entry, sprintf(
+          "\n    EndDateTime CHANGED: %s -> %s",
+          format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str),
+          format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)
+        ))
+      } else if (row$EndDateTime_added) {
+        log_entry <- paste0(log_entry, sprintf(
+          "\n    EndDateTime ADDED: <blank> -> %s",
+          format_datetime_for_log(row$EndDateTime_edit, row$EndDateTime_edit_str)
+        ))
+      } else if (row$EndDateTime_removed) {
+        log_entry <- paste0(log_entry, sprintf(
+          "\n    EndDateTime REMOVED: %s -> <blank>",
+          format_datetime_for_log(row$EndDateTime_orig, row$EndDateTime_orig_str)
+        ))
+      }
+      
+      log_entry <- paste0(log_entry, sprintf("\n    RecordingHours: %.2f\n", 
+                                             row$RecordingHours_edit))
+      
+      edit_log_lines <- c(edit_log_lines, log_entry)
+    }
+  }
+  
+  if (verbose) {
+    message(sprintf("  [OK] Tracked %d manual edits", total_edits))
+  }
+  
+  list(
+    total_edits = total_edits,
+    edit_log_lines = edit_log_lines,
+    comparison = comparison
+  )
 }
 
 

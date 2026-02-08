@@ -1,6 +1,10 @@
 # =============================================================================
-# core/utilities.R - FOUNDATIONAL UTILITIES (LOCKED CONTRACT)
+# UTILITY: utilities.R - Foundational Utilities (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Zero dependencies on other project modules
+# - Sourced first by load_all.R
 # PURPOSE
 # -------
 # Foundational utilities with ZERO internal dependencies on domain logic.
@@ -1163,4 +1167,377 @@ finalize_stage_validation_report <- function(validation_context,
   }
   
   validation_html_path
+}
+
+
+# ==============================================================================
+# NEW HELPER FUNCTIONS (Added for Module Refactoring - Stage 13-25)
+# ==============================================================================
+
+
+#' Save Summary CSV with Artifact Registration
+#'
+#' @description
+#' Saves a summary tibble/dataframe as CSV and registers it as an artifact.
+#' Used by summary_stats module for consistent CSV export.
+#'
+#' @param data Tibble or data.frame. Summary data to export.
+#' @param filename Character. Filename (e.g., "detector_summary_20260205.csv").
+#' @param output_dir Character. Output directory path. Default: "results/csv/summary_stats".
+#' @param registry List. Artifact registry from save_checkpoint_and_register().
+#' @param artifact_name Character. Name for artifact registry entry.
+#' @param metadata List. Additional metadata for artifact registration.
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return List with registry attribute containing file path reference.
+#'
+#' @section CONTRACT:
+#' - Ensures output directory exists
+#' - Saves data as CSV using readr::write_csv
+#' - Registers artifact with SHA256 hash
+#' - Adds file_path attribute for downstream use
+#' - Returns registry with updated artifact entries
+#'
+#' @keywords internal
+#' @export
+save_summary_csv <- function(data, filename, output_dir = "results/csv/summary_stats",
+                             registry = NULL, artifact_name = NULL, metadata = NULL,
+                             verbose = FALSE) {
+  
+  # Ensure directory exists
+  ensure_dir_exists(output_dir)
+  
+  # Build full file path
+  file_path <- file.path(output_dir, filename)
+  
+  # Save CSV
+  readr::write_csv(data, file_path)
+  
+  if (verbose) {
+    message(sprintf("  [OK] Saved CSV: %s", basename(file_path)))
+  }
+  
+  # Register artifact if registry provided
+  if (!is.null(registry) && !is.null(artifact_name)) {
+    registry <- save_and_register_rds(
+      object = NULL,  # Dummy - we're just registering the file
+      file_path = file_path,
+      artifact_type = "csv",
+      artifact_name = artifact_name,
+      registry = registry,
+      metadata = metadata,
+      verbose = FALSE
+    )
+  }
+  
+  # Add path attribute for easy reference
+  structure(registry, file_path = file_path)
+}
+
+
+#' Build Excel Workbook from CSV Files
+#'
+#' @description
+#' Compiles multiple CSV files into a single Excel workbook with one
+#' sheet per CSV. Ensures consistency between CSV and Excel formats.
+#'
+#' @param csv_files Named character vector. Names are sheet names, values are file paths.
+#'   Example: c("Detector Summary" = "path/to/detector.csv", ...)
+#' @param output_file Character. Path to output XLSX file.
+#' @param registry List. Artifact registry for registration.
+#' @param artifact_name Character. Name for artifact entry.
+#' @param workflow Character. Workflow name for metadata. Default: "summary_stats".
+#' @param metadata List. Additional metadata for artifact registration.
+#' @param verbose Logical. Print progress. Default: FALSE.
+#'
+#' @return List with registry attribute.
+#'
+#' @section CONTRACT:
+#' - Requires openxlsx package (returns TRUE if unavailable)
+#' - Creates output directory if needed
+#' - Reads CSVs and creates sheets in workbook
+#' - Registers completed Excel file as artifact
+#' - Returns updated registry with file_path attribute
+#'
+#' @keywords internal
+#' @export
+build_excel_from_csv <- function(csv_files, output_file, registry = NULL,
+                                 artifact_name = NULL, workflow = "summary_stats",
+                                 metadata = NULL, verbose = FALSE) {
+  
+  # Check if openxlsx is available
+  if (!requireNamespace("openxlsx", quietly = TRUE)) {
+    if (verbose) message("  [SKIP] openxlsx not installed - Excel export skipped")
+    return(structure(registry, file_path = NA_character_))
+  }
+  
+  # Ensure output directory exists
+  ensure_dir_exists(dirname(output_file))
+  
+  # Create new workbook
+  wb <- openxlsx::createWorkbook()
+  
+  # Add each CSV as a sheet
+  for (sheet_name in names(csv_files)) {
+    csv_path <- csv_files[[sheet_name]]
+    
+    if (!file.exists(csv_path)) {
+      warning(sprintf("CSV file not found: %s", csv_path))
+      next
+    }
+    
+    # Read CSV
+    df <- readr::read_csv(csv_path, show_col_types = FALSE)
+    
+    # Add sheet to workbook
+    openxlsx::addWorksheet(wb, sheet_name)
+    openxlsx::writeData(wb, sheet = sheet_name, df)
+  }
+  
+  # Save workbook
+  openxlsx::saveWorkbook(wb, output_file, overwrite = TRUE)
+  
+  if (verbose) {
+    message(sprintf("  [OK] Compiled Excel: %s (%d sheets)",
+                    basename(output_file), length(csv_files)))
+  }
+  
+  # Register artifact
+  if (!is.null(registry) && !is.null(artifact_name)) {
+    registry <- save_and_register_rds(
+      object = NULL,
+      file_path = output_file,
+      artifact_type = "xlsx",
+      artifact_name = artifact_name,
+      workflow = workflow,
+      registry = registry,
+      metadata = metadata,
+      verbose = FALSE
+    )
+  }
+  
+  structure(registry, file_path = output_file)
+}
+
+
+#' Verify RDS Artifact Structure
+#'
+#' @description
+#' Loads and validates RDS files for report compatibility. Checks that
+#' required elements exist and are properly structured.
+#'
+#' @param summary_rds Character. Path to RDS file with summaries.
+#' @param plots_rds Character. Path to RDS file with plots.
+#' @param verbose Logical. Print progress. Default: FALSE.
+#'
+#' @return List with elements:
+#'   - valid: Logical, TRUE if structure is valid
+#'   - errors: Character vector of validation errors (if any)
+#'   - total_plots: Numeric count of all plots found
+#'
+#' @section CONTRACT:
+#' - Loads files via readRDS and checks key elements
+#' - Returns list with valid status and error details
+#' - Does not stop on errors (allows pipeline to continue with warnings)
+#'
+#' @keywords internal
+#' @export
+verify_rds_artifacts <- function(summary_rds, plots_rds, verbose = FALSE) {
+  
+  errors <- character()
+  total_plots <- 0
+  
+  # Check summary RDS
+  if (!file.exists(summary_rds)) {
+    errors <- c(errors, sprintf("Summary RDS not found: %s", summary_rds))
+  } else {
+    all_summaries <- tryCatch({
+      readRDS(summary_rds)
+    }, error = function(e) {
+      errors <<- c(errors, sprintf("Cannot load summary RDS: %s", e$message))
+      NULL
+    })
+    
+    if (!is.null(all_summaries)) {
+      # Check for expected elements
+      expected_elements <- c("detector_summary", "study_summary")
+      missing <- setdiff(expected_elements, names(all_summaries))
+      if (length(missing) > 0) {
+        errors <- c(errors, sprintf("Summary missing elements: %s", paste(missing, collapse = ", ")))
+      }
+    }
+  }
+  
+  # Check plots RDS
+  if (!file.exists(plots_rds)) {
+    errors <- c(errors, sprintf("Plots RDS not found: %s", plots_rds))
+  } else {
+    all_plots <- tryCatch({
+      readRDS(plots_rds)
+    }, error = function(e) {
+      errors <<- c(errors, sprintf("Cannot load plots RDS: %s", e$message))
+      NULL
+    })
+    
+    if (!is.null(all_plots)) {
+      # Count total plots
+      total_plots <- sum(sapply(all_plots, function(x) {
+        if (is.list(x)) length(x) else 0
+      }, USE.NAMES = FALSE))
+    }
+  }
+  
+  list(
+    valid = length(errors) == 0,
+    errors = errors,
+    total_plots = total_plots
+  )
+}
+
+
+#' Render Quarto Report with Error Handling
+#'
+#' @description
+#' Wrapper for quarto::quarto_render with standardized error handling,
+#' parameter passing, and path management.
+#'
+#' @param qmd_template Character. Path to .qmd Quarto template.
+#' @param output_file Character. Output HTML filename.
+#' @param output_dir Character. Output directory. Default: "results/reports".
+#' @param params List. Execute parameters to pass to Quarto.
+#' @param verbose Logical. Print progress. Default: FALSE.
+#'
+#' @return List with elements:
+#'   - success: Logical, TRUE if rendering succeeded
+#'   - output_path: Character, path to rendered HTML (or NA if failed)
+#'   - message: Character, status message
+#'
+#' @section CONTRACT:
+#' - Ensures template exists before rendering
+#' - Ensures output directory exists
+#' - Passes execute_params to quarto::quarto_render
+#' - Handles file relocation if quarto renders to different location
+#' - Returns structured result with success status
+#'
+#' @keywords internal
+#' @export
+render_report <- function(qmd_template, output_file, output_dir = "results/reports",
+                          params = NULL, verbose = FALSE) {
+  
+  # Check template exists
+  if (!file.exists(qmd_template)) {
+    return(list(
+      success = FALSE,
+      output_path = NA_character_,
+      message = sprintf("Quarto template not found: %s", qmd_template)
+    ))
+  }
+  
+  # Ensure output directory exists
+  ensure_dir_exists(output_dir)
+  
+  # Full output path
+  output_path <- file.path(output_dir, output_file)
+  
+  # Render report
+  result <- tryCatch({
+    quarto::quarto_render(
+      input = qmd_template,
+      output_file = basename(output_path),
+      output_format = "html",
+      execute_params = params,
+      quiet = !verbose
+    )
+    
+    # Check if quarto rendered to template directory
+    template_rendered <- file.path(dirname(qmd_template), basename(output_path))
+    if (file.exists(template_rendered) && template_rendered != output_path) {
+      file.rename(template_rendered, output_path)
+    }
+    
+    list(
+      success = TRUE,
+      output_path = output_path,
+      message = "Report rendered successfully"
+    )
+  }, error = function(e) {
+    list(
+      success = FALSE,
+      output_path = NA_character_,
+      message = e$message
+    )
+  })
+  
+  if (verbose && result$success) {
+    message(sprintf("  [OK] Report rendered: %s", basename(result$output_path)))
+  }
+  
+  result
+}
+
+
+#' Create and Register Release Bundle
+#'
+#' @description
+#' Wrapper for create_release_bundle with standardized artifact registration.
+#'
+#' @param study_id Character. Study identifier.
+#' @param calls_per_night_final Tibble. Final CPN data.
+#' @param kpro_master Tibble. Master dataset.
+#' @param all_summaries List. Summary statistics.
+#' @param all_plots List. Plot objects.
+#' @param report_path Character. Path to HTML report.
+#' @param study_params List. Study parameters.
+#' @param output_dir Character. Output directory for bundle.
+#' @param registry List. Artifact registry.
+#' @param quiet Logical. Suppress quarto messages. Default: TRUE.
+#'
+#' @return List with elements:
+#'   - success: Logical
+#'   - zip_path: Character, path to bundle ZIP
+#'   - message: Character, status message
+#'
+#' @section CONTRACT:
+#' - Ensures output directory exists
+#' - Calls create_release_bundle function from release.R
+#' - Registers ZIP file as artifact
+#' - Returns structured result with success status
+#'
+#' @keywords internal
+#' @export
+create_and_register_release <- function(study_id, calls_per_night_final, kpro_master,
+                                        all_summaries, all_plots, report_path,
+                                        study_params, output_dir = "results/releases",
+                                        registry = NULL, quiet = TRUE) {
+  
+  ensure_dir_exists(output_dir)
+  
+  result <- tryCatch({
+    zip_path <- create_release_bundle(
+      study_id = study_id,
+      calls_per_night_final = calls_per_night_final,
+      kpro_master = kpro_master,
+      all_summaries = all_summaries,
+      all_plots = all_plots,
+      report_path = report_path,
+      study_params = study_params,
+      output_dir = output_dir,
+      registry = registry,
+      quiet = quiet
+    )
+    
+    list(
+      success = TRUE,
+      zip_path = zip_path,
+      message = "Release bundle created successfully"
+    )
+  }, error = function(e) {
+    list(
+      success = FALSE,
+      zip_path = NA_character_,
+      message = e$message
+    )
+  })
+  
+  result
 }

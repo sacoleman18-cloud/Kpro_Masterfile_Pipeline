@@ -1,6 +1,8 @@
 # =============================================================================
-# output/plot_quality.R — DATA QUALITY VISUALIZATIONS
+# UTILITY: plot_quality.R - Data Quality Visualizations
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Provides visualization functions focused on data quality and recording

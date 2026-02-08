@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: standardization.R - SCHEMA TRANSFORMATION (LOCKED CONTRACT)
+# UTILITY: standardization.R - Schema Transformation (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Transforms raw data to unified master schema
+# - Used by ingestion and standardization workflows
 # PURPOSE
 # -------
 # Transforms all KPro schema versions into a unified master schema. Handles

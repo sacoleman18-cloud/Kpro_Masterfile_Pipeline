@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: ingestion.R - PRIMARY INGESTION (LOCKED CONTRACT)
+# UTILITY: ingestion.R - Raw Data Ingestion (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Loads and intro-standardizes raw CSV data
+# - Used by workflows/modules in R/pipeline/
 # PURPOSE
 # -------
 # File discovery, reading, and intro-standardization. Provides two primary

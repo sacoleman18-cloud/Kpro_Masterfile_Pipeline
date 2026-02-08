@@ -1,6 +1,8 @@
 # =============================================================================
-# core/config.R - STUDY CONFIGURATION MANAGEMENT (LOCKED CONTRACT)
+# UTILITY: config.R - Study Configuration Management (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Manages study_parameters.yaml configuration file with automatic reconciliation

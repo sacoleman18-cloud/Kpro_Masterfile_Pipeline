@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: artifacts.R - Artifact Registry & File Provenance
+# UTILITY: artifacts.R - Artifact Registry & File Provenance
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Manages artifact registry, hashing, and provenance tracking
+# - Used by all modules and workflows
 # PURPOSE
 # -------
 # Provides a formal artifact registry for tracking all pipeline outputs,

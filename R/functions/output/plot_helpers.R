@@ -1,6 +1,8 @@
 # =============================================================================
-# output/plot_helpers.R — SHARED PLOTTING UTILITIES
+# UTILITY: plot_helpers.R - Shared Plotting Utilities
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Provides shared utilities for all visualization functions in the KPro
@@ -573,4 +575,135 @@ format_number <- function(x) {
 format_pct <- function(x, digits = 1, already_pct = FALSE) {
   if (!already_pct) x <- x * 100
   sprintf("%.*f%%", digits, x)
+}
+
+
+# ==============================================================================
+# NEW HELPER FUNCTIONS (Added for Module Refactoring)
+# ==============================================================================
+
+
+#' Create Plot Output Directories
+#'
+#' @description
+#' Sets up standardized directory structure for plot exports.
+#' Creates subdirectories for quality, detector, species, and temporal plots.
+#'
+#' @param base_dir Character. Base directory for plots. Default: "results/figures/png".
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return Character vector of created directory paths (invisibly).
+#'
+#' @section CONTRACT:
+#' - Creates all subdirectories if they don't exist
+#' - Always creates: quality/, detector/, species/, temporal/
+#' - Returns paths of all created directories
+#' - Never fails (creates recursively, ignores existing dirs)
+#'
+#' @keywords internal
+#' @export
+create_plot_directories <- function(base_dir = "results/figures/png", verbose = FALSE) {
+  
+  categories <- c("quality", "detector", "species", "temporal")
+  created_dirs <- character()
+  
+  for (category in categories) {
+    dir_path <- file.path(base_dir, category)
+    if (!dir.exists(dir_path)) {
+      dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+      if (verbose) message(sprintf("  [OK] Created directory: %s", dir_path))
+    }
+    created_dirs <- c(created_dirs, dir_path)
+  }
+  
+  invisible(created_dirs)
+}
+
+
+#' Export Plots to PNG Files
+#'
+#' @description
+#' Wrapper function to export a nested list of ggplot objects to PNG files.
+#' Standardizes export settings (DPI, dimensions, error handling).
+#'
+#' @param all_plots List of nested lists. Structure:
+#'   List(category1 = List(plot1 = ggplot(), plot2 = ggplot(), ...),
+#'        category2 = List(...), ...)
+#' @param base_dir Character. Base directory for exports (with category subdirs).
+#'   Default: "results/figures/png".
+#' @param width Numeric. Plot width in inches. Default: 10.
+#' @param height Numeric. Plot height in inches. Default: 7.
+#' @param dpi Numeric. DPI for PNG export. Default: 300.
+#' @param verbose Logical. Print progress messages. Default: FALSE.
+#'
+#' @return List with elements:
+#'   - total_exported: Numeric count of successfully exported plots
+#'   - files_created: Character vector of exported file paths
+#'   - failed_plots: Character vector of plot names that failed
+#'
+#' @section CONTRACT:
+#' - Requires ggplot2 package for ggsave()
+#' - Skips plots that are not ggplot objects
+#' - Handles errors gracefully (warns and continues)
+#' - Returns summary of export results
+#'
+#' @keywords internal
+#' @export
+export_plots_png <- function(all_plots, base_dir = "results/figures/png",
+                             width = 10, height = 7, dpi = 300, verbose = FALSE) {
+  
+  total_exported <- 0
+  files_created <- character()
+  failed_plots <- character()
+  
+  for (category in names(all_plots)) {
+    category_plots <- all_plots[[category]]
+    
+    if (!is.list(category_plots) || length(category_plots) == 0) {
+      next
+    }
+    
+    for (plot_name in names(category_plots)) {
+      plot_obj <- category_plots[[plot_name]]
+      
+      # Skip non-ggplot objects
+      if (!inherits(plot_obj, "ggplot")) {
+        next
+      }
+      
+      # Build file path
+      plot_path <- file.path(base_dir, category, sprintf("%s.png", plot_name))
+      
+      # Export plot
+      tryCatch({
+        ggplot2::ggsave(
+          plot_path,
+          plot_obj,
+          width = width,
+          height = height,
+          dpi = dpi,
+          bg = "white"
+        )
+        
+        files_created <- c(files_created, plot_path)
+        total_exported <- total_exported + 1
+      }, error = function(e) {
+        warning(sprintf("Failed to export plot %s: %s", plot_name, e$message))
+        failed_plots <<- c(failed_plots, plot_name)
+      })
+    }
+  }
+  
+  if (verbose) {
+    message(sprintf("  [OK] Exported %d PNG files", total_exported))
+    if (length(failed_plots) > 0) {
+      message(sprintf("  [!] Failed plots: %s", paste(failed_plots, collapse = ", ")))
+    }
+  }
+  
+  list(
+    total_exported = total_exported,
+    files_created = files_created,
+    failed_plots = failed_plots
+  )
 }

@@ -137,7 +137,7 @@ message("  └── Layer 6 loaded")
 # =============================================================================
 # LAYER 7: PIPELINE
 # =============================================================================
-message("[7/7] Loading Layer 7: pipeline/")
+message("[7/8] Loading Layer 7: pipeline/")
 
 # Pipeline scripts live in R/pipeline/
 source_module(file.path("R", "pipeline", "run_ingest_standardize.R"),
@@ -149,10 +149,40 @@ source_module(file.path("R", "pipeline", "run_cpn_template.R"),
               optional = TRUE)
 
 source_module(file.path("R", "pipeline", "run_finalize_to_report.R"),
-              "run_finalize_to_report.R (Chunk 3 orchestrator - planned)",
+              "run_finalize_to_report.R (Chunk 3 orchestrator - legacy)",
               optional = TRUE)
 
 message("  └── Layer 7 loaded")
+
+
+# =============================================================================
+# LAYER 8: MODULES (Chunk 3: Finalize to Report)
+# =============================================================================
+message("[8/8] Loading Layer 8: modules/")
+
+# Chunk 3 modules (thematic, unnumbered)
+source_module(file.path("R", "modules", "finalize_cpn.R"),
+              "finalize_cpn.R (CPN finalization - Module Stages 1-6)",
+              optional = TRUE)
+
+source_module(file.path("R", "modules", "summary_stats.R"),
+              "summary_stats.R (Summary statistics - Module Stages 7-16)",
+              optional = TRUE)
+
+source_module(file.path("R", "modules", "plotting.R"),
+              "plotting.R (Exploratory plots - Module Stages 15-21)",
+              optional = TRUE)
+
+source_module(file.path("R", "modules", "report_release.R"),
+              "report_release.R (Report & release - Module Stages 22-25)",
+              optional = TRUE)
+
+# Orchestrator for Chunk 3
+source_module(file.path("R", "pipeline", "run_finalize_to_report_REFACTORED.R"),
+              "run_finalize_to_report_REFACTORED.R (Chunk 3 orchestrator)",
+              optional = TRUE)
+
+message("  └── Layer 8 loaded")
 
 
 # =============================================================================
@@ -250,10 +280,37 @@ message("
                                        (1 function)
 
  Layer 7: pipeline/
-          └─ run_ingest_standardize.R  Chunk 1: Ingest & Standardize
-                                        (1 function)
-              ├─ [run_cpn_template.R - PLANNED for Chunk 2]
-              └─ [run_finalize_to_report.R - PLANNED for Chunk 3]
+          ├─ run_ingest_standardize.R  Chunk 1: Ingest & Standardize (1 function)
+          ├─ run_cpn_template.R        Chunk 2: CPN Template (planned)
+          └─ run_finalize_to_report.R  Chunk 3: Finalize to Report - LEGACY (1 function)
+
+ Layer 8: modules/ (Chunk 3: Finalize to Report - Current Architecture)
+          ├─ finalize_cpn.R ............  CPN finalization (1 function)
+          ├─ summary_stats.R ...........  Summary statistics (1 function)
+          ├─ plotting.R ................  Exploratory visualizations (1 function)
+          └─ report_release.R ..........  Report generation & release (1 function)
+
+ ARCHITECTURE OVERVIEW
+ ──────────────────────
+ Layer 1-6: Utility/Helper Functions (R/functions/)
+            - Reusable functions organized by domain
+            - No orchestration logic
+            - Safe I/O, validation, analysis, and visualization helpers
+
+ Layer 7: Pipeline Orchestrators (R/pipeline/)
+          - Entry point scripts that coordinate module/workflow execution
+          - Chunk-level coordination and data passing
+          - Three chunks: ingest, template, finalize
+
+ Layer 8: Processing Modules (R/modules/)
+          - Thematic subsystems with internal staged execution
+          - Chunk 3 split into 4 modules: finalize, stats, plots, release
+          - Each module contains internal "module stages"
+
+ Layer 9: Legacy Workflows (R/ root + numbered scripts)
+          - Original 01-07 workflow scripts (preserved for reference)
+          - Not recommended for new development
+          - Use orchestrators (Layer 7) and modules (Layer 8) instead
 
 ================================================================================
  TOTAL LOADED: 113 functions + 1 constant across 21 modules

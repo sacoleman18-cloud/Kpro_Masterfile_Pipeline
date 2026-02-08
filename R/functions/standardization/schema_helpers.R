@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: schema_helpers.R - KPRO SCHEMA VERSION DETECTION & HELPERS
+# UTILITY: schema_helpers.R - Schema Detection & Version Management
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Detects and handles multiple KPro schema versions
+# - Used by standardization workflows
 # PURPOSE
 # -------
 # Detects Kaleidoscope Pro schema version at the ROW level and provides helper

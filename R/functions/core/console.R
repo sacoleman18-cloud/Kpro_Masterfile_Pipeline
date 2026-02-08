@@ -1,6 +1,8 @@
 # =============================================================================
-# core/console.R - CONSOLE FORMATTING UTILITIES
+# UTILITY: console.R - Console Formatting & Output
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Console formatting utilities for visual output. Provides consistent

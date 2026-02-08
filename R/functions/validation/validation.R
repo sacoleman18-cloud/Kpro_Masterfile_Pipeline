@@ -1,6 +1,10 @@
 # =============================================================================
-# MODULE: validation.R - Comprehensive Data Validation (LOCKED CONTRACT)
+# UTILITY: validation.R - Data Validation Assertions (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Provides centralized assertion and validation functions
+# - Used by all modules and workflows
 # PURPOSE
 # -------
 # Provides comprehensive data validation, input assertion, and schema

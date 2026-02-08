@@ -1,6 +1,10 @@
 # ==============================================================================
-# MODULE: datetime_helpers.R - DATETIME UTILITIES (LOCKED CONTRACT)
+# UTILITY: datetime_helpers.R - Datetime Parsing & Timezone Handling (LOCKED CONTRACT)
 # ==============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
+# - Provides timezone-aware datetime parsing and conversion
+# - Used by all modules and workflows
 # PURPOSE
 # -------
 # Comprehensive datetime/time utilities for parsing, formatting, and converting

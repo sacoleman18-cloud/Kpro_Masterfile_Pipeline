@@ -1,6 +1,8 @@
 # =============================================================================
-# output/tables.R — GT TABLE FORMATTING (LOCKED CONTRACT)
+# UTILITY: tables.R - GT Table Formatting (LOCKED CONTRACT)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Formats summary tibbles as publication-ready GT tables with consistent
@@ -1329,6 +1331,82 @@ build_excel_from_csv <- function(csv_files,
   }
   
   invisible(output_file)
+}
+
+
+# ==============================================================================
+# NEW HELPER FUNCTIONS (Added for Module Refactoring)
+# ==============================================================================
+
+
+#' Save GT Table as PNG/HTML
+#'
+#' @description
+#' Saves a gt table object to PNG and/or HTML files. Handles missing
+#' webshot2 gracefully (skips PNG if unavailable).
+#'
+#' @param gt_object GT table object from format_*_summary_gt() functions.
+#' @param base_filename Character. Filename without extension
+#'   (e.g., "detector_summary_20260205").
+#' @param output_dir Character. Output directory path.
+#' @param format Character vector. Format(s) to export
+#'   (c("png", "html"), c("png"), c("html"), etc.). Default: c("png", "html").
+#'
+#' @return Invisibly returns paths of created files (character vector).
+#'
+#' @section CONTRACT:
+#' - Ensures output directory exists
+#' - PNG export requires webshot2 package (warning if missing)
+#' - Saves PNG at 300 DPI for publication quality
+#' - HTML export uses gt::gtsave with simple format
+#' - Returns vector of created file paths
+#'
+#' @section DOES NOT:
+#' - Modify input GT object
+#' - Validate table structure (assumes well-formed)
+#' - Set table dimensions (use gtsave width/height parameters separately)
+#'
+#' @keywords internal
+#' @export
+save_gt_table <- function(gt_object, base_filename, output_dir, 
+                          format = c("png", "html")) {
+  
+  # Ensure directory exists
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+  
+  created_files <- character()
+  
+  # PNG export
+  if ("png" %in% format) {
+    has_webshot2 <- requireNamespace("webshot2", quietly = TRUE)
+    
+    if (has_webshot2) {
+      png_file <- file.path(output_dir, sprintf("%s.png", base_filename))
+      tryCatch({
+        gt::gtsave(gt_object, png_file, vwidth = 800, vheight = 600)
+        created_files <- c(created_files, png_file)
+      }, error = function(e) {
+        warning(sprintf("Failed to export PNG %s: %s", base_filename, e$message))
+      })
+    } else {
+      warning("webshot2 not installed - PNG export skipped")
+    }
+  }
+  
+  # HTML export
+  if ("html" %in% format) {
+    html_file <- file.path(output_dir, sprintf("%s.html", base_filename))
+    tryCatch({
+      gt::gtsave(gt_object, html_file)
+      created_files <- c(created_files, html_file)
+    }, error = function(e) {
+      warning(sprintf("Failed to export HTML %s: %s", base_filename, e$message))
+    })
+  }
+  
+  invisible(created_files)
 }
 
 

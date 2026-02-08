@@ -1,6 +1,8 @@
 # =============================================================================
-# core/logging.R - FILE LOGGING UTILITIES
+# UTILITY: logging.R - File Logging (Audit Trail)
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # File logging utilities for audit trail and debugging. Provides timestamped

@@ -1,6 +1,8 @@
 # =============================================================================
-# output/plot_temporal.R — TEMPORAL PATTERN VISUALIZATIONS
+# UTILITY: plot_temporal.R - Temporal Pattern Visualizations
 # =============================================================================
+# Classification: Helper/Utility Function Module
+# - Part of R/functions/ → Contains reusable helper functions only
 # PURPOSE
 # -------
 # Provides visualization functions focused on temporal bat activity patterns.
