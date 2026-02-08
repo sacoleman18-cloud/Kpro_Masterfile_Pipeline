@@ -56,7 +56,7 @@ source_module <- function(path, label = NULL, optional = FALSE) {
 # =============================================================================
 # LAYER 1: CORE
 # =============================================================================
-message("[1/7] Loading Layer 1: core/")
+message("[1/9] Loading Layer 1: core/")
 
 source_module(file.path("R", "functions", "core", "utilities.R"), "utilities.R (I/O, checkpoints, paths)")
 source_module(file.path("R", "functions", "core", "logging.R"),   "logging.R   (file logging)")
@@ -71,7 +71,7 @@ message("  └── Layer 1 loaded")
 # =============================================================================
 # LAYER 2: INGESTION
 # =============================================================================
-message("[2/7] Loading Layer 2: ingestion/")
+message("[2/9] Loading Layer 2: ingestion/")
 
 source_module(file.path("R", "functions", "ingestion", "ingestion.R"), "ingestion.R (raw data loading)")
 
@@ -81,7 +81,7 @@ message("  └── Layer 2 loaded")
 # =============================================================================
 # LAYER 3: STANDARDIZATION
 # =============================================================================
-message("[3/7] Loading Layer 3: standardization/")
+message("[3/9] Loading Layer 3: standardization/")
 
 source_module(file.path("R", "functions", "standardization", "schema_helpers.R"),   "schema_helpers.R       (schema version detection)")
 source_module(file.path("R", "functions", "standardization", "standardization.R"),  "standardization.R      (schema transformation)")
@@ -93,7 +93,7 @@ message("  └── Layer 3 loaded")
 # =============================================================================
 # LAYER 4: VALIDATION
 # =============================================================================
-message("[4/7] Loading Layer 4: validation/")
+message("[4/9] Loading Layer 4: validation/")
 
 source_module(file.path("R", "functions", "validation", "validation.R"),            "validation.R            (data quality validation)")
 source_module(file.path("R", "functions", "validation", "validation_reporting.R"), "validation_reporting.R  (execution tracking & reporting)")
@@ -104,7 +104,7 @@ message("  └── Layer 4 loaded")
 # =============================================================================
 # LAYER 5: ANALYSIS
 # =============================================================================
-message("[5/7] Loading Layer 5: analysis/")
+message("[5/9] Loading Layer 5: analysis/")
 
 source_module(file.path("R", "functions", "analysis", "callspernight.R"),    "callspernight.R    (CPN templates, recording hours)")
 source_module(file.path("R", "functions", "analysis", "detector_mapping.R"), "detector_mapping.R (detector name management)")
@@ -116,7 +116,7 @@ message("  └── Layer 5 loaded")
 # =============================================================================
 # LAYER 6: OUTPUT
 # =============================================================================
-message("[6/7] Loading Layer 6: output/")
+message("[6/9] Loading Layer 6: output/")
 
 # Plot helpers FIRST
 source_module(file.path("R", "functions", "output", "plot_helpers.R"), "plot_helpers.R (shared plotting utilities)")
@@ -135,32 +135,46 @@ message("  └── Layer 6 loaded")
 
 
 # =============================================================================
-# LAYER 7: PIPELINE
+# LAYER 7: PIPELINE ORCHESTRATORS
 # =============================================================================
-message("[7/8] Loading Layer 7: pipeline/")
+message("[7/9] Loading Layer 7: pipeline/")
 
-# Pipeline scripts live in R/pipeline/
+# Pipeline orchestrators (thin wrappers that call modules in sequence)
 source_module(file.path("R", "pipeline", "run_ingest_standardize.R"),
-              "run_ingest_standardize.R (Chunk 1 orchestrator)",
+              "run_ingest_standardize.R (Chunk 1: Ingestion → Standardization)",
               optional = TRUE)
 
 source_module(file.path("R", "pipeline", "run_cpn_template.R"),
-              "run_cpn_template.R (Chunk 2 orchestrator - planned)",
+              "run_cpn_template.R (Chunk 2: CPN Template Generation)",
               optional = TRUE)
 
 source_module(file.path("R", "pipeline", "run_finalize_to_report.R"),
-              "run_finalize_to_report.R (Chunk 3 orchestrator - legacy)",
+              "run_finalize_to_report.R (Chunk 3: Finalize → Report)",
               optional = TRUE)
 
 message("  └── Layer 7 loaded")
 
 
 # =============================================================================
-# LAYER 8: MODULES (Chunk 3: Finalize to Report)
+# LAYER 8: MODULES (Complete Pipeline)
 # =============================================================================
-message("[8/8] Loading Layer 8: modules/")
+message("[8/9] Loading Layer 8: modules/")
 
-# Chunk 3 modules (thematic, unnumbered)
+# Chunk 1 modules (Data Ingestion & Standardization)
+source_module(file.path("R", "modules", "data_ingestion.R"),
+              "data_ingestion.R (Raw data loading - Module Stages 1-2)",
+              optional = TRUE)
+
+source_module(file.path("R", "modules", "data_standardization.R"),
+              "data_standardization.R (Schema transform & filters - Module Stages 3-8)",
+              optional = TRUE)
+
+# Chunk 2 modules (CPN Template)
+source_module(file.path("R", "modules", "cpn_template.R"),
+              "cpn_template.R (CPN template generation - Module Stages 1-9)",
+              optional = TRUE)
+
+# Chunk 3 modules (Finalize to Report)
 source_module(file.path("R", "modules", "finalize_cpn.R"),
               "finalize_cpn.R (CPN finalization - Module Stages 1-6)",
               optional = TRUE)
@@ -175,11 +189,6 @@ source_module(file.path("R", "modules", "plotting.R"),
 
 source_module(file.path("R", "modules", "report_release.R"),
               "report_release.R (Report & release - Module Stages 22-25)",
-              optional = TRUE)
-
-# Orchestrator for Chunk 3
-source_module(file.path("R", "pipeline", "run_finalize_to_report_REFACTORED.R"),
-              "run_finalize_to_report_REFACTORED.R (Chunk 3 orchestrator)",
               optional = TRUE)
 
 message("  └── Layer 8 loaded")
@@ -280,15 +289,26 @@ message("
                                        (1 function)
 
  Layer 7: pipeline/
-          ├─ run_ingest_standardize.R  Chunk 1: Ingest & Standardize (1 function)
-          ├─ run_cpn_template.R        Chunk 2: CPN Template (planned)
-          └─ run_finalize_to_report.R  Chunk 3: Finalize to Report - LEGACY (1 function)
+          ├─ run_ingest_standardize.R  Chunk 1: Ingestion → Standardization (1 function)
+          ├─ run_cpn_template.R        Chunk 2: CPN Template Generation (1 function)
+          └─ run_finalize_to_report.R  Chunk 3: Finalize → Report (1 function)
 
- Layer 8: modules/ (Chunk 3: Finalize to Report - Current Architecture)
-          ├─ finalize_cpn.R ............  CPN finalization (1 function)
-          ├─ summary_stats.R ...........  Summary statistics (1 function)
-          ├─ plotting.R ................  Exploratory visualizations (1 function)
-          └─ report_release.R ..........  Report generation & release (1 function)
+ Layer 8: modules/ (Complete Pipeline - 7 Modules)
+          [Chunk 1: Ingestion & Standardization]
+          ├─ data_ingestion.R ...........  Raw data loading (1 function)
+          └─ data_standardization.R .....  Schema transform & filters (1 function)
+          
+          [Chunk 2: CPN Template]
+          └─ cpn_template.R .............  CPN template generation (1 function)
+          
+          [Chunk 3: Finalize to Report]
+          ├─ finalize_cpn.R .............  CPN finalization (1 function)
+          ├─ summary_stats.R ............  Summary statistics (1 function)
+          ├─ plotting.R .................  Exploratory visualizations (1 function)
+          └─ report_release.R ...........  Report generation & release (1 function)
+
+ Layer 9: debug/ (Optional Development Tools)
+          └─ module_runner.R ............  Individual module testing (7 runners)
 
  ARCHITECTURE OVERVIEW
  ──────────────────────
@@ -298,33 +318,58 @@ message("
             - Safe I/O, validation, analysis, and visualization helpers
 
  Layer 7: Pipeline Orchestrators (R/pipeline/)
-          - Entry point scripts that coordinate module/workflow execution
-          - Chunk-level coordination and data passing
-          - Three chunks: ingest, template, finalize
+          - Entry point scripts that coordinate module execution
+          - Thin wrappers calling modules in sequence
+          - Three chunks: Ingest/Standardize, CPN Template, Finalize/Report
 
  Layer 8: Processing Modules (R/modules/)
           - Thematic subsystems with internal staged execution
-          - Chunk 3 split into 4 modules: finalize, stats, plots, release
-          - Each module contains internal "module stages"
+          - 7 total modules across 3 pipeline chunks
+          - Each module contains internal "module stages" numbered sequentially
+          - Modules are self-contained: load → process → save → validate
 
- Layer 9: Legacy Workflows (R/ root + numbered scripts)
-          - Original 01-07 workflow scripts (preserved for reference)
-          - Not recommended for new development
-          - Use orchestrators (Layer 7) and modules (Layer 8) instead
+ Layer 9: Debug Tools (R/debug/)
+          - Individual module runners for testing and development
+          - Run modules one at a time or in custom sequences
+          - Convenience functions for debugging specific pipeline stages
+
+ LEGACY: Original 01-07 workflow scripts remain in R/ root (preserved for reference)
 
 ================================================================================
- TOTAL LOADED: 113 functions + 1 constant across 21 modules
+ TOTAL LOADED: 120+ functions across 27+ modules
  VALIDATION: 2-module system (data validation + execution reporting)
- ORCHESTRATION: 1 of 3 chunks implemented
+ ORCHESTRATION: All 3 chunks fully modularized
 ================================================================================
 
  Ready to run:
-   • Orchestrating functions: run_ingest_standardize()
-   • Legacy workflow scripts: 01-07 (interactive/debug)
+   • Production Orchestrators:
+     - run_ingest_standardize()     # Chunk 1
+     - run_cpn_template()           # Chunk 2
+     - run_finalize_to_report()     # Chunk 3
+   
+   • Debug Module Runners:
+     - source("R/debug/module_runner.R")
+     - run_module_ingestion()
+     - run_module_standardization()
+     - run_module_cpn_template()
+     - run_module_finalize_cpn()
+     - run_module_summary_stats()
+     - run_module_plotting()
+     - run_module_report_release()
+     - run_all_modules()            # Full pipeline with pauses
 
- Usage:
+ Usage (Production):
    source('R/functions/load_all.R')
-   result <- run_ingest_standardize(verbose = TRUE)
+   r1 <- run_ingest_standardize(verbose = TRUE)
+   r2 <- run_cpn_template(r1$ingest_standardize$kpro_master, verbose = TRUE)
+   # [User edits template]
+   r3 <- run_finalize_to_report(verbose = TRUE)
+
+ Usage (Debug):
+   source('R/functions/load_all.R')
+   source('R/debug/module_runner.R')
+   r1 <- run_module_ingestion(verbose = TRUE)
+   r2 <- run_module_standardization(r1, verbose = TRUE)
 
 ================================================================================
 ")
