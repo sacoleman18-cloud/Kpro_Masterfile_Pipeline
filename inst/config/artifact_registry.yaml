@@ -2912,9 +2912,9 @@ artifacts:
     type: summary_stats
     workflow: summary_stats
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/rds/summary_data_20260207.rds
-    file_hash_sha256: a7adfc42fd0131eda2bb9133f86b6fbbc53c302a8b2824b2b1a2e70dc28122d5
-    file_size_bytes: 2114.0
-    created_utc: '2026-02-07T19:50:42Z'
+    file_hash_sha256: d444b401523fc2e402c23ddeca03af113536fd5f3229b91e2614ca6c4341688b
+    file_size_bytes: 2118.0
+    created_utc: '2026-02-07T20:58:06Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -2926,9 +2926,9 @@ artifacts:
     type: plot_objects
     workflow: exploratory_plots
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/rds/plot_objects_20260207.rds
-    file_hash_sha256: bc2afc2baeecd4ac78b54b47ce0ff682e7ab09b7b8f631c2f5240d4f9c4667e5
-    file_size_bytes: 1809481.0
-    created_utc: '2026-02-07T19:51:01Z'
+    file_hash_sha256: abd57dd19f7353d94244da327b89be5c9c8f320d8de98699e4447150437fa505
+    file_size_bytes: 1818430.0
+    created_utc: '2026-02-07T20:58:22Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -2953,4 +2953,58 @@ artifacts:
       study_id: SchmeeckleBatStudy
       n_files: 34
       zip_size_bytes: 5138299.0
-last_modified_utc: '2026-02-07T19:51:42Z'
+  CallsPerNight_final_20260207_145754:
+    name: CallsPerNight_final_20260207_145754
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260207_145754.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-07T20:57:55Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  CallsPerNight_final_20260207_145806:
+    name: CallsPerNight_final_20260207_145806
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260207_145806.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-07T20:58:06Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+  kpro_release_SchmeeckleBatStudy_20260207_145843:
+    name: kpro_release_SchmeeckleBatStudy_20260207_145843
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260207_145843.zip
+    file_hash_sha256: 81d6c8ff2e78302b2b6a17ea9d329b6d26fc535368b7190e1a2b2a864ab9e806
+    file_size_bytes: 5144931.0
+    created_utc: '2026-02-07T20:58:48Z'
+    pipeline_version: '2.1'
+    input_artifacts:
+    - kpro_master
+    - cpn_final
+    metadata:
+      study_id: SchmeeckleBatStudy
+      n_files: 35
+      zip_size_bytes: 5144931.0
+last_modified_utc: '2026-02-07T20:58:48Z'
