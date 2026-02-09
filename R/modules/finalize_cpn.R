@@ -78,7 +78,7 @@
 #
 # CHANGELOG
 # ---------
-# 2026-02-08: Extracted from run_finalize_to_report.R as standalone module
+# 2026-02-08: Extracted from Phase 3 (run_phase3_analysis_reporting) as standalone module
 # 2026-02-08: Phase 1 DRY refactoring — Template loading & edit tracking
 
 
@@ -217,7 +217,7 @@ finalize_cpn <- function(kpro_master = NULL,
   
   if (length(missing_columns) > 0) {
     stop(sprintf(
-      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream workflows:\n  - DateTime_local & Hour_local: created by run_ingest_standardize() (Workflow 02)\n  - species: created by run_cpn_template() (Workflow 03)\n  \n  To remediate:\n  1. Check that both workflows completed without errors\n  2. Verify kpro_master checkpoint files exist in outputs/checkpoints/\n  3. Review pipeline logs for any warnings or failures in Workflows 02-03\n  4. Ensure input data contains datetime and species identification columns",
+      "Schema validation failed: Required columns missing from kpro_master: %s\n  These columns should have been created in upstream phases:\n  - DateTime_local & Hour_local: created by run_phase1_data_preparation() (Phase 1)\n  - species: created by run_phase2_template_generation() (Phase 2)\n  \n  To remediate:\n  1. Verify Phase 1 (Data Preparation) completed without errors\n  2. Verify Phase 2 (Template Generation) completed without errors\n  3. Verify kpro_master checkpoint files exist in outputs/checkpoints/\n  4. Review logs/ for any warnings or failures in Phases 1-2\n  5. Ensure input data contains datetime and species identification columns",
       paste(missing_columns, collapse = ", ")
     ))
   }

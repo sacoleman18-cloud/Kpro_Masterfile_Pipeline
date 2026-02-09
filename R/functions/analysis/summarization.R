@@ -26,9 +26,9 @@
 #
 # 2. SCHEMA CONTRACT ENFORCEMENT
 #    - All functions expect columns created by upstream workflows
-#    - species column: created in Workflow 03 (run_cpn_template)
-#    - Hour_local column: created in Workflow 02 (run_ingest_standardize)
-#    - Night column: created in Workflow 02 (run_ingest_standardize)
+#    - species column: created in Module 3 (run_phase2_template_generation)
+#    - Hour_local column: created in Module 2 (run_phase1_data_preparation)
+#    - Night column: created in Module 2 (run_phase1_data_preparation)
 #
 # 3. HELPER FUNCTIONS VS WORKFLOW FUNCTIONS
 #    - Helper functions (reused multiple times): CAN have parameters
@@ -106,9 +106,9 @@
 # kpro_master <- load_most_recent_checkpoint("^02_kpro_master_.*\\.csv$")
 #
 # # CRITICAL: kpro_master must have these columns created upstream:
-# #   - species: created in Workflow 03 via create_unified_species_column()
-# #   - Hour_local: created in Workflow 02 via add_temporal_columns()
-# #   - Night: created in Workflow 02 via standardization
+# #   - species: created in Module 3 via create_unified_species_column()
+# #   - Hour_local: created in Module 2 via add_temporal_columns()
+# #   - Night: created in Module 2 via standardization
 #
 # # Generate summaries (deterministic - no parameters)
 # detector_summary <- create_detector_activity_summary(cpn_final)
@@ -133,7 +133,7 @@
 #             - All functions now expect deterministically-created columns from upstream
 # 2026-02-05: DOCUMENTATION FIX - Updated header to match 02_documentation_standards.md
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
-# 2024-12-29: Added new summary functions for Workflow 05
+# 2024-12-29: Added new summary functions for Module 5
 # 2024-12-26: Initial CODING_STANDARDS compliant version
 #
 # =============================================================================

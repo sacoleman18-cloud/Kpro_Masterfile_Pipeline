@@ -79,8 +79,8 @@
 #
 # WORKFLOW INTEGRATION
 # --------------------
-# This module is used in Workflow 02 (Standardization) and Chunk 2 (CPN Template):
-#   1. raw_combined (from Workflow 01) -> detect_row_schema()
+# This module is used in Module 2 (Standardization) and Phase 2 (CPN Template):
+#   1. raw_combined (from Module 1) -> detect_row_schema()
 #   2. raw_with_schemas -> standardize_kpro_schema() -> unified_data
 #   3. unified_data -> convert_datetime_to_cst() -> enforce_unified_schema()
 #   4. validated_data -> finalize_master_columns() -> kpro_master

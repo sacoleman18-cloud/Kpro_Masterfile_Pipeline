@@ -42,7 +42,7 @@
 # SPECIES COLUMN NOTE
 # -------------------
 # All functions in this module use the unified `species` column created
-# in Workflow 03. This column contains either:
+# in Module 3. This column contains either:
 #   - auto_id values (if user chose automatic ID only)
 #   - manual_id values with auto_id fallback (if user chose manual ID path)
 #
@@ -64,7 +64,7 @@
 # CHANGELOG
 # ---------
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
-# 2026-02-01: Confirmed usage in run_finalize_to_report.R (Chunk 3, Workflow 06)
+# 2026-02-08: Confirmed usage in run_phase3_analysis_reporting() (Phase 3, Module 6)
 # 2025-01-07: Updated to use unified `species` column (was auto_id)
 # 2024-12-30: Initial creation with CODING_STANDARDS compliance
 #
@@ -84,7 +84,7 @@
 #'
 #' @param master_data Data frame. Must contain a `species` column with
 #'   species identification codes (unified from auto_id or manual_id
-#'   in Workflow 03). Each row represents one bat call.
+#'   in Module 3). Each row represents one bat call.
 #' @param top_n Integer or NULL. If specified, only show the top N species
 #'   by total calls. Default is NULL (show all species).
 #' @param exclude_noid Logical. If TRUE (default), exclude NoID and
@@ -474,7 +474,7 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #' Shows when different species are most active during the night.
 #' 
 #' DETERMINISTIC DESIGN: This function expects Hour_local column to exist,
-#' created deterministically by Workflow 02. No conditional column creation.
+#' created deterministically by Module 2. No conditional column creation.
 #'
 #' @param master_data Data frame. Must contain columns:
 #'   - species: Character. Species identification code.
@@ -515,7 +515,7 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #'
 #' @examples
 #' \dontrun{
-#' # Hour_local must exist from Workflow 02
+#' # Hour_local must exist from Module 2
 #' p <- plot_species_hourly_profile(kpro_master)
 #'
 #' # More species

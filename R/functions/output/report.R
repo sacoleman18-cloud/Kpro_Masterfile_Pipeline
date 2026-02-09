@@ -52,8 +52,8 @@ library(quarto)
 #' objects. This function is read-only with respect to analytical results—
 #' no computation or transformation occurs.
 #'
-#' @param all_summaries List.  Summary data from Workflow 05 (or RDS path)
-#' @param all_plots List.  Plot objects from Workflow 06 (or RDS path)
+#' @param all_summaries List.  Summary data from Module 5 (or RDS path)
+#' @param all_plots List.  Plot objects from Module 6 (or RDS path)
 #' @param study_params_path Character. Path to study_parameters.yaml
 #' @param template_path Character. Path to .qmd template
 #' @param output_dir Character. Directory for rendered output

@@ -104,7 +104,7 @@
 #
 # CHANGELOG
 # ---------
-# 2026-02-08: Extracted from run_finalize_to_report.R as standalone module
+# 2026-02-08: Extracted from Phase 3 (run_phase3_analysis_reporting) as standalone module
 
 
 #' Generate Exploratory Plots

@@ -44,7 +44,7 @@
 # CHANGELOG
 # ---------
 # 2026-02-01: Verified deterministic behavior - no code-level variability parameters
-# 2026-02-01: Confirmed integration with run_finalize_to_report.R (Chunk 3, Workflow 07)
+# 2026-02-08: Confirmed integration with run_phase3_analysis_reporting() (Phase 3, Module 7)
 # 2026-01-12: Initial version
 # =============================================================================
 
@@ -77,10 +77,10 @@ RELEASE_DIR <- here::here("results", "releases")
 #' projects (e.g., NB GAMM Bat project) without any renaming. 
 #'
 #' @param study_id Character. Study identifier (used in zip filename)
-#' @param calls_per_night_final Data frame. Final CPN data from Workflow 04
-#' @param kpro_master Data frame. Master detection file from Workflow 02
-#' @param all_summaries List. Summary data from Workflow 05 (optional)
-#' @param all_plots List. Plot objects from Workflow 06 (optional)
+#' @param calls_per_night_final Data frame. Final CPN data from Module 4
+#' @param kpro_master Data frame. Master detection file from Module 2
+#' @param all_summaries List. Summary data from Module 5 (optional)
+#' @param all_plots List. Plot objects from Module 6 (optional)
 #' @param report_path Character. Path to rendered HTML report (optional)
 #' @param study_params List. Study parameters from YAML (optional, auto-loaded)
 #' @param output_dir Character. Directory for output zip

@@ -61,9 +61,9 @@
 #
 # WORKFLOW INTEGRATION
 # --------------------
-# This module is used across multiple workflows:
-#   - Workflow 02 (Standardization): convert_datetime_to_local()
-#   - Workflow 04 (CPN Finalization): parse_datetime_safe(), extract_time(), parse_date_safe()
+# This module is used across multiple modules:
+#   - Module 2 (Standardization): convert_datetime_to_local()
+#   - Module 4 (CPN Finalization): parse_datetime_safe(), extract_time(), parse_date_safe()
 #   - Edit tracking: format_datetime_for_log()
 #
 # FUNCTIONS PROVIDED
@@ -100,7 +100,7 @@
 #             - Added format_datetime_for_csv() for MM/DD/YYYY HH:MM:SS export format
 #             - Added parse_datetime_local_from_csv() to parse CSV datetime back to POSIXct
 #             - Fixes issue where DateTime_local was exported in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
-#             - Fixes error in run_cpn_template where force_tz() failed on character column
+             - Fixes error in run_phase2_template_generation() where force_tz() failed on character column
 #             - Ensures DateTime_local maintains timezone through CSV round-trip
 # 2026-02-05: DOCUMENTATION FIX - Standards compliance update
 #             - Fixed MODULE header format (removed path prefix)
@@ -116,7 +116,7 @@
 #             - Renamed file from datetime_conversion.R to datetime_helpers.R
 # 2026-01-30: Refactored to use centralized assert_* functions from validation.R
 # 2026-01-26: Added verbose parameter to convert_datetime_to_local() (default: FALSE)
-# 2024-12-29: Added template comparison helpers for Workflow 04
+# 2024-12-29: Added template comparison helpers for Module 4
 # 2024-12-27: Made target_tz REQUIRED (no default timezone)
 #
 # ==============================================================================
@@ -131,7 +131,7 @@
 #' @description
 #' Parses date and time columns, combines them into datetime, and converts from 
 #' UTC to user-specified timezone. Creates both UTC and local datetime columns
-#' with derived time components. Used in Workflow 02 standardization.
+#' with derived time components. Used in Module 2 standardization.
 #'
 #' @param df Data frame containing date and time columns
 #' @param target_tz Target timezone from YAML config (REQUIRED)
@@ -363,7 +363,7 @@ convert_datetime_to_local <- function(df,
 #'
 #' @description
 #' Simple type checker to determine if an object inherits from the Date class.
-#' Used in Workflow 04 for validating column types before joins in template
+#' Used in Module 4 for validating column types before joins in template
 #' comparison logic.
 #'
 #' @param x Object to check (any type)
@@ -492,7 +492,7 @@ parse_datetime_safe <- function(dt_string) {
 #' @description
 #' Parses date strings in multiple formats commonly produced by Excel or
 #' user editing. Handles mixed date formats gracefully. Used for parsing
-#' Night column in template comparison (Workflow 04).
+#' Night column in template comparison (Module 4).
 #'
 #' @param date_string Character date string to parse, Date object, or NA
 #'
@@ -564,7 +564,7 @@ parse_date_safe <- function(date_string) {
 #' @description
 #' Parses a full datetime string and extracts just the time component as
 #' HH:MM:SS (24-hour format). Used for comparing recording times between
-#' original and edited templates when checking for manual edits in Workflow 04.
+#' original and edited templates when checking for manual edits in Module 4.
 #'
 #' @param datetime_str Character scalar datetime string, or NA
 #'
@@ -771,7 +771,7 @@ parse_datetime_columns <- function(df, target_tz, verbose = FALSE) {
 #' @description
 #' Formats a parsed POSIXct datetime for display in the CallsPerNight edit
 #' log. Returns consistent 24-hour format without seconds for readability.
-#' Used in Workflow 04 edit tracking.
+#' Used in Module 4 edit tracking.
 #'
 #' @param dt_parsed POSIXct datetime object (parsed), or NA
 #' @param dt_string Character original datetime string (for reference, unused)

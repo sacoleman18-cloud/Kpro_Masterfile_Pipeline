@@ -402,8 +402,8 @@ generate_validation_html <- function(context, output_path) {
   # ============================================================================
   
   # Customize labels based on which workflow is running
-  # Workflow 01: Ingestion (files -> rows)
-  # Workflow 02: Transformation (input rows -> output rows)
+  # Module 1: Ingestion (files -> rows)
+  # Module 2: Transformation (input rows -> output rows)
   
   if (context$workflow == "02") {
     rows_label <- "Output Rows"
@@ -516,7 +516,7 @@ generate_validation_html <- function(context, output_path) {
   # BUILD WORKFLOW-SPECIFIC SECTIONS
   # ============================================================================
   
-  # Build data quality section (if workflow 01)
+  # Build data quality section (if module 1)
   data_quality_section <- if (context$workflow == "01") {
     sprintf('
   <h2>Data Quality</h2>
@@ -541,7 +541,7 @@ generate_validation_html <- function(context, output_path) {
     ""
   }
   
-  # Build transformation section (if workflow 02)
+  # Build transformation section (if module 2)
   transformation_section <- if (context$workflow == "02") {
     sprintf('
   <h2>Transformations</h2>

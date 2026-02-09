@@ -35,7 +35,7 @@
 #    - Domain-aware where appropriate
 #
 # 3. Schema enforcement (enforce_* functions)
-#    - enforce_unified_schema: For Workflow 02 output (kpro_master)
+#    - enforce_unified_schema: For Module 2 output (kpro_master)
 #    - Returns new tibbles, never modifies in place
 #
 # 4. Quality checks (check_* functions)
@@ -103,7 +103,7 @@
 # -----
 # # Universal assertions
 # assert_data_frame(df)
-# assert_columns_exist(df, c("Detector", "Night"), source_hint = "Workflow 03")
+# assert_columns_exist(df, c("Detector", "Night"), source_hint = "Module 3")
 #
 # # Domain validators
 # validate_cpn_data(calls_per_night_df)
@@ -785,7 +785,7 @@ validate_cpn_data <- function(cpn_data,
 #'
 #' @description
 #' Domain-specific validator for Master file data. Checks for standard
-#' master columns from Workflow 02.
+#' master columns from Module 2.
 #'
 #' Standards Reference: 04_data_standards.md §2.2
 #'
@@ -860,7 +860,7 @@ enforce_unified_schema <- function(df, verbose = FALSE) {
     df,
     required_cols = required_cols,
     arg_name = "Master data for schema enforcement",
-    source_hint = "run_ingest_standardize()"
+    source_hint = "run_phase1_data_preparation()"
   )
   
   # Ensure key columns are character
