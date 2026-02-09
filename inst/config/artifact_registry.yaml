@@ -6,7 +6,7 @@ artifacts:
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/summary_stats/detector_summary_20260209.csv
     file_hash_sha256: 8e9cca734087cb732940d3a3ca5bcb21b5e707101ab40e95cdbafd89174062c7
     file_size_bytes: 1208.0
-    created_utc: '2026-02-09T21:57:38Z'
+    created_utc: '2026-02-09T23:22:48Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -20,7 +20,7 @@ artifacts:
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/summary_stats/study_summary_20260209.csv
     file_hash_sha256: 3f5bd2c84286980d1e6d2c2654eeaac4e244c94dbdc732481fe8715f917b71d6
     file_size_bytes: 173.0
-    created_utc: '2026-02-09T21:57:38Z'
+    created_utc: '2026-02-09T23:22:48Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -35,7 +35,7 @@ artifacts:
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/summary_stats/species_summary_20260209.csv
     file_hash_sha256: b27a2d63c985deb80be239aaa142939d1affe40b7ac1c87bb03535747b992457
     file_size_bytes: 906.0
-    created_utc: '2026-02-09T21:57:38Z'
+    created_utc: '2026-02-09T23:22:48Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -50,7 +50,7 @@ artifacts:
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/summary_stats/species_accumulation_20260209.csv
     file_hash_sha256: a345b9b5ffe0e1f605c7fce63feb92f95b7ac223cb4044f7dc7ce5a316555156
     file_size_bytes: 168.0
-    created_utc: '2026-02-09T21:57:38Z'
+    created_utc: '2026-02-09T23:22:48Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -65,7 +65,7 @@ artifacts:
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/summary_stats/hourly_summary_overall_20260209.csv
     file_hash_sha256: 93143f27b6fdded765cf3ca1675609e07c7b57798db27de6b161caf8fbc56a0a
     file_size_bytes: 243.0
-    created_utc: '2026-02-09T21:57:38Z'
+    created_utc: '2026-02-09T23:22:48Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
@@ -79,11 +79,11 @@ artifacts:
     file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/summary_stats/variance_components_20260209.csv
     file_hash_sha256: f28ab830adbfbf3b2563082fac7d58c7fc8db870f89d75f1a00c513efa8262c1
     file_size_bytes: 228.0
-    created_utc: '2026-02-09T21:57:38Z'
+    created_utc: '2026-02-09T23:22:48Z'
     pipeline_version: '2.1'
     input_artifacts: ~
     metadata:
       n_components: 7
       n_rows: 7
       n_cols: 2
-last_modified_utc: '2026-02-09T21:57:38Z'
+last_modified_utc: '2026-02-09T23:22:48Z'

@@ -1343,7 +1343,7 @@ build_excel_from_csv <- function(csv_files,
     registry <- register_artifact(
       registry = registry,
       artifact_name = artifact_name,
-      artifact_type = "summary_xlsx",
+      artifact_type = "summary_stats",
       workflow = workflow,
       file_path = output_file,
       metadata = metadata
