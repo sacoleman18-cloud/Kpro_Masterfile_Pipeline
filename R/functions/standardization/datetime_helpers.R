@@ -100,7 +100,7 @@
 #             - Added format_datetime_for_csv() for MM/DD/YYYY HH:MM:SS export format
 #             - Added parse_datetime_local_from_csv() to parse CSV datetime back to POSIXct
 #             - Fixes issue where DateTime_local was exported in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
-             - Fixes error in run_phase2_template_generation() where force_tz() failed on character column
+#             - Fixes error in run_phase2_template_generation() where force_tz() failed on character column
 #             - Ensures DateTime_local maintains timezone through CSV round-trip
 # 2026-02-05: DOCUMENTATION FIX - Standards compliance update
 #             - Fixed MODULE header format (removed path prefix)
