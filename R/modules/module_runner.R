@@ -335,8 +335,13 @@ run_module_plotting <- function(summary_stats_result, verbose = FALSE) {
   study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
   kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
   
-  # Load calls_per_night_final from checkpoint
-  calls_per_night_final <- load_cpn_final(verbose = verbose)
+  # Load calls_per_night_final from results
+  cpn_final_file <- find_most_recent_file(
+    directory = here::here("results", "csv"),
+    pattern = "^CallsPerNight_final_.*\\.csv$",
+    hint = "Run run_module_finalize_cpn() first to generate CallsPerNight_final"
+  )
+  calls_per_night_final <- safe_read_csv(cpn_final_file)
   
   result <- module_plotting(
     calls_per_night_final = calls_per_night_final,
@@ -385,7 +390,12 @@ run_module_report_release <- function(plotting_result,
   kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
   
   # Load calls_per_night_final from checkpoint
-  calls_per_night_final <- load_cpn_final(verbose = verbose)
+  cpn_final_file <- find_most_recent_file(
+    directory = here::here("results", "csv"),
+    pattern = "^CallsPerNight_final_.*\\.csv$",
+    hint = "Run run_module_finalize_cpn() first to generate CallsPerNight_final"
+  )
+  calls_per_night_final <- safe_read_csv(cpn_final_file)
   
   result <- module_report_release(
     calls_per_night_final = calls_per_night_final,
