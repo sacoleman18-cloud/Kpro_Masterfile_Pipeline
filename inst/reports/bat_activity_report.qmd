@@ -375,7 +375,7 @@ cat("Distribution of bat calls by hour across the study period.\n\n")
 
 all_summaries$hourly_summary_overall %>%
   mutate(
-    Hour_Display = sprintf("%02d:00", Hour),
+    Hour_Display = sprintf("%02d:00", as.integer(Hour_local)),
     Pct_Display = sprintf("%.1f%%", pct_of_total)
   ) %>%
   select(Hour = Hour_Display, Calls = n_calls, `% of Total` = Pct_Display) %>%
