@@ -209,7 +209,7 @@ run_phase2_template_generation <- function(phase1_result = NULL,
     validation_html_paths = module3_result$validation_html_paths,
     next_phase = "Phase 3: Analysis & Reporting (run_phase3_analysis_reporting)",
     human_action_required = TRUE,
-    human_action_message = sprintf("Edit template: %s", basename(template_edit_path)),
+    human_action_message = sprintf("Edit template: %s", if(!is.null(template_edit_path) && is.character(template_edit_path)) basename(template_edit_path) else "template_file.csv"),
     
     # Raw module result (for advanced use)
     module_results = list(

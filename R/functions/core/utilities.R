@@ -1295,7 +1295,7 @@ render_report <- function(qmd_template, output_file, output_dir = "results/repor
   })
   
   if (verbose && result$success) {
-    message(sprintf("  [OK] Report rendered: %s", if(!is.null(result$output_path) && !is.na(result$output_path)) basename(result$output_path) else "report.html"))
+    message(sprintf("  [OK] Report rendered: %s", if(!is.null(result$output_path) && !is.na(result$output_path) && is.character(result$output_path)) basename(result$output_path) else "report.html"))
   }
   
   result

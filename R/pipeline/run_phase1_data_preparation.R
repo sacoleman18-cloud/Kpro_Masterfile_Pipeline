@@ -154,7 +154,7 @@ run_phase1_data_preparation <- function(verbose = FALSE) {
     cat("========================================\n")
     cat(sprintf("  Rows: %s\n", format(metadata$n_rows, big.mark = ",")))
     cat(sprintf("  Detectors: %d\n", metadata$n_detectors))
-    cat(sprintf("  Checkpoint: %s\n", basename(checkpoint_path)))
+    cat(sprintf("  Checkpoint: %s\n", if(!is.null(checkpoint_path) && is.character(checkpoint_path)) basename(checkpoint_path) else "checkpoint.csv"))
     cat("========================================\n")
     cat("\n")
     cat("NEXT: Run Phase 2 (Template Generation)\n")

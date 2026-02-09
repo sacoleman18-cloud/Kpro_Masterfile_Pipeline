@@ -264,7 +264,7 @@ module_report_release <- function(calls_per_night_final,
         validation_context,
         event_type = "report_generated",
         description = "Quarto report rendered",
-        details = list(file = if(!is.null(report_html_path) && !is.na(report_html_path)) basename(report_html_path) else "report.html")
+        details = list(file = if(!is.null(report_html_path) && !is.na(report_html_path) && is.character(report_html_path)) basename(report_html_path) else "report.html")
       )
     } else {
       warning(sprintf("Report rendering failed: %s", render_result$message))
@@ -303,15 +303,15 @@ module_report_release <- function(calls_per_night_final,
     if (release_result$success) {
       release_zip_path <- release_result$zip_path
       
-      if (verbose) message(sprintf("  [OK] Release bundle: %s", if(!is.null(release_zip_path) && !is.na(release_zip_path)) basename(release_zip_path) else "bundle.zip"))
+      if (verbose) message(sprintf("  [OK] Release bundle: %s", if(!is.null(release_zip_path) && !is.na(release_zip_path) && is.character(release_zip_path)) basename(release_zip_path) else "bundle.zip"))
       
       validation_context <- log_validation_event(
         validation_context,
         event_type = "release_created",
         description = "Release bundle created",
         details = list(
-          file = if(!is.null(release_zip_path) && !is.na(release_zip_path)) basename(release_zip_path) else "bundle.zip",
-          size_kb = if(!is.null(release_zip_path) && !is.na(release_zip_path) && file.exists(release_zip_path)) file.size(release_zip_path) / 1024 else NA
+          file = if(!is.null(release_zip_path) && !is.na(release_zip_path) && is.character(release_zip_path)) basename(release_zip_path) else "bundle.zip",
+          size_kb = if(!is.null(release_zip_path) && !is.na(release_zip_path) && is.character(release_zip_path) && file.exists(release_zip_path)) file.size(release_zip_path) / 1024 else NA
         )
       )
     } else {

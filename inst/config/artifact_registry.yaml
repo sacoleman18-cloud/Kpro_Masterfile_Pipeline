@@ -1,18 +1,18 @@
 artifacts:
-  plot_objects_20260209:
-    name: plot_objects_20260209
-    type: plot_objects
-    workflow: exploratory_plots
-    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/rds/plot_objects_20260209.rds
-    file_hash_sha256: 10c72fb95214b222a42b582fb3912e4cf605e2e3fe010910302f3def6eb03da4
-    file_size_bytes: 1529995.0
-    created_utc: '2026-02-09T23:50:10Z'
+  kpro_release_SchmeeckleBatStudy_20260209_175455:
+    name: kpro_release_SchmeeckleBatStudy_20260209_175455
+    type: release_bundle
+    workflow: release
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260209_175455.zip
+    file_hash_sha256: bc007e095bf6556bc303798be0cab320e15fbdc1b4efaea8d23851bf5b32110f
+    file_size_bytes: 4863251.0
+    created_utc: '2026-02-09T23:55:00Z'
     pipeline_version: '2.1'
-    input_artifacts: ~
+    input_artifacts:
+    - kpro_master
+    - cpn_final
     metadata:
-      total_plots: 26.0
-      quality_plots: 8
-      detector_plots: 7
-      species_plots: 5
-      temporal_plots: 6
-last_modified_utc: '2026-02-09T23:50:10Z'
+      study_id: SchmeeckleBatStudy
+      n_files: 35
+      zip_size_bytes: 4863251.0
+last_modified_utc: '2026-02-09T23:55:00Z'
