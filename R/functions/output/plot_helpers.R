@@ -20,27 +20,58 @@
 # Internal Dependencies:
 #   - None (this is the base layer for plotting)
 #
-# CONTENTS
-# --------
-# Theme Functions:
-#   - theme_kpro()
+# FUNCTIONS PROVIDED
+# ------------------
 #
-# Color Palette Functions:
-#   - kpro_palette_cat()
-#   - kpro_palette_seq()
-#   - kpro_status_colors()
+# Theme Functions - Standard ggplot2 theme configuration:
 #
-# Validation Functions:
-#   - validate_plot_input()
+#   - theme_kpro():
+#       Uses packages: ggplot2 (theme_minimal, element_* functions, margin, rel)
+#       Calls internal: none
+#       Purpose: Return publication-ready ggplot2 theme object with KPro styling
 #
-# Formatting Utilities:
-#   - format_number()
-#   - format_pct()
+# Color Palette Functions - Colorblind-accessible color schemes:
+#
+#   - kpro_palette_cat():
+#       Uses packages: base R (list operations)
+#       Calls internal: none
+#       Purpose: Return categorical color palette (colorblind-safe, N colors)
+#
+#   - kpro_palette_seq():
+#       Uses packages: base R (list operations)
+#       Calls internal: none
+#       Purpose: Return sequential color palette (low to high values)
+#
+#   - kpro_status_colors():
+#       Uses packages: base R (list operations)
+#       Calls internal: none
+#       Purpose: Return status-specific colors (success, warning, error)
+#
+# Validation Functions - Input checking:
+#
+#   - validate_plot_input():
+#       Uses packages: base R (is.data.frame, inherits, stop)
+#       Calls internal: none
+#       Purpose: Validate data frame and required columns exist
+#
+# Formatting Utilities - Number and percentage formatting:
+#
+#   - format_number():
+#       Uses packages: base R (format, round, scales)
+#       Calls internal: none
+#       Purpose: Format counts/decimals with thousands separator and precision
+#
+#   - format_pct():
+#       Uses packages: base R (format, round, scales)
+#       Calls internal: none
+#       Purpose: Format percentages with specified decimal places
 #
 # USAGE
 # -----
 # This file is sourced automatically by load_all.R. All plot_*.R files
 # depend on functions defined here.
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

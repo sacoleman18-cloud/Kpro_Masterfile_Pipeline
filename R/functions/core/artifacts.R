@@ -26,24 +26,69 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Registry Management (5 functions):
-#   - init_artifact_registry(): Create/load registry
-#   - register_artifact(): Add artifact to registry
-#   - get_artifact(): Retrieve artifact metadata
-#   - list_artifacts(): List all artifacts (optionally filtered)
-#   - get_latest_artifact(): Get most recent artifact by type
 #
-# Hashing & Provenance (3 functions): 
-#   - hash_file(): Compute SHA256 of file
-#   - hash_dataframe(): Compute deterministic hash of data frame
-#   - verify_artifact(): Check if artifact matches registered hash
+# Registry Management - Artifact tracking and discovery:
 #
-# RDS Management (1 function):
-#   - save_and_register_rds(): Save RDS and register in one atomic operation
+#   - init_artifact_registry():
+#       Uses packages: yaml (read_yaml), here (here), base R (file operations)
+#       Calls internal: none (YAML I/O + filesystem)
+#       Purpose: Create/load artifact registry with all metadata
 #
-# RDS Discovery (2 functions):
-#   - discover_pipeline_rds(): Find summary_data and plot_objects RDS files
-#   - validate_rds_structure(): Validate loaded RDS objects have required elements
+#   - register_artifact():
+#       Uses packages: digest (sha256), base R (file operations)
+#       Calls internal: none (list manipulation)
+#       Purpose: Add artifact to registry with SHA256 hash and metadata
+#
+#   - get_artifact():
+#       Uses packages: base R (list operations)
+#       Calls internal: none
+#       Purpose: Retrieve single artifact metadata by ID
+#
+#   - list_artifacts():
+#       Uses packages: base R (data.frame operations, do.call)
+#       Calls internal: none
+#       Purpose: List all artifacts (optionally filtered by type/workflow)
+#
+#   - get_latest_artifact():
+#       Uses packages: base R (list operations, max, which)
+#       Calls internal: none
+#       Purpose: Get most recent artifact by type (sorted by timestamp)
+#
+# Hashing & Provenance - Deterministic hashing:
+#
+#   - hash_file():
+#       Uses packages: digest (sha256), base R (file operations)
+#       Calls internal: none (pure I/O)
+#       Purpose: Compute SHA256 hash of file for integrity checking
+#
+#   - hash_dataframe():
+#       Uses packages: digest (sha256), base R (data.frame operations)
+#       Calls internal: none
+#       Purpose: Compute deterministic hash of data frame (sorted rows)
+#
+#   - verify_artifact():
+#       Uses packages: digest (sha256), base R (file operations)
+#       Calls internal: artifacts.R (hash_file)
+#       Purpose: Check if artifact matches registered hash
+#
+# RDS Management - Atomic save + register operations:
+#
+#   - save_and_register_rds():
+#       Uses packages: base R (saveRDS, file operations), digest (sha256)
+#       Calls internal: artifacts.R (register_artifact, hash_file)
+#       Purpose: Save RDS file and register with metadata atomically
+#
+# RDS Discovery - Load and validate pipeline outputs:
+#
+#   - discover_pipeline_rds():
+#       Uses packages: base R (list.files, grep)
+#       Calls internal: none (filesystem scanning)
+#       Purpose: Discover summary_data and plot_objects RDS files
+#
+#   - validate_rds_structure():
+#       Uses packages: base R (list operations, all, names)
+#       Calls internal: none (validation only)
+#       Purpose: Validate loaded RDS has required elements/structure
 #
 # USAGE
 # -----

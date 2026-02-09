@@ -24,21 +24,51 @@
 #   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
 #                     format_number()
 #
-# CONTENTS
-# --------
-# Overall Composition:
-#   - plot_species_composition_bar(): Total calls by species (study-wide)
-#   - plot_species_by_detector_heatmap(): Species × Detector matrix
+# FUNCTIONS PROVIDED
+# ------------------
 #
-# Sampling Adequacy:
-#   - plot_species_accumulation_curve(): Cumulative species over time
+# Overall Composition - Study-wide species summaries:
 #
-# Activity Patterns:
-#   - plot_species_hourly_profile(): When different species are active
+#   - plot_species_composition_bar():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, coord_flip),
+#                      dplyr (count, arrange, mutate)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Horizontal bar chart of total calls by species (ordered high to low)
 #
-# Data Quality:
-#   - plot_noid_proportion(): Unidentified call rates by detector
+#   - plot_species_by_detector_heatmap():
+#       Uses packages: ggplot2 (ggplot, aes, geom_tile, scale_fill_gradient),
+#                      dplyr (group_by, summarize), tidyr (pivot_wider)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       format_number)
+#       Purpose: Heatmap of species × detector with call counts
 #
+# Sampling Adequacy - Species accumulation over time:
+#
+#   - plot_species_accumulation_curve():
+#       Uses packages: ggplot2 (ggplot, aes, geom_line, geom_point),
+#                      dplyr (group_by, mutate, cumsum)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Line plot of cumulative unique species over study period
+#
+# Activity Patterns - Species-specific temporal patterns:
+#
+#   - plot_species_hourly_profile():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
+#                      dplyr (group_by, summarize, slice_max)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Activity by hour for top N species (subset to prevent crowding)
+#
+# Data Quality - Identification rates:
+#
+#   - plot_noid_proportion():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col),
+#                      dplyr (group_by, summarize, mutate)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_status_colors, format_number)
+#       Purpose: Stacked bar showing ID success rate by detector
 # SPECIES COLUMN NOTE
 # -------------------
 # All functions in this module use the unified `species` column created
@@ -60,6 +90,8 @@
 #
 # # Save plot
 # ggsave("outputs/species_composition.png", p, width = 10, height = 6)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

@@ -68,16 +68,46 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Timezone Conversion (for master data):
-#   - convert_datetime_to_local()      # Main UTC -> local timezone conversion
-#   - is_valid_timezone()              # Timezone validation (internal)
 #
-# Date/DateTime Parsing (for template comparison):
-#   - parse_datetime_safe()            # Parse full datetime strings (multi-format)
-#   - parse_date_safe()                # Parse date strings (multi-format)
-#   - extract_time()                   # Extract time component from datetime
-#   - parse_datetime_local_from_csv()  # Parse DateTime_local from CSV (MM/DD/YYYY HH:MM:SS)
-#   - parse_datetime_columns()         # Parse DateTime_local column in data frame from CSV
+# Timezone Conversion - Master data datetime standardization:
+#
+#   - convert_datetime_to_local():
+#       Uses packages: lubridate (with_tz, force_tz), dplyr (mutate, select)
+#       Calls internal: validation.R (assert_data_frame, assert_columns_exist),
+#                       datetime_helpers.R (is_valid_timezone)
+#       Purpose: Add DateTime_local column by converting UTC to user timezone
+#
+#   - is_valid_timezone():
+#       Uses packages: base R (is.character, na.omit)
+#       Calls internal: none (uses OlsonNames())
+#       Purpose: Validate timezone string against R's OlsonNames
+#
+# Date/DateTime Parsing - Multi-format flexible parsing:
+#
+#   - parse_datetime_safe():
+#       Uses packages: lubridate (parse_date_time, mdy_hms, mdy_hm)
+#       Calls internal: validation.R (assert_scalar_string)
+#       Purpose: Parse datetime strings (handles multiple formats, returns NA on failure)
+#
+#   - parse_date_safe():
+#       Uses packages: lubridate (parse_date_time, mdy, as_date)
+#       Calls internal: validation.R (assert_scalar_string)
+#       Purpose: Parse date strings (multi-format, returns NA on failure)
+#
+#   - extract_time():
+#       Uses packages: lubridate (hour, minute, second), base R (sprintf)
+#       Calls internal: none
+#       Purpose: Extract HH:MM:SS time component from datetime (returns character)
+#
+#   - parse_datetime_local_from_csv():
+#       Uses packages: lubridate (mdy_hms)
+#       Calls internal: validation.R (assert_scalar_string)
+#       Purpose: Parse MM/DD/YYYY HH:MM:SS format from CSV (template comparison)
+#
+#   - parse_datetime_columns():
+#       Uses packages: lubridate (mdy_hms), dplyr (mutate)
+#       Calls internal: validation.R (assert_data_frame, assert_columns_exist)
+#       Purpose: Parse DateTime_local column in data frame from CSV import
 #
 # Type Checking:
 #   - is.Date()                        # Check if object is Date class
@@ -88,6 +118,8 @@
 #
 # Debugging:
 #   - summarize_date_formats()         # Analyze date format patterns (internal)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

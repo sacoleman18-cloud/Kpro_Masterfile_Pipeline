@@ -39,12 +39,36 @@
 #   - core/utilities.R: safe_read_csv, log_message
 #   - dplyr: left_join, distinct
 #
-# CONTENTS
-# --------
-#   - load_detector_mapping()
-#   - apply_detector_names()
-#   - validate_detector_mapping()
-#   - generate_mapping_template()
+# FUNCTIONS PROVIDED
+# ------------------
+#
+# Mapping Application - Load user-provided detector names:
+#
+#   - load_detector_mapping():
+#       Uses packages: dplyr (read_csv via utilities.R)
+#       Calls internal: utilities.R (safe_read_csv)
+#       Purpose: Read detector_mapping.csv from data/ directory
+#
+# Detector Name Assignment - Apply mapping to data:
+#
+#   - apply_detector_names():
+#       Uses packages: dplyr (left_join, mutate)
+#       Calls internal: none (assumes pre-loaded mapping)
+#       Purpose: Add Detector column via left join on detector_id
+#
+# Validation - Check mapping completeness:
+#
+#   - validate_detector_mapping():
+#       Uses packages: dplyr (anti_join), base R (warning)
+#       Calls internal: utilities.R (log_message)
+#       Purpose: Warn if data detector_ids missing from mapping (and vice versa)
+#
+# Template Generation - Create user template:
+#
+#   - generate_mapping_template():
+#       Uses packages: readr (write_csv), dplyr (distinct), base R (file operations)
+#       Calls internal: utilities.R (ensure_dir_exists, make_output_path)
+#       Purpose: Discover unique detector_ids and create template CSV for user
 #
 # MAPPING FILE FORMAT
 # -------------------

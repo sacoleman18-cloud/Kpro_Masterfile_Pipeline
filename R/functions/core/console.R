@@ -44,16 +44,37 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Text Helpers:
-#   - center_text()
 #
-# Stage Formatting:
-#   - print_stage_header()
-#   - print_stage_banner()
+# Text Utilities - Center text for formatting:
 #
-# Summary Formatting:
-#   - print_workflow_summary()
-#   - print_pipeline_complete()
+#   - center_text():
+#       Uses packages: base R (nchar, floor, ceiling, strrep, paste0)
+#       Calls internal: none
+#       Purpose: Center text string within fixed width (used by all format functions)
+#
+# Stage Formatting - Single-line stage headers:
+#
+#   - print_stage_header():
+#       Uses packages: base R (message, sprintf)
+#       Calls internal: console.R (center_text)
+#       Purpose: Print stage header in single-line box (stage number + description)
+#
+#   - print_stage_banner():
+#       Uses packages: base R (message, sprintf)
+#       Calls internal: console.R (center_text)
+#       Purpose: Print stage banner in single-line box with verbose gating
+#
+# Workflow Output - Multi-line workflow summaries:
+#
+#   - print_workflow_summary():
+#       Uses packages: base R (message, sprintf, strrep)
+#       Calls internal: console.R (center_text)
+#       Purpose: Print workflow completion summary in double-line box
+#
+#   - print_pipeline_complete():
+#       Uses packages: base R (message, strrep, nchar, ceiling, sprintf)
+#       Calls internal: console.R (center_text)
+#       Purpose: Print final pipeline completion message with double-line box
 #
 # CHANGELOG
 # ---------

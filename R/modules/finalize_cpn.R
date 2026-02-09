@@ -64,20 +64,32 @@
 #   - All stages sequentially: 1 → 2 → 3 → 4 → 5 → 6
 #   - No cross-module dependencies
 #
-# **Depends on (DRY helpers):**
-#   - functions/analysis/callspernight.R: 
-#       - load_and_normalize_template() — *NEW*
-#       - track_template_edits() — *NEW*
-#       - calculate_recording_hours()
-#   - functions/core/utilities.R: log_stage_start, save_checkpoint_and_register
-#   - functions/core/logging.R: log_message, initialize_pipeline_log
-#   - functions/core/console.R: print_stage_banner
-#   - functions/core/config.R: load_study_parameters
-#   - functions/core/artifacts.R: init_stage_validation, log_validation_event
-#   - functions/standardization/datetime_helpers.R: parse_datetime_columns
+# DEPENDENCIES
+# ------------
+# R Packages:
+#   - dplyr: Data manipulation
+#   - readr: CSV I/O
+#   - here: Path management
+#
+# Internal Dependencies:
+#   - R/functions/analysis/callspernight.R (load_and_normalize_template, track_template_edits, calculate_recording_hours)
+#   - R/functions/core/orchestration_helpers.R (log_stage_start, save_checkpoint_and_register, finalize_stage_validation_report)
+#   - R/functions/core/logging.R (log_message, initialize_pipeline_log)
+#   - R/functions/core/console.R (print_stage_banner)
+#   - R/functions/core/config.R (load_study_parameters)
+#   - R/functions/core/artifacts.R (init_artifact_registry)
+#   - R/functions/validation/validation.R (init_stage_validation, log_validation_event)
+#   - R/functions/standardization/datetime_helpers.R (parse_datetime_columns)
+#
+# FUNCTIONS PROVIDED
+# ------------------
+#   - finalize_cpn(): Main module function (exported)
+#     Used by: R/modules/module_runner.R (run_module_finalize_cpn)
+#     Used by: R/pipeline/run_phase3_analysis_reporting.R
 #
 # CHANGELOG
 # ---------
+# 2026-02-09: Updated dependencies to reference orchestration_helpers.R; standardized header format
 # 2026-02-08: Extracted from Phase 3 (run_phase3_analysis_reporting) as standalone module
 # 2026-02-08: Phase 1 DRY refactoring — Template loading & edit tracking
 

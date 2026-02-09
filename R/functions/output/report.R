@@ -19,7 +19,14 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# - generate_quarto_report(): Main function to render report
+#
+# Report Generation - Main Quarto rendering function:
+#
+#   - generate_quarto_report():
+#       Uses packages: quarto (quarto_render), yaml (read_yaml), here (here),
+#                      readr (write_lines), base R (file operations, dir.create)
+#       Calls internal: none (external Quarto rendering)
+#       Purpose: Render .qmd template with pre-computed summaries/plots to HTML
 #
 # USAGE
 # -----

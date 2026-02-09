@@ -24,22 +24,68 @@
 #   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_status_colors(),
 #                     format_number()
 #
-# CONTENTS
-# --------
-# Recording Status Summaries:
-#   - plot_recording_status_summary(): Stacked bar by detector
-#   - plot_recording_status_percent(): 100% stacked bar
-#   - plot_recording_status_overall(): Donut chart (study-wide)
+# FUNCTIONS PROVIDED
+# ------------------
 #
-# Effort Summaries:
-#   - plot_effort_by_detector(): Total hours per detector
-#   - plot_nights_by_detector(): Number of nights per detector
+# Recording Status Summaries - Deployment success rates:
 #
-# Data Completeness:
-#   - plot_data_completeness_calendar(): Calendar heatmap
-#   - plot_missing_nights(): Missing data by detector
-#   - plot_recording_effort_heatmap(): Effort × Night matrix
+#   - plot_recording_status_summary():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, position_stack),
+#                      dplyr (group_by, mutate, arrange)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_status_colors, format_number)
+#       Purpose: Stacked bar of Success/Partial/Fail nights by detector
 #
+#   - plot_recording_status_percent():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, position_fill),
+#                      dplyr (group_by, mutate), scales (percent)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_status_colors, format_number)
+#       Purpose: 100% stacked bar of status percentages by detector
+#
+#   - plot_recording_status_overall():
+#       Uses packages: ggplot2 (ggplot, aes, geom_bar, coord_polar),
+#                      dplyr (group_by, summarize)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_status_colors)
+#       Purpose: Donut chart of status distribution (study-wide)
+#
+# Effort Summaries - Recording deployment metrics:
+#
+#   - plot_effort_by_detector():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (arrange)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Bar chart of total recording hours per detector
+#
+#   - plot_nights_by_detector():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (arrange)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Bar chart of recording nights per detector
+#
+# Data Completeness - Missing data visualization:
+#
+#   - plot_data_completeness_calendar():
+#       Uses packages: ggplot2 (ggplot, aes, geom_tile, facet_wrap, scale_fill_gradient),
+#                      dplyr (group_by, mutate), tidyr (expand_grid),
+#                      lubridate (week, wday)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       format_number)
+#       Purpose: Calendar heatmap of nights recorded (light to dark = few to many)
+#
+#   - plot_missing_nights():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (anti_join),
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_status_colors, format_number)
+#       Purpose: Bar chart of missing night count per detector
+#
+#   - plot_recording_effort_heatmap():
+#       Uses packages: ggplot2 (ggplot, aes, geom_tile, facet_wrap, scale_fill_gradient),
+#                      dplyr (group_by, summarize), tidyr (pivot_wider, expand_grid)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       format_number)
+#       Purpose: Heatmap of effort (hours or calls) by detector × night
 # USAGE
 # -----
 # # Source via load_all.R or directly:
@@ -48,6 +94,8 @@
 #
 # # Generate plot
 # p <- plot_recording_status_summary(calls_per_night_final)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

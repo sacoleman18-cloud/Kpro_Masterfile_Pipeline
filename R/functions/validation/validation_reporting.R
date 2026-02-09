@@ -63,21 +63,56 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Event Tracking (2 functions):
-#   - create_validation_context(): Initialize event tracking structure
-#   - log_validation_event(): Record an event to context
 #
-# Report Generation (2 functions):
-#   - finalize_validation_report(): Finalize context and save YAML + HTML
-#   - generate_validation_html(): Generate HTML report from context
+# Event Tracking - Record execution events throughout workflow:
 #
-# Orchestrator Helpers (2 functions):
-#   - init_stage_validation(): Initialize validation for stage (wrapper)
-#   - complete_stage_validation(): Complete validation for stage (wrapper)
+#   - create_validation_context():
+#       Uses packages: base R (list operations, Sys.time, format)
+#       Calls internal: none
+#       Purpose: Initialize empty context object with event tracking structure
 #
-# Internal Functions (2 functions):
-#   - sum_event_counts(): Sum counts by event type (internal helper)
-#   - format_details(): Format event details as HTML (internal helper)
+#   - log_validation_event():
+#       Uses packages: base R (list operations, c, append)
+#       Calls internal: none
+#       Purpose: Append single event to context, update cumulative counters
+#
+# Report Generation - Create validation outputs:
+#
+#   - finalize_validation_report():
+#       Uses packages: yaml (write_yaml), here (here), base R (file.path, dir.create)
+#       Calls internal: validation_reporting.R (generate_validation_html),
+#                       utilities.R (log_message, ensure_dir_exists)
+#       Purpose: Finalize context object, save YAML + HTML report
+#
+#   - generate_validation_html():
+#       Uses packages: base R (paste, sprintf, HTML string building)
+#       Calls internal: validation_reporting.R (sum_event_counts, format_details)
+#       Purpose: Create self-contained HTML report with embedded CSS
+#
+# Orchestrator Convenience Wrappers - Simplified stage validation:
+#
+#   - init_stage_validation():
+#       Uses packages: base R (list operations)
+#       Calls internal: validation_reporting.R (create_validation_context)
+#       Purpose: Wrapper around create_validation_context for orchestrator
+#
+#   - complete_stage_validation():
+#       Uses packages: base R (file.path), here (here)
+#       Calls internal: validation_reporting.R (finalize_validation_report),
+#                       utilities.R (log_message, ensure_dir_exists)
+#       Purpose: Wrapper around finalize_validation_report for orchestrator
+#
+# Internal Helper Functions - Support functions not exported:
+#
+#   - sum_event_counts():
+#       Uses packages: base R (tapply, list operations, sum)
+#       Calls internal: none
+#       Purpose: Sum event counts by event type for summary display
+#
+#   - format_details():
+#       Uses packages: base R (paste, sprintf, HTML formatting)
+#       Calls internal: none
+#       Purpose: Format event details as HTML table rows
 #
 # USAGE
 # -----
@@ -135,6 +170,8 @@
 # Status:
 #   - warning: Non-fatal issues
 #   - error: Fatal issues
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

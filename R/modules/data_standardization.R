@@ -27,11 +27,19 @@
 #   - R/functions/standardization/standardization.R (standardize_kpro_schema)
 #   - R/functions/standardization/datetime_helpers.R (convert_datetime_to_local)
 #   - R/functions/validation/validation.R (enforce_unified_schema, finalize_master_columns, log_validation_event)
-#   - R/functions/core/utilities.R (save_checkpoint_and_register, finalize_stage_validation_report, hash_dataframe)
-#   - R/functions/core/logging.R (log_message, log_stage_start)
+#   - R/functions/core/orchestration_helpers.R (log_stage_start, save_checkpoint_and_register, finalize_stage_validation_report)
+#   - R/functions/core/utilities.R (hash_dataframe)
+#   - R/functions/core/logging.R (log_message)
 #
-# Last Modified: 2026-02-08
-# Changelog: Created as part of pipeline modularization refactor
+# Functions Provided:
+#   - module_data_standardization(): Main module function (exported)
+#     Used by: R/modules/module_runner.R (run_module_standardization)
+#     Used by: R/pipeline/run_phase1_data_preparation.R
+#
+# Last Modified: 2026-02-09
+# Changelog:
+#   2026-02-09: Updated dependencies to reference orchestration_helpers.R
+#   2026-02-08: Created as part of pipeline modularization refactor
 #
 # ==============================================================================
 

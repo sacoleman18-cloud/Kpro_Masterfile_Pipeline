@@ -57,15 +57,16 @@ source_module <- function(path, label = NULL, optional = FALSE) {
 
 # =============================================================================
 # LAYER 1: CORE
-# =============================================================================
+# ==============================================================================
 message("[1/9] Loading Layer 1: core/")
 
-source_module(file.path("R", "functions", "core", "utilities.R"), "utilities.R (I/O, checkpoints, paths)")
-source_module(file.path("R", "functions", "core", "logging.R"),   "logging.R   (file logging)")
-source_module(file.path("R", "functions", "core", "console.R"),   "console.R   (console formatting)")
-source_module(file.path("R", "functions", "core", "config.R"),    "config.R    (YAML parameter management)")
-source_module(file.path("R", "functions", "core", "artifacts.R"), "artifacts.R (artifact registry & provenance)")
-source_module(file.path("R", "functions", "core", "release.R"),   "release.R   (release bundle generator)")
+source_module(file.path("R", "functions", "core", "utilities.R"), "utilities.R                   (I/O, paths, templates)")
+source_module(file.path("R", "functions", "core", "orchestration_helpers.R"), "orchestration_helpers.R       (orchestrator convenience functions)")
+source_module(file.path("R", "functions", "core", "logging.R"),   "logging.R                     (file logging)")
+source_module(file.path("R", "functions", "core", "console.R"),   "console.R                     (console formatting)")
+source_module(file.path("R", "functions", "core", "config.R"),    "config.R                      (YAML parameter management)")
+source_module(file.path("R", "functions", "core", "artifacts.R"), "artifacts.R                   (artifact registry & provenance)")
+source_module(file.path("R", "functions", "core", "release.R"),   "release.R                     (release bundle generator)")
 
 message("  └── Layer 1 loaded")
 

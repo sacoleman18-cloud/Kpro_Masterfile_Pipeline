@@ -24,10 +24,31 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Bundle Creation:
-#   - create_release_bundle(): Main function to create release zip
-#   - validate_release_inputs(): Validate all inputs before bundling
-#   - generate_manifest(): Create manifest.yaml with provenance
+#
+# Bundle Creation - Main entry point:
+#
+#   - create_release_bundle():
+#       Uses packages: zip (zip_file), yaml (write_yaml), here (here),
+#                      base R (file operations, dir.create)
+#       Calls internal: release.R (validate_release_inputs, generate_manifest),
+#                       artifacts.R (init_artifact_registry, register_artifact),
+#                       utilities.R (ensure_dir_exists)
+#       Purpose: Create portable zip bundle with all pipeline outputs
+#
+# Validation - Check bundle preconditions:
+#
+#   - validate_release_inputs():
+#       Uses packages: base R (is.data.frame, file.exists, nrow)
+#       Calls internal: none (input validation)
+#       Purpose: Validate all input files and data frame structures
+#
+# Manifest - Generate provenance documentation:
+#
+#   - generate_manifest():
+#       Uses packages: yaml (as.yaml), base R (list operations, Sys.time),
+#                      digest (sha256 via artifacts.R)
+#       Calls internal: artifacts.R (hash_file, hash_dataframe)
+#       Purpose: Create manifest.yaml with file hashes and provenance metadata
 #
 # USAGE
 # -----
@@ -40,6 +61,8 @@
 #   all_plots = plots,
 #   report_path = "results/reports/bat_activity_report.html"
 # )
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

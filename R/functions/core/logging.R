@@ -42,12 +42,25 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Directory Helper:
-#   - ensure_log_dir_exists() (internal)
 #
-# Logging Functions:
-#   - log_message()
-#   - initialize_pipeline_log()
+# Directory Management - Internal logging setup:
+#
+#   - ensure_log_dir_exists():
+#       Uses packages: base R (dir.exists, dir.create)
+#       Calls internal: none (filesystem only)
+#       Purpose: Create log directory if missing (internal helper, duplicated from utilities)
+#
+# Logging Functions - Timestamped audit trail:
+#
+#   - log_message():
+#       Uses packages: base R (cat, paste0, Sys.time, file, sink)
+#       Calls internal: logging.R (ensure_log_dir_exists)
+#       Purpose: Write timestamped message to log file (append-only)
+#
+#   - initialize_pipeline_log():
+#       Uses packages: base R (cat, file, paste0, Sys.time)
+#       Calls internal: logging.R (ensure_log_dir_exists)
+#       Purpose: Create new pipeline log file (ISO 8601 header)
 #
 # CHANGELOG
 # ---------

@@ -68,9 +68,33 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-#   - apply_intro_standardization()  [internal helper]
-#   - load_local_raw_data()          [returns combined tibble or assigns to envir]
-#   - load_external_raw_data()       [returns combined tibble]
+#
+# Intro-Standardization (Internal Helper) - Apply minimal processing to single file:
+#
+#   - apply_intro_standardization():
+#       Uses packages: janitor (clean_names), dplyr (filter, mutate), readr
+#       Calls internal: standardization/schema_helpers.R (detect_row_schema),
+#                       validation.R (assert_data_frame),
+#                       utilities.R (log_message)
+#       Purpose: Remove invalid rows, add detector_id, detect schema version
+#
+# Local Data Loading - Load from data/raw/ directory:
+#
+#   - load_local_raw_data():
+#       Uses packages: base R (list.files, dir, file.path), dplyr (bind_rows),
+#                      readr (read_csv)
+#       Calls internal: utilities.R (safe_read_csv, log_message),
+#                       ingestion.R (apply_intro_standardization)
+#       Purpose: Recursively find *id.csv files and combine into single tibble
+#
+# External Data Loading - Load from external sources:
+#
+#   - load_external_raw_data():
+#       Uses packages: readr (read_csv), base R (file operations),
+#                      dplyr (bind_rows)
+#       Calls internal: utilities.R (safe_read_csv, log_message),
+#                       ingestion.R (apply_intro_standardization)
+#       Purpose: Load pre-specified external CSV file with standardization
 #
 # CHANGELOG
 # ---------

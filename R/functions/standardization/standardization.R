@@ -88,23 +88,58 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Constants:
-#   - SPECIES_CODE_MAP_4_TO_6            # 60+ species 4-letter -> 6-letter lookup
 #
-# Core Functions:
-#   - convert_4letter_to_6letter()       # Applies species code mapping
-#   - harmonize_column_names()           # out_file -> out_file_fs transition
+# Constants - Species code mapping:
 #
-# Schema Transformation Functions:
-#   - transform_v1_to_unified()          # Handles semicolon splitting + conversion
-#   - transform_v2_to_unified()          # Adds alternate_3 + conversion
-#   - transform_v3_to_unified()          # Adds alternate_3 (already 6-letter)
+#   - SPECIES_CODE_MAP_4_TO_6:
+#       Type: List (4-letter species code → 6-letter code mapping)
+#       Purpose: Lookup table for 60+ species code conversion (v2→v3)
 #
-# Orchestration:
-#   - standardize_kpro_schema()          # Main orchestrator (splits by schema, transforms, combines)
+# Core Transformation - Species code and column name handling:
 #
-# Species Unification:
-#   - create_unified_species_column()    # Unified species with priority logic (manual > auto > NoID)
+#   - convert_4letter_to_6letter():
+#       Uses packages: dplyr (mutate, case_when), base R (tolower)
+#       Calls internal: standardization.R (SPECIES_CODE_MAP_4_TO_6 lookup)
+#       Purpose: Convert 4-letter species codes to 6-letter codes
+#
+#   - harmonize_column_names():
+#       Uses packages: dplyr (mutate, coalesce, select)
+#       Calls internal: none
+#       Purpose: Handle out_file → out_file_fs transition (KPro version changes)
+#
+# Schema Transformation - Version-specific conversions:
+#
+#   - transform_v1_to_unified():
+#       Uses packages: tidyr (separate_rows), dplyr (mutate, select)
+#       Calls internal: standardization.R (convert_4letter_to_6letter)
+#       Purpose: Split semicolon-delimited alternates, convert to v3 format
+#
+#   - transform_v2_to_unified():
+#       Uses packages: dplyr (mutate)
+#       Calls internal: standardization.R (convert_4letter_to_6letter)
+#       Purpose: Add alternate_3 column, convert 4-letter to 6-letter codes
+#
+#   - transform_v3_to_unified():
+#       Uses packages: dplyr (mutate)
+#       Calls internal: none (already in target format)
+#       Purpose: Add alternate_3 if missing (identity transform for v3)
+#
+# Orchestration - Main entry point:
+#
+#   - standardize_kpro_schema():
+#       Uses packages: dplyr (filter, bind_rows), base R (split/combine)
+#       Calls internal: schema_helpers.R (detect_row_schema, get_dominant_schema),
+#                       standardization.R (transform_v1/v2/v3_to_unified,
+#                                         harmonize_column_names),
+#                       validation.R (assert_data_frame)
+#       Purpose: Orchestrate schema detection, split by version, transform, reassemble
+#
+# Species Unification - Analysis preparation:
+#
+#   - create_unified_species_column():
+#       Uses packages: dplyr (mutate, case_when, if_any), base R (coalesce)
+#       Calls internal: none
+#       Purpose: Create single 'species' column with priority (manual > auto > NoID)
 #
 # USAGE
 # -----
@@ -117,6 +152,8 @@
 #
 # # Create unified species column for analysis
 # cpn_data <- create_unified_species_column(kpro_master)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

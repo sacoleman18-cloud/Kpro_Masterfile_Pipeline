@@ -80,24 +80,63 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Detector-Level Summaries:
-#   - create_detector_activity_summary()   # Comprehensive per-detector metrics
-#   - calculate_coefficient_of_variation() # CV per detector
-#   - create_effort_summary_table()        # Recording effort by detector
 #
-# Study-Wide Summaries:
-#   - create_study_summary()               # Single-row study overview
-#   - calculate_variance_components()      # Between/within detector variance
+# Detector-Level Summaries - Per-detector metrics and statistics:
 #
-# Species Analysis (DETERMINISTIC - no species_col parameter):
-#   - create_species_summary_by_detector() # Species composition per detector
-#   - create_species_accumulation_summary() # Species over time
+#   - create_detector_activity_summary():
+#       Uses packages: dplyr (group_by, summarize, across, n, n_distinct)
+#       Calls internal: validation.R (validate_data_frame, validate_cpn_data,
+#                       assert_column_type, assert_columns_exist),
+#                       utilities.R (log_message)
+#       Purpose: Generate comprehensive per-detector activity metrics
 #
-# Temporal Analysis (DETERMINISTIC - no by_detector parameter):
-#   - create_hourly_activity_summary()     # Activity by hour of night
+#   - calculate_coefficient_of_variation():
+#       Uses packages: dplyr (mutate, across)
+#       Calls internal: validation.R (assert_column_type)
+#       Purpose: Calculate CV = sd/mean for each detector's hourly calls
 #
-# File I/O (HELPER - keeps parameters for reusability):
-#   - save_master_with_timestamp()         # Save with timestamp in filename
+#   - create_effort_summary_table():
+#       Uses packages: dplyr (group_by, summarize, n_distinct)
+#       Calls internal: validation.R (validate_data_frame)
+#       Purpose: Summarize recording effort (night count, hour count) by detector
+#
+# Study-Wide Summaries - Aggregated statistics across all detectors:
+#
+#   - create_study_summary():
+#       Uses packages: dplyr (summarize, n, n_distinct)
+#       Calls internal: validation.R (validate_cpn_data)
+#       Purpose: Generate single-row study-level overview statistics
+#
+#   - calculate_variance_components():
+#       Uses packages: dplyr (group_by, summarize)
+#       Calls internal: none (variance calculations via base R)
+#       Purpose: Decompose variance into between-detector and within-detector components
+#
+# Species Analysis - Species composition summaries (DETERMINISTIC):
+#
+#   - create_species_summary_by_detector():
+#       Uses packages: dplyr (group_by, summarize, across), tidyr (pivot_wider)
+#       Calls internal: validation.R (assert_columns_exist)
+#       Purpose: Species composition matrix per detector (requires species column)
+#
+#   - create_species_accumulation_summary():
+#       Uses packages: dplyr (group_by, summarize, n_distinct), tidyr (pivot_wider)
+#       Calls internal: validation.R (assert_columns_exist)
+#       Purpose: Cumulative species richness over time (requires species column)
+#
+# Temporal Analysis - Time-based activity patterns (DETERMINISTIC):
+#
+#   - create_hourly_activity_summary():
+#       Uses packages: dplyr (group_by, summarize, n)
+#       Calls internal: validation.R (assert_columns_exist)
+#       Purpose: Activity by hour of night (requires Hour_local column)
+#
+# File I/O - Timestamp-based file saving (HELPER function):
+#
+#   - save_master_with_timestamp():
+#       Uses packages: readr (write_csv), base R (file.path, format, Sys.time)
+#       Calls internal: utilities.R (make_output_path)
+#       Purpose: Save data frame with ISO timestamp appended to filename
 #
 # USAGE
 # -----
@@ -120,6 +159,8 @@
 # # Format as GT tables
 # detector_gt <- format_detector_summary_gt(detector_summary)
 # study_gt <- format_study_summary_gt(study_summary)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

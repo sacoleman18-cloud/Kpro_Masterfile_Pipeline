@@ -70,34 +70,105 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Universal Assertions (11 functions):
-#   - assert_data_frame(): Validate input is data frame
-#   - assert_not_empty(): Validate data frame has rows
-#   - assert_row_count(): Validate exact row count
-#   - assert_columns_exist(): Validate required columns present
-#   - assert_column_type(): Validate column class
-#   - assert_not_na(): Validate column has no NA values
-#   - assert_date_range(): Validate date order
-#   - assert_time_format(): Validate HH:MM:SS format
-#   - assert_file_exists(): Validate file exists with hints
-#   - assert_directory_exists(): Validate/create directory
-#   - assert_scalar_string(): Validate single character string
 #
-# Composite Validators (3 functions):
-#   - validate_data_frame(): Combined assertions for common pattern
-#   - validate_cpn_data(): Domain-specific CallsPerNight validation
-#   - validate_master_data(): Domain-specific master file validation
+# Universal Assertions - Input validation with clear error messages:
 #
-# Schema Enforcement (1 function):
-#   - enforce_unified_schema(): Ensure master file schema compliance
+#   - assert_data_frame():
+#       Uses packages: base R (is.data.frame, class)
+#       Calls internal: none
+#       Purpose: Validate input is data frame
 #
-# Master File Finalization (1 function):
-#   - finalize_master_columns(): Remove unwanted columns and reorder
+#   - assert_not_empty():
+#       Uses packages: base R (nrow)
+#       Calls internal: none
+#       Purpose: Validate data frame has at least one row
 #
-# Quality Checks (3 functions):
-#   - check_column_completeness(): Report NA percentages
-#   - check_duplicates(): Detect duplicate rows
-#   - validate_calls_per_night(): Check logical consistency
+#   - assert_columns_exist():
+#       Uses packages: base R (setdiff)
+#       Calls internal: none
+#       Purpose: Validate required columns present with helpful hints
+#
+#   - assert_column_type():
+#       Uses packages: base R (class, inherits)
+#       Calls internal: assert_columns_exist()
+#       Purpose: Validate column data type
+#
+#   - assert_not_na():
+#       Uses packages: base R (any, is.na)
+#       Calls internal: none
+#       Purpose: Validate column has no missing values
+#
+#   - assert_date_range():
+#       Uses packages: base R (all, is.na)
+#       Calls internal: none
+#       Purpose: Validate date order (not decreasing)
+#
+#   - assert_time_format():
+#       Uses packages: base R (grepl)
+#       Calls internal: none
+#       Purpose: Validate HH:MM:SS time format
+#
+#   - assert_row_count():
+#       Uses packages: base R (nrow)
+#       Calls internal: none
+#       Purpose: Validate exact row count
+#
+#   - assert_file_exists():
+#       Uses packages: base R (file.exists)
+#       Calls internal: none
+#       Purpose: Validate file exists with helpful hints
+#
+#   - assert_directory_exists():
+#       Uses packages: base R (dir.exists, dir.create)
+#       Calls internal: none
+#       Purpose: Validate/create directory
+#
+#   - assert_scalar_string():
+#       Uses packages: base R (is.character, length)
+#       Calls internal: none
+#       Purpose: Validate single character string
+#
+# Composite Validators - Combine assertions for common validation patterns:
+#
+#   - validate_data_frame():
+#       Uses packages: none
+#       Calls internal: assert_data_frame(), assert_not_empty(), assert_columns_exist()
+#       Purpose: Run combined checks for standard data frame validation
+#
+#   - validate_cpn_data():
+#       Uses packages: dplyr (select, across)
+#       Calls internal: assert_data_frame(), assert_columns_exist(),
+#                       assert_not_na(), assert_date_range()
+#       Purpose: Domain-specific validation for CallsPerNight templates
+#
+#   - validate_master_data():
+#       Uses packages: dplyr (select)
+#       Calls internal: assert_data_frame(), assert_columns_exist()
+#       Purpose: Domain-specific validation for master file
+#
+# Schema Enforcement - Ensure data conforms to unified schema:
+#
+#   - enforce_unified_schema():
+#       Uses packages: dplyr (mutate, select, all_of)
+#       Calls internal: assert_data_frame(), assert_columns_exist()
+#       Purpose: Reorder columns and ensure unified schema compliance
+#
+# Quality Checks - Generate reports on data quality:
+#
+#   - check_column_completeness():
+#       Uses packages: purrr (map_dfr), dplyr (summarize, mutate), base R (sum, is.na)
+#       Calls internal: assert_data_frame()
+#       Purpose: Report percentage of missing (NA) values per column
+#
+#   - check_duplicates():
+#       Uses packages: dplyr (distinct, filter, n), base R (nrow)
+#       Calls internal: assert_data_frame()
+#       Purpose: Detect and report duplicate rows
+#
+#   - validate_calls_per_night():
+#       Uses packages: base R (all, is.na, >=, <=)
+#       Calls internal: assert_data_frame(), assert_columns_exist()
+#       Purpose: Check logical consistency (calls >= 0, hours >= 0)
 #
 # USAGE
 # -----

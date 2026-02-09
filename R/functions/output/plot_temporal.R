@@ -25,21 +25,55 @@
 #   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
 #                     format_number()
 #
-# CONTENTS
-# --------
-# Nightly Patterns:
-#   - plot_activity_over_time(): Time series by detector
-#   - plot_cumulative_calls_over_time(): Running total
+# FUNCTIONS PROVIDED
+# ------------------
 #
-# Within-Night Patterns:
-#   - plot_hourly_activity_profile(): Activity by hour
-#   - plot_callsperhour_distribution(): CPH histogram
+# Nightly Patterns - Temporal activity trends across nights:
 #
-# Seasonal Patterns:
-#   - plot_weekly_activity(): Weekly aggregation
-#   - plot_activity_by_month(): Monthly aggregation
+#   - plot_activity_over_time():
+#       Uses packages: ggplot2 (ggplot, aes, geom_line, geom_point, facet_wrap)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Line plot of calls per night by detector over study period
 #
+#   - plot_cumulative_calls_over_time():
+#       Uses packages: ggplot2 (ggplot, aes, geom_line, geom_area, facet_wrap),
+#                      dplyr (group_by, mutate, cumsum)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Running total (cumulative sum) of calls over time by detector
 #
+# Within-Night Patterns - Activity by hour of night:
+#
+#   - plot_hourly_activity_profile():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
+#                      dplyr (group_by, summarize)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Bar plot of call counts by hour, aggregated across all nights
+#
+#   - plot_callsperhour_distribution():
+#       Uses packages: ggplot2 (ggplot, aes, geom_histogram, facet_wrap),
+#                      dplyr (group_by, mutate)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Histogram of calls per hour (samples one hour per night)
+#
+# Seasonal Patterns - Aggregations over longer time periods:
+#
+#   - plot_weekly_activity():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
+#                      dplyr (group_by, summarize), lubridate (week, year)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Bar plot of activity by week across study period
+#
+#   - plot_activity_by_month():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
+#                      dplyr (group_by, summarize), lubridate (month, year)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Bar plot of activity by month across study period
 # USAGE
 # -----
 # # Source via load_all.R or directly:
@@ -48,6 +82,8 @@
 #
 # # Generate plot
 # p <- plot_activity_over_time(calls_per_night_final)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

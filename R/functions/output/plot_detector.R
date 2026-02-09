@@ -26,21 +26,61 @@
 #   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
 #                     format_number()
 #
-# CONTENTS
-# --------
-# Single Detector Summaries:
-#   - plot_total_calls_by_detector(): Bar chart of cumulative calls
-#   - plot_detector_activity_caterpillar(): Mean ± CI ordered plot
-#   - plot_detector_boxplots(): Distribution of nightly activity
+# FUNCTIONS PROVIDED
+# ------------------
 #
-# Outlier Analysis:
-#   - plot_activity_with_without_outliers(): Side-by-side comparison
+# Single Detector Summaries - Per-detector total activity:
 #
-# Cross-Detector Patterns:
-#   - plot_synchrony(): Overlaid time series
-#   - plot_correlation_heatmap(): Pairwise Pearson correlations
-#   - plot_detector_rank_over_time(): Rank stability over study
+#   - plot_total_calls_by_detector():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (count, arrange)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Bar chart of cumulative calls per detector (ordered high to low)
 #
+#   - plot_detector_activity_caterpillar():
+#       Uses packages: ggplot2 (ggplot, aes, geom_point, geom_errorbarh),
+#                      dplyr (group_by, summarize), stats (mean, sd, qt)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Ordered dot plot with 95% CI whiskers (mean ± CI calls per night)
+#
+#   - plot_detector_boxplots():
+#       Uses packages: ggplot2 (ggplot, aes, geom_boxplot, facet_wrap)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Boxplots of nightly call distribution per detector
+#
+# Outlier Analysis - Impact of extreme nights:
+#
+#   - plot_activity_with_without_outliers():
+#       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
+#                      dplyr (filter, mutate, group_by)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Side-by-side bars comparing mean with/without high-activity nights
+#
+# Cross-Detector Patterns - Comparing activity across sites:
+#
+#   - plot_synchrony():
+#       Uses packages: ggplot2 (ggplot, aes, geom_line, scale_color_manual),
+#                      dplyr (select, pivot_longer)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Overlaid time series comparing nightly activity patterns
+#
+#   - plot_correlation_heatmap():
+#       Uses packages: ggplot2 (ggplot, aes, geom_tile, scale_fill_gradient2),
+#                      dplyr (select), stats (cor), tidyr (pivot_longer)
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       format_number)
+#       Purpose: Heatmap of Pearson correlations in activity patterns between detectors
+#
+#   - plot_detector_rank_over_time():
+#       Uses packages: ggplot2 (ggplot, aes, geom_line, facet_wrap),
+#                      dplyr (group_by, mutate, rank), zoo (rollmean),
+#       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
+#                       kpro_palette_cat, format_number)
+#       Purpose: Rank stability visualization (which detectors rank highest over time)
 # USAGE
 # -----
 # # Source via load_all.R or directly:
@@ -52,6 +92,8 @@
 #
 # # Save plot
 # ggsave("outputs/total_calls_by_detector.png", p, width = 10, height = 6)
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

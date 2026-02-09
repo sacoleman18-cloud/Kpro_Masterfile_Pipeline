@@ -28,12 +28,20 @@
 #
 # Dependencies:
 #   - R/functions/core/config.R (load_study_parameters, get_schedule_config)
+#   - R/functions/core/orchestration_helpers.R (setup_pipeline_context, log_stage_start, load_most_recent_checkpoint)
 #   - R/functions/analysis/callspernight.R (generate_calls_per_night_template)
-#   - R/functions/core/utilities.R (create_unified_species_column, load_most_recent_checkpoint)
+#   - R/functions/standardization/standardization.R (create_unified_species_column)
 #   - R/functions/validation/validation.R (assert_columns_exist, log_validation_event)
 #
-# Last Modified: 2026-02-08
-# Changelog: Created as part of pipeline modularization refactor
+# Functions Provided:
+#   - module_cpn_template(): Main module function (exported)
+#     Used by: R/modules/module_runner.R (run_module_cpn_template)
+#     Used by: R/pipeline/run_phase2_template_generation.R
+#
+# Last Modified: 2026-02-09
+# Changelog:
+#   2026-02-09: Updated dependencies to reference orchestration_helpers.R
+#   2026-02-08: Created as part of pipeline modularization refactor
 #
 # ==============================================================================
 

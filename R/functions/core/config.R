@@ -65,16 +65,50 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Core functions:
-#   - load_study_parameters()        # Read YAML, return list or NULL
-#   - save_study_parameters()        # Write list to YAML
-#   - build_study_config()           # Construct config list with defaults
-#   - validate_study_config()        # Ensure required structure exists
-#   - get_schedule_config()          # Extract and normalize schedule parameters
 #
-# Reconciliation functions:
-#   - reconcile_detector_mapping()   # Merge current IDs with existing names
-#   - ensure_study_parameters()      # One-call setup/reconciliation
+# Core Configuration - YAML read/write operations:
+#
+#   - load_study_parameters():
+#       Uses packages: yaml (read_yaml), base R (file.exists)
+#       Calls internal: none (pure YAML I/O)
+#       Purpose: Read study_parameters.yaml, return list or NULL if missing
+#
+#   - save_study_parameters():
+#       Uses packages: yaml (write_yaml), base R (dir.exists, dir.create)
+#       Calls internal: none (pure YAML I/O)
+#       Purpose: Write configuration list to study_parameters.yaml (overwrites)
+#
+# Configuration Management - Build default configs:
+#
+#   - build_study_config():
+#       Uses packages: base R (list operations, do.call)
+#       Calls internal: config.R (reconcile_detector_mapping)
+#       Purpose: Construct YAML config list with defaults and detector mapping
+#
+#   - validate_study_config():
+#       Uses packages: base R (all operations, stop)
+#       Calls internal: none (validation only)
+#       Purpose: Ensure required structure and fields exist in config
+#
+# Schedule Extraction - Normalize schedule parameters:
+#
+#   - get_schedule_config():
+#       Uses packages: base R (list operations, as.logical)
+#       Calls internal: none (parameter extraction + normalization)
+#       Purpose: Extract and normalize schedule parameters from loaded YAML
+#
+# Detector Mapping - Reconcile detector IDs:
+#
+#   - reconcile_detector_mapping():
+#       Uses packages: base R (list operations, alphabetical sort)
+#       Calls internal: none
+#       Purpose: Merge new detector IDs with existing user-entered names
+#
+#   - ensure_study_parameters():
+#       Uses packages: yaml (read_yaml, write_yaml), base R (file operations)
+#       Calls internal: config.R (load_study_parameters, build_study_config,
+#                                 save_study_parameters, validate_study_config)
+#       Purpose: One-call setup and reconciliation of YAML file
 #
 # USAGE EXAMPLE
 # -------------

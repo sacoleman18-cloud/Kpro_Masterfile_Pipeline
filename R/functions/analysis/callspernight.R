@@ -66,19 +66,48 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Recording Hours Calculation:
-#   - calculate_recording_hours()          # Recording duration calculation (vectorized)
 #
-# Template Generation:
-#   - generate_calls_per_night_template()  # Template generation
-#   - apply_schedule()                     # Apply recording schedule
+# Recording Hours Calculation - Vectorized duration computation:
 #
-# Saving:
-#   - save_callspernight_with_version()    # Save with version numbering
+#   - calculate_recording_hours():
+#       Uses packages: lubridate (hms::parse_hms, as.numeric), base R (grepl, ifelse)
+#       Calls internal: none (pure calculation)
+#       Purpose: Calculate hours between start/end times with overnight handling
 #
-# Template Loading:
-#   - load_cpn_template()                  # Load ORIGINAL or EDIT_THIS template
-#   - extract_template_timestamp()         # Extract timestamp from filename (internal)
+# Template Generation - Create standard recording templates:
+#
+#   - generate_calls_per_night_template():
+#       Uses packages: dplyr (group_by, summarize, mutate), readr (write_csv),
+#                      lubridate (date arithmetic)
+#       Calls internal: callspernight.R (calculate_recording_hours, apply_schedule),
+#                       utilities.R (make_output_path, save_summary_csv),
+#                       validation.R (assert_data_frame, validate_calls_per_night)
+#       Purpose: Generate CSV template with one row per detector-night
+#
+#   - apply_schedule():
+#       Uses packages: dplyr (filter, mutate), lubridate (with_tz, date)
+#       Calls internal: none (configuration-based filtering)
+#       Purpose: Apply recording schedule constraints to template rows
+#
+# File Management - Save and load templates with versioning:
+#
+#   - save_callspernight_with_version():
+#       Uses packages: readr (write_csv), base R (file.path)
+#       Calls internal: utilities.R (make_versioned_path)
+#       Purpose: Save template with auto-incremented version (v1, v2, v3...)
+#
+# Template Loading - Discover and load existing templates:
+#
+#   - load_cpn_template():
+#       Uses packages: readr (read_csv), base R (list.files)
+#       Calls internal: callspernight.R (extract_template_timestamp),
+#                       utilities.R (find_most_recent_file, safe_read_csv)
+#       Purpose: Load most recent ORIGINAL or EDIT_THIS template
+#
+#   - extract_template_timestamp():
+#       Uses packages: base R (substr, as.POSIXct)
+#       Calls internal: none (string parsing only)
+#       Purpose: Extract ISO timestamp from template filename (internal helper)
 #
 # USAGE
 # -----
@@ -105,6 +134,8 @@
 #   =(VALUE(E2)-VALUE(D2))*24
 #   Where E2 = EndDateTime, D2 = StartDateTime
 #   VALUE() converts text datetime to Excel serial number
+#
+# Last Modified: 2026-02-09
 #
 # CHANGELOG
 # ---------

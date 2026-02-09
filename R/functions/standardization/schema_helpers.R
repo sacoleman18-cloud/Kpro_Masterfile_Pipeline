@@ -66,12 +66,25 @@
 #
 # FUNCTIONS PROVIDED
 # ------------------
-# Primary function:
-#   - detect_row_schema()         # Main workhorse - adds schema_version column
 #
-# Helper functions:
-#   - get_dominant_schema()       # Returns most common schema version
-#   - get_schema_summary()        # Returns detailed schema distribution
+# Schema Detection - Row-level schema version assignment:
+#
+#   - detect_row_schema():
+#       Uses packages: dplyr (mutate, case_when), base R (nchar, trimws)
+#       Calls internal: validation.R (assert_data_frame, assert_columns_exist)
+#       Purpose: Add schema_version column based on alternates col + auto_id length
+#
+# Schema Analysis - Summarize schema distribution:
+#
+#   - get_dominant_schema():
+#       Uses packages: base R (table, which.max, names)
+#       Calls internal: none
+#       Purpose: Return single most common schema version in data frame
+#
+#   - get_schema_summary():
+#       Uses packages: dplyr (count, arrange), base R (table operations)
+#       Calls internal: none
+#       Purpose: Return detailed tibble of schema counts with optional verbose output
 #
 # SCHEMA VERSIONS
 # ---------------

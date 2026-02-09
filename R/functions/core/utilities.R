@@ -8,13 +8,14 @@
 # PURPOSE
 # -------
 # Foundational utilities with ZERO internal dependencies on domain logic.
-# Provides safe I/O, checkpoint management, file discovery, path generation,
-# and orchestrator helper functions.
+# Provides safe I/O, file discovery, path generation, and template utilities.
 #
-# NOTE: Logging and console formatting have been split into separate modules:
+# NOTE: Related modules have been split out for focused concerns:
 #   - core/logging.R: log_message(), initialize_pipeline_log()
 #   - core/console.R: center_text(), print_stage_header(), 
 #                     print_workflow_summary(), print_pipeline_complete()
+#   - core/orchestration_helpers.R: setup_pipeline_context(), log_stage_start(),
+#                                   save_checkpoint_and_register(), etc.
 #
 # This module is the bedrock of the pipeline. By having zero dependencies on
 # other project modules, it can be safely sourced first and provides the
@@ -65,48 +66,111 @@
 #   - dplyr: mutate, across, all_of
 #   - base R: file operations
 #
-# CONTENTS
-# --------
-# Directory Management:
-#   - ensure_dir_exists()
+# FUNCTIONS PROVIDED
+# ------------------
 #
-# Safe I/O:
-#   - safe_read_csv()
-#   - convert_empty_to_na()
+# Operators - Null handling:
 #
-# File Discovery:
-#   - find_most_recent_file()
+#   - %||%:
+#       Uses packages: base R (is.null)
+#       Calls internal: none
+#       Purpose: Null coalescing operator (returns left if not NULL, else right)
 #
-# Orchestrator Utilities:
-#   - setup_pipeline_context()
-#   - load_most_recent_checkpoint()
-#   - generate_timestamped_filename()
-#   - store_stage_results()
+# Directory Management - Safe filesystem operations:
 #
-# Orchestrator Convenience Functions:
-#   - log_stage_start()
-#   - save_checkpoint_and_register()
-#   - finalize_stage_validation_report()
+#   - ensure_dir_exists():
+#       Uses packages: base R (dir.exists, dir.create)
+#       Calls internal: none
+#       Purpose: Create directory if missing (recursive, safe to repeat)
 #
-# Path Generation:
-#   - make_output_path()
-#   - make_versioned_path()
+# Safe I/O - Non-stopping file operations:
 #
-# Template Utilities:
-#   - fill_readme_template()
+#   - safe_read_csv():
+#       Uses packages: readr (read_csv), base R (file operations)
+#       Calls internal: none (pure I/O)
+#       Purpose: Read CSV with error logging (returns NULL, never stops)
 #
-# Operators:
-#   - %||%
+#   - convert_empty_to_na():
+#       Uses packages: dplyr (mutate, if_all), base R (is.na)
+#       Calls internal: none
+#       Purpose: Convert empty strings/spaces to NA values
+#
+# File Discovery - Timestamp-based file location:
+#
+#   - find_most_recent_file():
+#       Uses packages: base R (list.files, grepl, sort)
+#       Calls internal: none
+#       Purpose: Find newest file matching pattern (deterministic by timestamp)
+#
+# Path Generation - Timestamped and versioned paths:
+#
+#   - make_output_path():
+#       Uses packages: here (here), base R (file.path)
+#       Calls internal: none (pure path construction)
+#       Purpose: Generate timestamped output path for audit trail
+#
+#   - make_versioned_path():
+#       Uses packages: base R (file.path, list.files, grep)
+#       Calls internal: none
+#       Purpose: Generate version-incremented path (v1, v2, v3...)
+#
+# Template Utilities - File template processing:
+#
+#   - fill_readme_template():
+#       Uses packages: base R (readLines, writeLines, gsub)
+#       Calls internal: none
+#       Purpose: Replace placeholders in README template files
+#
+# Module-Specific Helpers - Domain utilities:
+#
+#   - save_summary_csv():
+#       Uses packages: readr (write_csv), base R (file.path)
+#       Calls internal: none (pure I/O)
+#       Purpose: Save summary table as CSV with timestamped filename
+#
+#   - build_excel_from_csv():
+#       Uses packages: readxl, writexl, dplyr (read operations)
+#       Calls internal: none
+#       Purpose: Convert CSV to Excel workbook format
+#
+#   - verify_rds_artifacts():
+#       Uses packages: base R (file.exists, readRDS)
+#       Calls internal: none
+#       Purpose: Verify RDS artifact files exist and are readable
+#
+#   - render_report():
+#       Uses packages: rmarkdown (render), base R (file operations)
+#       Calls internal: none
+#       Purpose: Render R Markdown reports to HTML/PDF
+#
+#   - create_and_register_release():
+#       Uses packages: zip (zip), yaml (write_yaml)
+#       Calls internal: none (calls artifacts.R functions if present)
+#       Purpose: Create release bundle and register with artifact system
 #
 # REMOVED (moved to other modules):
-#   - log_message() -> logging.R
-#   - initialize_pipeline_log() -> logging.R
-#   - center_text() -> console.R
-#   - print_stage_header() -> console.R
-#   - print_stage_banner() -> console.R (deprecated - use print_workflow_summary)
-#   - print_workflow_summary() -> console.R
-#   - print_pipeline_complete() -> console.R
-#   - create_unified_species_column() -> standardization.R
+#   Logging functions -> logging.R:
+#     - log_message()
+#     - initialize_pipeline_log()
+#   
+#   Console formatting -> console.R:
+#     - center_text()
+#     - print_stage_header()
+#     - print_stage_banner() (deprecated - use print_workflow_summary)
+#     - print_workflow_summary()
+#     - print_pipeline_complete()
+#   
+#   Orchestrator helpers -> orchestration_helpers.R:
+#     - setup_pipeline_context()
+#     - load_most_recent_checkpoint()
+#     - generate_timestamped_filename()
+#     - store_stage_results()
+#     - log_stage_start()
+#     - save_checkpoint_and_register()
+#     - finalize_stage_validation_report()
+#   
+#   Domain-specific processing -> standardization.R:
+#     - create_unified_species_column()
 #
 # LEGACY FUNCTIONS REMOVED (replaced by orchestrator utilities):
 #   - load_or_checkpoint() -> use load_most_recent_checkpoint()
@@ -115,8 +179,13 @@
 #   - load_cpn_final() -> use load_most_recent_checkpoint("04_CallsPerNight_Final_.*")
 #   - load_cpn_template_original() -> use load_cpn_template() in callspernight.R
 #
+# Last Modified: 2026-02-09
+#
 # CHANGELOG
 # ---------
+# 2026-02-09: Extracted orchestrator helpers to orchestration_helpers.R
+#             (7 functions, ~680 lines) to separate orchestrator-specific
+#             convenience functions from general utilities
 # 2026-02-05: Added orchestrator convenience functions to reduce code duplication
 #             - Added log_stage_start() to consolidate print_stage_header + log_message
 #             - Added save_checkpoint_and_register() to consolidate CSV save + artifact registration
@@ -457,247 +526,6 @@ find_most_recent_file <- function(directory,
 
 
 # ==============================================================================
-# ORCHESTRATOR UTILITIES
-# ==============================================================================
-
-
-#' Setup Pipeline Context
-#'
-#' @description
-#' Consolidates the standard initialization pattern used by all orchestrating
-#' functions: load YAML config, create validation context, set up paths.
-#'
-#' @param workflow_name Character. Workflow identifier (e.g., "ingest")
-#'
-#' @return Named list with yaml_path, study_params, validation_context,
-#'   checkpoint_dir, outputs_dir.
-#'
-#' @section CONTRACT:
-#' - Loads study_parameters.yaml from inst/config/
-#' - Creates validation context with workflow name
-#' - Returns standard paths (checkpoints, outputs)
-#' - Stops with actionable error if YAML not found
-#'
-#' @section DOES NOT:
-#' - Create directories
-#' - Validate YAML structure (config.R handles this)
-#' - Write to log file (caller's responsibility)
-#'
-#' @examples
-#' \dontrun{
-#' ctx <- setup_pipeline_context("ingest")
-#' study_name <- ctx$study_params$study_parameters$study_name
-#' }
-#'
-#' @export
-setup_pipeline_context <- function(workflow_name) {
-  
-  # Standard paths - FIXED by project structure
-  yaml_path <- here::here("inst", "config", "study_parameters.yaml")
-  checkpoint_dir <- here::here("outputs", "checkpoints")
-  outputs_dir <- here::here("outputs")
-  
-  # Assert YAML exists
-  if (!file.exists(yaml_path)) {
-    stop(sprintf(
-      "Configuration file not found: %s\n  Configure study parameters in Shiny app first.",
-      yaml_path
-    ))
-  }
-  
-  # Load configuration (requires load_study_parameters from config.R)
-  study_params <- load_study_parameters(yaml_path)
-  
-  # Create validation context (requires create_validation_context from validation.R)
-  validation_context <- create_validation_context(workflow = workflow_name)
-  validation_context$study_name <- study_params$study_parameters$study_name
-  
-  list(
-    yaml_path = yaml_path,
-    study_params = study_params,
-    validation_context = validation_context,
-    checkpoint_dir = checkpoint_dir,
-    outputs_dir = outputs_dir
-  )
-}
-
-
-#' Load Most Recent Checkpoint
-#'
-#' @description
-#' Discovers and loads the most recent checkpoint file matching a pattern.
-#' Replaces legacy checkpoint loaders with a generic pattern-based approach.
-#'
-#' @param pattern Character. Regex pattern for filename matching.
-#'
-#' @return Tibble loaded from most recent checkpoint file.
-#'
-#' @section CONTRACT:
-#' - Searches outputs/checkpoints/ directory
-#' - Uses filename timestamps for "most recent" determination
-#' - Returns tibble with all columns as character
-#' - Stops with actionable error if no files found
-#'
-#' @section DOES NOT:
-#' - Convert column types (caller's responsibility)
-#' - Validate data structure
-#' - Create directories
-#'
-#' @examples
-#' \dontrun{
-#' # Load most recent kpro_master
-#' kpro_master <- load_most_recent_checkpoint("^02_kpro_master_.*\\.csv$")
-#'
-#' # Load most recent CPN final
-#' cpn_final <- load_most_recent_checkpoint("^04_CallsPerNight_Final_.*\\.csv$")
-#' }
-#'
-#' @export
-load_most_recent_checkpoint <- function(pattern) {
-  
-  checkpoint_dir <- here::here("outputs", "checkpoints")
-  
-  if (!dir.exists(checkpoint_dir)) {
-    stop(sprintf("Checkpoint directory not found: %s\n  Run previous chunk first.", checkpoint_dir))
-  }
-  
-  files <- list.files(checkpoint_dir, pattern = pattern, full.names = TRUE)
-  
-  if (length(files) == 0) {
-    stop(sprintf(
-      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  Run previous chunk first.",
-      pattern, checkpoint_dir
-    ))
-  }
-  
-  # Get most recent (last in sorted list)
-  most_recent <- files[length(files)]
-  
-  safe_read_csv(most_recent)
-}
-
-
-#' Generate Timestamped Filename
-#'
-#' @description
-#' Generates a filename with embedded timestamp in YYYYMMDD_HHMMSS format.
-#' Used by orchestrating functions for consistent checkpoint naming.
-#'
-#' @param prefix Character. Filename prefix (e.g., "02_kpro_master")
-#' @param suffix Character. Optional suffix before extension. Default: ""
-#'
-#' @return Character. Formatted filename string with .csv extension.
-#'
-#' @section CONTRACT:
-#' - Timestamp format: YYYYMMDD_HHMMSS
-#' - Pattern: {prefix}_{timestamp}_{suffix}.csv
-#' - Returns filename only (not full path)
-#'
-#' @section DOES NOT:
-#' - Create the file
-#' - Include directory path
-#' - Validate prefix format
-#'
-#' @examples
-#' \dontrun{
-#' filename <- generate_timestamped_filename("02_kpro_master")
-#' # Returns: "02_kpro_master_20260204_143022.csv"
-#'
-#' filename <- generate_timestamped_filename("03_CallsPerNight_Template", "ORIGINAL")
-#' # Returns: "03_CallsPerNight_Template_20260204_143022_ORIGINAL.csv"
-#' }
-#'
-#' @export
-generate_timestamped_filename <- function(prefix, suffix = "") {
-  
-  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  parts <- c(prefix, timestamp)
-  
-  if (!is.null(suffix) && nchar(suffix) > 0) {
-    parts <- c(parts, suffix)
-  }
-  
-  base_name <- paste(parts, collapse = "_")
-  paste0(base_name, ".csv")
-}
-
-
-#' Store Stage Results in Orchestrator Result Object
-#'
-#' @description
-#' Consolidates stage outputs into a structured result object used by 
-#' multi-stage orchestrator functions. Stores stage-specific outputs under 
-#' a stage key and tracks validation HTML paths.
-#'
-#' @param result List. The result object being built (must have 
-#'   `validation_html_paths` field).
-#' @param stage_key Character. Unique identifier for the stage 
-#'   (e.g., "ingest_standardize", "finalize_cpn").
-#' @param stage_outputs List. Stage-specific outputs to store (typically 
-#'   includes data, metadata, artifact_id, checkpoint_path).
-#' @param validation_html Character. Optional. Path to validation HTML for 
-#'   this stage.
-#'
-#' @return List. Updated result object with stage outputs stored and 
-#'   validation_html added to tracking array.
-#'
-#' @section CONTRACT:
-#' - Stores stage_outputs under result[[stage_key]]
-#' - Appends validation_html to result$validation_html_paths if provided
-#' - Returns modified result object
-#' - Does not validate structure of stage_outputs (caller's responsibility)
-#'
-#' @section DOES NOT:
-#' - Create or validate files
-#' - Modify global state
-#' - Write to log (caller's responsibility)
-#' - Validate stage_key uniqueness (caller may overwrite)
-#'
-#' @examples
-#' \dontrun{
-#' # Initialize result object
-#' result <- list(
-#'   validation_html_paths = character()
-#' )
-#' 
-#' # Store stage outputs
-#' stage_outputs <- list(
-#'   kpro_master = df,
-#'   metadata = list(n_rows = nrow(df)),
-#'   artifact_id = "kpro_master_20260205"
-#' )
-#' 
-#' result <- store_stage_results(
-#'   result,
-#'   stage_key = "ingest_standardize",
-#'   stage_outputs = stage_outputs,
-#'   validation_html = "results/validation/validation_ingest_20260205.html"
-#' )
-#' 
-#' # Access stored outputs
-#' master <- result$ingest_standardize$kpro_master
-#' all_reports <- result$validation_html_paths
-#' }
-#'
-#' @export
-store_stage_results <- function(result, 
-                                stage_key, 
-                                stage_outputs, 
-                                validation_html = NULL) {
-  
-  # Store stage outputs under stage key
-  result[[stage_key]] <- stage_outputs
-  
-  # Track validation HTML if provided
-  if (!is.null(validation_html) && nchar(validation_html) > 0) {
-    result$validation_html_paths <- c(result$validation_html_paths, validation_html)
-  }
-  
-  result
-}
-
-
-# ==============================================================================
 # PATH GENERATION
 # ==============================================================================
 
@@ -858,15 +686,38 @@ fill_readme_template <- function(template_path,
 
 
 # ==============================================================================
-# ORCHESTRATOR CONVENIENCE FUNCTIONS
+# MODULE-SPECIFIC HELPER FUNCTIONS (Added for Module Refactoring)
 # ==============================================================================
 
 
-#' Log Stage Start with Console and File Output
+#' Save Summary CSV with Artifact Registration
 #'
 #' @description
-#' Consolidates the common pattern of printing a stage header to console
-#' and logging a stage message to file. Reduces boilerplate in orchestrator
+#' Saves a summary tibble/dataframe as CSV and registers it as an artifact.
+#' Used by summary_stats module for consistent CSV export.
+#'
+#' @param data Tibble or data.frame. Summary data to export.
+#' @param filename Character. Filename (e.g., "detector_summary_20260205.csv").
+#' @param output_dir Character. Output directory path. Default: "results/csv/summary_stats".
+#' @param registry List. Artifact registry from save_checkpoint_and_register().
+#' @param artifact_name Character. Name for artifact registry entry.
+#' @param metadata List. Additional metadata for artifact registration.
+#' @param verbose Logical. Print progress messages. Default FALSE.
+#'
+#' @return List with registry attribute containing file path reference.
+#'
+#' @section CONTRACT:
+#' - Ensures output directory exists
+#' - Saves data as CSV using readr::write_csv
+#' - Registers artifact with SHA256 hash
+#' - Adds file_path attribute for downstream use
+#' - Returns registry with updated artifact entries
+#'
+#' @keywords internal
+#' @export
+save_summary_csv <- function(data, filename, output_dir = "results/csv/summary_stats",
+                             registry = NULL, artifact_name = NULL, metadata = NULL,
+                             verbose = FALSE) {
 #' functions by combining print_stage_header() + log_message() into one call.
 #'
 #' @param stage_num Character. Stage number (e.g., "1", "2.3", "7.1")

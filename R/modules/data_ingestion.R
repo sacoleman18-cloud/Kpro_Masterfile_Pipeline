@@ -19,15 +19,23 @@
 #   Output: Combined raw data tibble with schema version detection
 #
 # Dependencies:
-#   - R/functions/core/config.R (load_study_parameters, setup_pipeline_context)
-#   - R/functions/core/logging.R (log_message, log_stage_start)
+#   - R/functions/core/config.R (load_study_parameters)
+#   - R/functions/core/orchestration_helpers.R (setup_pipeline_context, log_stage_start)
+#   - R/functions/core/logging.R (log_message)
 #   - R/functions/core/console.R (print_stage_banner)
 #   - R/functions/ingestion/ingestion.R (load_local_raw_data, load_external_raw_data)
 #   - R/functions/validation/validation.R (init_stage_validation, log_validation_event)
 #   - R/functions/core/utilities.R (%||%)
 #
-# Last Modified: 2026-02-08
-# Changelog: Created as part of pipeline modularization refactor
+# Functions Provided:
+#   - module_data_ingestion(): Main module function (exported)
+#     Used by: R/modules/module_runner.R (run_module_ingestion)
+#     Used by: R/pipeline/run_phase1_data_preparation.R
+#
+# Last Modified: 2026-02-09
+# Changelog:
+#   2026-02-09: Updated dependencies to reference orchestration_helpers.R
+#   2026-02-08: Created as part of pipeline modularization refactor
 #
 # ==============================================================================
 
