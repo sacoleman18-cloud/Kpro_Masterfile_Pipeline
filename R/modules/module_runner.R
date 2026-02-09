@@ -292,6 +292,12 @@ run_module_summary_stats <- function(finalize_result, verbose = FALSE) {
   study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
   kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
   
+  # Convert Night column from character to Date
+  if ("Night" %in% names(kpro_master)) {
+    kpro_master <- kpro_master %>%
+      dplyr::mutate(Night = as.Date(Night))
+  }
+  
   result <- module_summary_stats(
     calls_per_night_final = finalize_result$finalize_cpn$calls_per_night_final,
     kpro_master = kpro_master,
@@ -334,6 +340,12 @@ run_module_plotting <- function(summary_stats_result, verbose = FALSE) {
   kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*\\.csv$")
   study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
   kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
+  
+  # Convert Night column from character to Date
+  if ("Night" %in% names(kpro_master)) {
+    kpro_master <- kpro_master %>%
+      dplyr::mutate(Night = as.Date(Night))
+  }
   
   # Load calls_per_night_final from results
   cpn_final_file <- find_most_recent_file(
@@ -397,6 +409,12 @@ run_module_report_release <- function(plotting_result,
   kpro_master <- load_most_recent_checkpoint("02_kpro_master_.*\\.csv$")
   study_tz <- study_params$study_parameters$timezone %||% "America/Chicago"
   kpro_master <- parse_datetime_columns(kpro_master, target_tz = study_tz, verbose = verbose)
+  
+  # Convert Night column from character to Date
+  if ("Night" %in% names(kpro_master)) {
+    kpro_master <- kpro_master %>%
+      dplyr::mutate(Night = as.Date(Night))
+  }
   
   # Load calls_per_night_final from checkpoint
   cpn_final_file <- find_most_recent_file(
