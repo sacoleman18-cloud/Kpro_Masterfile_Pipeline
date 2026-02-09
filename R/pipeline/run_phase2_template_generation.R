@@ -33,8 +33,8 @@
 #   - Supports optional Manual ID file integration
 #
 # Checkpoint Output:
-#   - outputs/03_CallsPerNight_Template_EDIT_THIS_YYYYMMDD_HHMMSS.csv
-#   - outputs/03_CallsPerNight_Template_ORIGINAL_YYYYMMDD_HHMMSS.csv
+#   - outputs/03_CallsPerNight_Template_YYYYMMDD_HHMMSS_EDIT_THIS.csv
+#   - outputs/03_CallsPerNight_Template_YYYYMMDD_HHMMSS_ORIGINAL.csv
 #   - results/validation/validation_*.html
 #
 # Dependencies:

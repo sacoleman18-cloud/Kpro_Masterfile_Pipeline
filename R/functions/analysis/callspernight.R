@@ -869,8 +869,8 @@ save_callspernight_with_version <- function(data,
 #' @section Template File Naming:
 #' Templates follow the naming convention:
 #' ```
-#' 03_CallsPerNight_Template_ORIGINAL_YYYYMMDD_HHMMSS.csv
-#' 03_CallsPerNight_Template_EDIT_THIS_YYYYMMDD_HHMMSS.csv
+#' 03_CallsPerNight_Template_YYYYMMDD_HHMMSS_ORIGINAL.csv
+#' 03_CallsPerNight_Template_YYYYMMDD_HHMMSS_EDIT_THIS.csv
 #' ```
 #' 
 #' The function searches for the most recent file matching the pattern
@@ -926,7 +926,7 @@ load_cpn_template <- function(type = "EDIT_THIS",
     if (!file.exists(file_path)) {
       stop(sprintf("Failed to load template: file not found at %s", file_path))
     }
-    expected_pattern <- sprintf("^03_CallsPerNight_Template_%s_\\d{8}_\\d{6}\\.csv$", type)
+    expected_pattern <- sprintf("^03_CallsPerNight_Template_\\d{8}_\\d{6}_%s\\.csv$", type)
     if (!grepl(expected_pattern, basename(file_path))) {
       stop(sprintf(
         "Provided template file name does not match expected pattern %s: %s",
@@ -936,8 +936,8 @@ load_cpn_template <- function(type = "EDIT_THIS",
     template_file <- file_path
   } else {
     # Build pattern for file discovery
-    # Pattern: 03_CallsPerNight_Template_{TYPE}_YYYYMMDD_HHMMSS.csv
-    pattern <- sprintf("^03_CallsPerNight_Template_%s_\\d{8}_\\d{6}\\.csv$", type)
+    # Pattern: 03_CallsPerNight_Template_YYYYMMDD_HHMMSS_{TYPE}.csv
+    pattern <- sprintf("^03_CallsPerNight_Template_\\d{8}_\\d{6}_%s\\.csv$", type)
     
     # Find most recent file
     template_file <- find_most_recent_file(
