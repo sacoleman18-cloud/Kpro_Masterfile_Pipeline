@@ -158,6 +158,7 @@ run_phase2_template_generation <- function(phase1_result = NULL,
   # ===========================================================================
   
   cpn_template <- module3_result$cpn_template
+  kpro_master <- module3_result$kpro_master  # Updated with species column for Phase 3
   metadata <- module3_result$metadata
   template_edit_path <- module3_result$template_edit_path
   template_original_path <- module3_result$template_original_path
@@ -200,6 +201,7 @@ run_phase2_template_generation <- function(phase1_result = NULL,
   list(
     phase = 2,
     phase_name = "Template Generation",
+    kpro_master = kpro_master,  # Updated with species column for Phase 3
     cpn_template = cpn_template,
     template_edit_path = template_edit_path,
     template_original_path = template_original_path,

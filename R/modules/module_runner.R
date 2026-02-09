@@ -236,9 +236,14 @@ run_module_finalize_cpn <- function(cpn_template_result = NULL,
                                     verbose = FALSE) {
   cat("\n>>> Running MODULE 4: Finalize CPN\n\n")
   
-  # Extract kpro_master if provided
+  # Extract kpro_master from Phase 2 result if provided
+  # Phase 2 includes updated kpro_master with species column
   kpro_master <- NULL
-  # Note: finalize_cpn module will load from checkpoint if not provided
+  if (!is.null(cpn_template_result) && "kpro_master" %in% names(cpn_template_result)) {
+    kpro_master <- cpn_template_result$kpro_master
+    if (verbose) cat("  [OK] Using kpro_master from Phase 2 (with species column)\n")
+  }
+  # If not provided, finalize_cpn module will load from checkpoint
   
   # Load study parameters
   study_params <- load_study_parameters(here::here("inst", "config", "study_parameters.yaml"))

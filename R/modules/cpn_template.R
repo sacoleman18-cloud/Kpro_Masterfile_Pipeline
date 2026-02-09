@@ -593,6 +593,7 @@ module_cpn_template <- function(kpro_master = NULL,
   }
   
   result$cpn_template <- cpn_template
+  result$kpro_master <- kpro_master  # Updated with species column for Phase 3
   result$validation_html_paths <- c(validation_html_path)
   result$metadata <- list(
     n_rows = nrow(cpn_template),
