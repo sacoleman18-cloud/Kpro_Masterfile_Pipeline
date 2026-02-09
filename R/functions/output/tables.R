@@ -1018,7 +1018,7 @@ save_gt_table <- function(gt_table,
 #' @param registry List. Artifact registry object (from init_artifact_registry()).
 #'   If provided, artifact will be registered with hash. Default: NULL (no registration)
 #' @param artifact_name Character. Name for artifact registry entry. Required if registry provided.
-#' @param artifact_type Character. Type for artifact registry. Default: "summary_csv"
+#' @param artifact_type Character. Type for artifact registry. Default: "summary_stats"
 #' @param workflow Character. Workflow identifier. Default: "05"
 #' @param metadata List. Additional metadata for registry. Default: list()
 #' @param verbose Logical. Print progress messages? Default: TRUE
@@ -1074,7 +1074,7 @@ save_summary_csv <- function(summary_df,
                              output_dir = "results/csv/summary_stats",
                              registry = NULL,
                              artifact_name = NULL,
-                             artifact_type = "summary_csv",
+                             artifact_type = "summary_stats",
                              workflow = "05",
                              metadata = list(),
                              verbose = TRUE) {

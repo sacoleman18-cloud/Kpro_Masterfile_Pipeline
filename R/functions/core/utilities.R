@@ -689,7 +689,7 @@ fill_readme_template <- function(template_path,
 # MODULE-SPECIFIC HELPER FUNCTIONS (Added for Module Refactoring)
 # ==============================================================================
 
-
+#' Log the start of a stage
 #'
 #' @description
 #' Consolidates stage lifecycle logging by combining print_stage_header() + log_message()
