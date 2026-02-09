@@ -3329,4 +3329,23 @@ artifacts:
       n_detectors: 9
       n_nights: 28
       template_type: EDIT_THIS
-last_modified_utc: '2026-02-09T18:02:32Z'
+  CallsPerNight_final_20260209_150132:
+    name: CallsPerNight_final_20260209_150132
+    type: cpn_final
+    workflow: finalize_cpn
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/csv/CallsPerNight_final_20260209_150132.csv
+    file_hash_sha256: 4acfa15bd3360e86cd5bf223256c0d1e9f2595cbf7cf060e5b7d78b692f34a01
+    file_size_bytes: 15724.0
+    created_utc: '2026-02-09T21:01:33Z'
+    pipeline_version: '2.1'
+    input_artifacts: ~
+    metadata:
+      n_rows: 252
+      n_detectors: 9
+      total_edits: 152
+      status_distribution:
+        Fail: 77
+        Partial: 75
+        Success: 100
+      dead_nights_retained: 77
+last_modified_utc: '2026-02-09T21:01:33Z'

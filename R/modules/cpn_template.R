@@ -284,6 +284,30 @@ module_cpn_template <- function(kpro_master = NULL,
   
   log_message(sprintf("[Stage 3] Species integration: %d NoID removed", n_noid_removed))
   
+  # Save updated kpro_master checkpoint with species column for Phase 3
+  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  kpro_master_checkpoint <- here::here("outputs", sprintf("02_kpro_master_%s.csv", timestamp))
+  
+  registry <- save_checkpoint_and_register(
+    data = kpro_master,
+    file_path = kpro_master_checkpoint,
+    artifact_type = "kpro_master",
+    workflow = "cpn_template",
+    metadata = list(
+      n_rows = nrow(kpro_master),
+      n_species = dplyr::n_distinct(kpro_master$species),
+      species_source = species_source,
+      manual_id_used = manual_id_used,
+      noid_removed = n_noid_removed,
+      stage = "03_species_integration"
+    ),
+    verbose = verbose
+  )
+  
+  if (verbose) {
+    message(sprintf("  [OK] Saved updated kpro_master checkpoint: %s", basename(kpro_master_checkpoint)))
+  }
+  
   # ===========================================================================
   # STAGE 4: CALCULATE STUDY NIGHTS
   # ===========================================================================

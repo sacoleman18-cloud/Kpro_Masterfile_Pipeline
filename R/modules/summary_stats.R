@@ -154,6 +154,19 @@ module_summary_stats <- function(calls_per_night_final,
   all_summaries <- list()
   files_created <- character()
   
+  # Validate required columns for species analysis
+  if (!"species" %in% names(kpro_master)) {
+    stop(sprintf(
+      "Missing required 'species' column in kpro_master.\n  Phase 2 (Template Generation) should have created this column in Stage 3.\n  \n  To remediate:\n  1. Verify Phase 2 (run_phase2_template_generation) completed successfully\n  2. Check that kpro_master checkpoint exists with species column\n  3. If running Phase 3 independently, ensure Phase 2 completed first\n  4. Review logs/ for any warnings in Phase 2 Module 3 (CPN Template)\n  \n  Current kpro_master columns: %s",
+      paste(names(kpro_master), collapse = ", ")
+    ))
+  }
+  
+  if (verbose) {
+    message(sprintf("  [OK] Schema validation passed: species column present (%d unique species)", 
+                    dplyr::n_distinct(kpro_master$species)))
+  }
+  
   # ===========================================================================
   # STAGE 7: DETECTOR ACTIVITY SUMMARY
   # ===========================================================================
@@ -218,7 +231,7 @@ module_summary_stats <- function(calls_per_night_final,
     create_species_summary_by_detector(kpro_master)
   }, error = function(e) {
     stop(sprintf(
-      "Failed to create species composition summary.\n  Species column was validated in Stage 2, but summary generation failed.\n  Original error: %s\n  Check that kpro_master has valid species data.",
+      "Failed to create species composition summary.\n  Original error: %s\n  Check that kpro_master has valid species data and required columns.",
       e$message
     ))
   })
@@ -236,7 +249,7 @@ module_summary_stats <- function(calls_per_night_final,
     create_species_accumulation_summary(kpro_master)
   }, error = function(e) {
     stop(sprintf(
-      "Failed to create species accumulation summary.\n  Species column was validated in Stage 2, but accumulation calculation failed.\n  Original error: %s\n  Check that kpro_master has valid species and date data.",
+      "Failed to create species accumulation summary.\n  Original error: %s\n  Check that kpro_master has valid species and date data.",
       e$message
     ))
   })
