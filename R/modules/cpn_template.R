@@ -291,7 +291,7 @@ module_cpn_template <- function(kpro_master = NULL,
   registry <- save_checkpoint_and_register(
     data = kpro_master,
     file_path = kpro_master_checkpoint,
-    artifact_type = "kpro_master",
+    artifact_type = "checkpoint",
     workflow = "cpn_template",
     metadata = list(
       n_rows = nrow(kpro_master),
@@ -299,7 +299,8 @@ module_cpn_template <- function(kpro_master = NULL,
       species_source = species_source,
       manual_id_used = manual_id_used,
       noid_removed = n_noid_removed,
-      stage = "03_species_integration"
+      stage = "03_species_integration",
+      checkpoint_name = "02_kpro_master"
     ),
     verbose = verbose
   )
