@@ -205,8 +205,8 @@ run_phase3_analysis_reporting <- function(phase2_result = NULL,
   calls_per_night_final <- module4_result$finalize_cpn$calls_per_night_final
   n_summaries <- length(module5_result$summary_stats$all_summaries)
   n_plots <- sum(unlist(module6_result$plotting$plot_counts))
-  report_path <- module7_result$report_release$report_path
-  release_bundle_path <- module7_result$report_release$release_bundle_path
+  report_path <- module7_result$report_release$report_html
+  release_bundle_path <- module7_result$report_release$release_zip
   
   log_message("=== PHASE 3 COMPLETE: Pipeline finished successfully ===")
   
@@ -218,16 +218,16 @@ run_phase3_analysis_reporting <- function(phase2_result = NULL,
     cat(sprintf("  CPN rows: %s\n", format(nrow(calls_per_night_final), big.mark = ",")))
     cat(sprintf("  Summaries: %d\n", n_summaries))
     cat(sprintf("  Plots: %d\n", n_plots))
-    cat(sprintf("  Report: %s\n", basename(report_path)))
-    cat(sprintf("  Release bundle: %s\n", basename(release_bundle_path)))
+    cat(sprintf("  Report: %s\n", if(!is.null(report_path)) basename(report_path) else "NOT GENERATED"))
+    cat(sprintf("  Release bundle: %s\n", if(!is.null(release_bundle_path)) basename(release_bundle_path) else "NOT CREATED"))
     cat("========================================\n")
     cat("\n")
     cat("✅  PIPELINE COMPLETE  ✅\n")
     cat("========================================\n")
     cat("  All phases executed successfully!\n")
     cat("  Review outputs:\n")
-    cat(sprintf("  - Report: %s\n", report_path))
-    cat(sprintf("  - Bundle: %s\n", release_bundle_path))
+    cat(sprintf("  - Report: %s\n", if(!is.null(report_path)) report_path else "NOT GENERATED"))
+    cat(sprintf("  - Bundle: %s\n", if(!is.null(release_bundle_path)) release_bundle_path else "NOT CREATED"))
     cat("========================================\n")
     cat("\n")
   }

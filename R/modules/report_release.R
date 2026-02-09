@@ -198,7 +198,7 @@ module_report_release <- function(calls_per_night_final,
   
   # Validate RDS structure
   rds_validation <- tryCatch({
-    validate_rds_structure(summary_rds_path, plots_rds_path)
+    validate_rds_structure(all_summaries_for_report, all_plots_for_report)
   }, error = function(e) {
     list(valid = FALSE, errors = e$message)
   })
