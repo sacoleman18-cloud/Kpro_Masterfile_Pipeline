@@ -28,6 +28,13 @@
 #
 # =============================================================================
 
+# Load required packages
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(quarto, quietly = TRUE)
+library(zip, quietly = TRUE)
+library(here, quietly = TRUE)
+
 # -----------------------------------------------------------------------------
 # Helper: consistent module sourcing with clean messaging
 # -----------------------------------------------------------------------------
