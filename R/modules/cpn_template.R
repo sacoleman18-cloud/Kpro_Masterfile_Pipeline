@@ -286,7 +286,8 @@ module_cpn_template <- function(kpro_master = NULL,
   
   # Save updated kpro_master checkpoint with species column for Phase 3
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  kpro_master_checkpoint <- here::here("outputs", sprintf("02_kpro_master_%s.csv", timestamp))
+  kpro_master_checkpoint <- here::here("outputs", "checkpoints",
+                                       sprintf("02_kpro_master_%s.csv", timestamp))
   
   registry <- save_checkpoint_and_register(
     data = kpro_master,
