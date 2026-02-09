@@ -1,17 +1,34 @@
 # ==============================================================================
-# R/debug/module_runner.R
+# MODULE: module_runner.R
 # ==============================================================================
-# PURPOSE
-# -------
-# Debug and testing runner for individual pipeline modules. Allows executing
-# modules one at a time for development, testing, and debugging purposes.
+# 
+# Classification: Module Execution Layer
+# Subtitle: Central module execution and orchestration interface
 #
-# USAGE
-# -----
-# # Source this file to load all modules
-# source("R/debug/module_runner.R")
+# Description:
+# This module provides the core module execution layer for the KPro pipeline.
+# It defines callable runner functions for each of the 7 pipeline modules,
+# enabling both phase-based orchestration and individual module testing.
 #
-# # Run individual modules:
+# Architecture Role:
+# - Serves as the interface between phase orchestrators and processing modules
+# - Enables checkpointed phase orchestration with human-in-the-loop points
+# - Provides granular control for testing, debugging, and incremental execution
+# - Maintains compatibility with both automated and interactive workflows
+#
+# USAGE (Phase Orchestration)
+# ----------------------------
+# Used by phase orchestrators in R/pipeline/:
+#   Phase 1: run_module_ingestion() → run_module_standardization()
+#   Phase 2: run_module_cpn_template()
+#   Phase 3: run_module_finalize_cpn() → run_module_summary_stats() 
+#            → run_module_plotting() → run_module_report_release()
+#
+# USAGE (Individual Module Testing)
+# ----------------------------------
+# source("R/functions/load_all.R")
+# 
+# # Run modules individually:
 # result1 <- run_module_ingestion(verbose = TRUE)
 # result2 <- run_module_standardization(result1, verbose = TRUE)
 # result3 <- run_module_cpn_template(result2, verbose = TRUE)
@@ -30,12 +47,30 @@
 # MODULE 6: Plotting (Stages 15-21)
 # MODULE 7: Report & Release (Stages 22-25)
 #
+# CHECKPOINTED PHASES
+# -------------------
+# The pipeline is divided into three phases with checkpoint/validation between:
+#
+#   PHASE 1: Data Preparation (Modules 1-2)
+#            └─→ Checkpoint: kpro_master.csv
+#
+#   PHASE 2: Template Generation (Module 3)
+#            └─→ Checkpoint: CPN_Template_EDIT_THIS.csv
+#            └─→ HUMAN-IN-THE-LOOP: User edits recording hours
+#
+#   PHASE 3: Analysis & Reporting (Modules 4-7)
+#            └─→ Final outputs: Report, plots, release bundle
+#
 # NOTES
 # -----
 # - Each function returns results compatible with the next module's input
 # - Use verbose = TRUE for detailed progress messages
 # - Modules can be run independently if you have intermediate results
-# - Checkpoint files will be saved as usual during module execution
+# - Checkpoint files are saved automatically during module execution
+# - Phase orchestrators call these functions to implement pipeline phases
+#
+# Last Modified: 2026-02-08
+# Changelog: Relocated from R/debug/ to R/modules/ as core architecture
 #
 # ==============================================================================
 
@@ -44,10 +79,10 @@ source(file.path("R", "functions", "load_all.R"))
 
 cat("\n")
 cat("===============================================\n")
-cat("  KPro Pipeline Module Runner (Debug Mode)\n")
+cat("  KPro Pipeline Module Execution Layer\n")
 cat("===============================================\n")
 cat("\n")
-cat("Available modules:\n")
+cat("Available module runners:\n")
 cat("  1. run_module_ingestion()\n")
 cat("  2. run_module_standardization(ingestion_result)\n")
 cat("  3. run_module_cpn_template(standardization_result)\n")

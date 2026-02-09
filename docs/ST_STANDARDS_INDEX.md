@@ -35,7 +35,7 @@ Phase 2: Template Generation       → CPN_Template_EDIT_THIS.csv (USER EDITS)
 Phase 3: Analysis & Reporting      → Final outputs (report, bundle)
 ```
 
-**Authoritative Reference:** See [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md)
+**Authoritative Reference:** See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md)
 
 Key improvements in v3.0:
 - Explicit phases with clear checkpoints (not implicit chunks)
@@ -52,16 +52,16 @@ The coding standards are organized into focused documents for targeted reference
 
 | File | Version | Focus Area | Use When... |
 |------|---------|------------|-------------|
-| **[ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md)** | **NEW v1.0** | **Phase orchestration architecture** | **Understanding checkpointed phases, module execution layer, phase result passing** |
-| `01_architecture_standards.md` | v3.0 | Project structure, phases, file naming, paths | Organizing files, understanding phase flow, adding directories |
-| `02_documentation_standards.md` | v2.3 | Headers, Roxygen2, comments, collaboration | Documenting functions, writing phase orchestrator headers |
-| `03_code_design_standards.md` | v2.4 | Function design, error handling, style, assertions | Writing functions, handling errors, code review |
-| `04_data_standards.md` | v2.4 | Data handling, quality, validation, hashing, filters | Validating data, adding quality checks, fingerprinting |
-| `05_logging_console_standards.md` | v2.4 | Logging, console output, progress indicators, verbose gating | Adding logging, formatting console messages |
-| `06_quarto_reporting_standards.md` | v2.3 | Quarto integration, reports, manifest | Working with Quarto, generating reports |
-| `07_artifact_release_standards.md` | v2.4 | Artifact registry, release bundles | Registering outputs, creating release packages |
-| `08_development_standards.md` | v2.3 | Git, testing, dependencies, YAML config | Version control, writing tests, managing packages |
-| `09_appendices.md` | v2.2 | Templates, inventories, checklists, quick reference | Looking up templates, function lists, checklists |
+| **[ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md)** | **NEW v1.0** | **Phase orchestration architecture** | **Understanding checkpointed phases, module execution layer, phase result passing** |
+| `ST_architecture_standards.md` | v3.0 | Project structure, phases, file naming, paths | Organizing files, understanding phase flow, adding directories |
+| `ST_documentation_standards.md` | v2.3 | Headers, Roxygen2, comments, collaboration | Documenting functions, writing phase orchestrator headers |
+| `ST_code_design_standards.md` | v2.4 | Function design, error handling, style, assertions | Writing functions, handling errors, code review |
+| `ST_data_standards.md` | v2.4 | Data handling, quality, validation, hashing, filters | Validating data, adding quality checks, fingerprinting |
+| `ST_logging_console_standards.md` | v2.4 | Logging, console output, progress indicators, verbose gating | Adding logging, formatting console messages |
+| `ST_quarto_reporting_standards.md` | v2.3 | Quarto integration, reports, manifest | Working with Quarto, generating reports |
+| `ST_artifact_release_standards.md` | v2.4 | Artifact registry, release bundles | Registering outputs, creating release packages |
+| `ST_development_standards.md` | v2.3 | Git, testing, dependencies, YAML config | Version control, writing tests, managing packages |
+| `ST_appendices.md` | v2.2 | Templates, inventories, checklists, quick reference | Looking up templates, function lists, checklists |
 
 ---
 
@@ -157,48 +157,48 @@ assert_not_empty(df)
 ## DOCUMENTATION HIERARCHY
 
 ### Level 1: Master Reference (Start Here)
-- **[ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md)** - Understanding phase architecture
-- **[01_architecture_standards.md](01_architecture_standards.md)** - File structure and design
+- **[ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md)** - Understanding phase architecture
+- **[ST_architecture_standards.md](ST_architecture_standards.md)** - File structure and design
 
 ### Level 2: Implementation Standards
-- **[02_documentation_standards.md](02_documentation_standards.md)** - How to document
-- **[03_code_design_standards.md](03_code_design_standards.md)** - How to design functions
-- **[04_data_standards.md](04_data_standards.md)** - Data handling and validation
-- **[05_logging_console_standards.md](05_logging_console_standards.md)** - Logging and output
+- **[ST_documentation_standards.md](ST_documentation_standards.md)** - How to document
+- **[ST_code_design_standards.md](ST_code_design_standards.md)** - How to design functions
+- **[ST_data_standards.md](ST_data_standards.md)** - Data handling and validation
+- **[ST_logging_console_standards.md](ST_logging_console_standards.md)** - Logging and output
 
 ### Level 3: Specific Topics
-- **[06_quarto_reporting_standards.md](06_quarto_reporting_standards.md)** - Report generation
-- **[07_artifact_release_standards.md](07_artifact_release_standards.md)** - Artifacts and releases
-- **[08_development_standards.md](08_development_standards.md)** - Version control and testing
-- **[09_appendices.md](09_appendices.md)** - Templates and checklists
+- **[ST_quarto_reporting_standards.md](ST_quarto_reporting_standards.md)** - Report generation
+- **[ST_artifact_release_standards.md](ST_artifact_release_standards.md)** - Artifacts and releases
+- **[ST_development_standards.md](ST_development_standards.md)** - Version control and testing
+- **[ST_appendices.md](ST_appendices.md)** - Templates and checklists
 
 ---
 
 ## USAGE IN DEVELOPMENT
 
 ### When Writing Phase Orchestrators
-1. Read [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md) - understand concept
-2. Read [01_architecture_standards.md](01_architecture_standards.md) - architecture specifics
-3. Read [02_documentation_standards.md](02_documentation_standards.md) - header template
+1. Read [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) - understand concept
+2. Read [ST_architecture_standards.md](ST_architecture_standards.md) - architecture specifics
+3. Read [ST_documentation_standards.md](ST_documentation_standards.md) - header template
 4. Implement following phase orchestrator pattern
 
 ### When Writing Modules
-1. Read [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md) - module role
-2. Read [03_code_design_standards.md](03_code_design_standards.md) - function design
-3. Read [04_data_standards.md](04_data_standards.md) - data handling
+1. Read [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) - module role
+2. Read [ST_code_design_standards.md](ST_code_design_standards.md) - function design
+3. Read [ST_data_standards.md](ST_data_standards.md) - data handling
 4. Implement module following self-containment pattern
 
 ### When Writing Utility Functions
-1. Read [03_code_design_standards.md](03_code_design_standards.md) - design principles
-2. Read [04_data_standards.md](04_data_standards.md) or relevant section
-3. Read [02_documentation_standards.md](02_documentation_standards.md) - Roxygen2
+1. Read [ST_code_design_standards.md](ST_code_design_standards.md) - design principles
+2. Read [ST_data_standards.md](ST_data_standards.md) or relevant section
+3. Read [ST_documentation_standards.md](ST_documentation_standards.md) - Roxygen2
 
 ### When Working with Git
-1. Read [08_development_standards.md](08_development_standards.md) - commit messages
+1. Read [ST_development_standards.md](ST_development_standards.md) - commit messages
 
 ### When Writing Tests
-1. Read [08_development_standards.md](08_development_standards.md) - testing standards
-2. Check [09_appendices.md](09_appendices.md) - test templates
+1. Read [ST_development_standards.md](ST_development_standards.md) - testing standards
+2. Check [ST_appendices.md](ST_appendices.md) - test templates
 
 ---
 
@@ -215,10 +215,10 @@ assert_not_empty(df)
 - Phase orchestrators (thin wrappers composing modules)
 
 **New Documents:**
-- ✨ ORCHESTRATION_PHILOSOPHY.md (v1.0) - Authoritative orchestration reference
+- ✨ ST_ORCHESTRATION_PHILOSOPHY.md (v1.0) - Authoritative orchestration reference
 
 **Updated Documents:**
-- 01_architecture_standards.md (v2.5 → v3.0) - Complete rewrite for phases
+- ST_architecture_standards.md (v2.5 → v3.0) - Complete rewrite for phases
 - All other documents remain compatible (minor terminology updates recommended)
 
 **Terminology Changes:**
@@ -230,7 +230,7 @@ assert_not_empty(df)
 **Migration:**
 - Old chunk-based functions still work (deprecated)
 - New phase orchestrators recommended for all development
-- See ORCHESTRATION_PHILOSOPHY.md §7 for migration guide
+- See ST_ORCHESTRATION_PHILOSOPHY.md §7 for migration guide
 
 ### v2.3 (2026-01-31)
 - Transitioned to Shiny-driven orchestrating functions
@@ -262,12 +262,12 @@ assert_not_empty(df)
 Reference specific standards files when asking for help:
 
 ```
-"Using ORCHESTRATION_PHILOSOPHY, explain how phases work"
-"Using architecture_standards, help me add a new output directory"
-"Using code_design_standards, review this function"  
-"Using data_standards, add hash verification to this loader"
-"Using documentation_standards, write the header for this orchestrator"
-"Using artifact_standards, register these new outputs"
+"Using ST_ORCHESTRATION_PHILOSOPHY, explain how phases work"
+"Using ST_architecture_standards, help me add a new output directory"
+"Using ST_code_design_standards, review this function"  
+"Using ST_data_standards, add hash verification to this loader"
+"Using ST_documentation_standards, write the header for this orchestrator"
+"Using ST_artifact_release_standards, register these new outputs"
 ```
 
 ---
@@ -292,7 +292,7 @@ Reference specific standards files when asking for help:
 - [ ] Ready to handle human-in-the-loop (Phase 2)
 
 ### Before Writing New Standards
-- [ ] Reviewed ORCHESTRATION_PHILOSOPHY.md
+- [ ] Reviewed ST_ORCHESTRATION_PHILOSOPHY.md
 - [ ] Checked existing standards for overlaps
 - [ ] Aligned with phase orchestration philosophy
 - [ ] Updated terminology to current standards
@@ -314,5 +314,5 @@ This standards system synthesizes best practices from:
 
 **Version 3.0 - Checkpointed Phase Orchestration (2026-02-08)**
 
-For the most current architecture concepts, always consult [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md) first.
+For the most current architecture concepts, always consult [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) first.
 

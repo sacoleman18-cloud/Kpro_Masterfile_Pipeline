@@ -111,7 +111,7 @@ process_data <- function(df, verbose = FALSE) {
 ### 1.9 Structured Return Pattern for Phase Orchestrator Functions
 
 > **NEW in v3.0:** Phase orchestrators replace legacy chunk orchestrators.
-> See [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md) for complete patterns.
+> See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) for complete patterns.
 
 Phase orchestrator functions must return comprehensive structured results with explicit phase information:
 
@@ -275,7 +275,7 @@ ensure_dir_exists(output_dir)  # Creates with recursive = TRUE
 ### 2.3 Phase Orchestrator Helper Patterns
 
 > **v3.0:** Phase orchestrators are the primary execution model.
-> See [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md) §4 for complete workflows.
+> See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) §4 for complete workflows.
 
 **Pattern: Pipeline Context Setup**
 ```r
@@ -801,7 +801,7 @@ my_function <- function(df, verbose = FALSE) {
 
 ### 7.2 Within a Workflow Script
 
-Use the standardized `print_stage_header()` function (see `05_logging_console_standards.md`):
+Use the standardized `print_stage_header()` function (see `ST_logging_console_standards.md`):
 
 ```r
 # ==============================================================================

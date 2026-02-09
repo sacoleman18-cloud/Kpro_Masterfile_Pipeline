@@ -340,11 +340,11 @@ See `docs/ARTIFACT_CONFIGURATION_ANALYSIS.md` for comprehensive recommendations:
 
 All changes follow repository standards:
 
-- ✅ **02_documentation_standards.md** - Roxygen2 headers, CONTRACT sections
-- ✅ **03_code_design_standards.md** - Function design, verbose parameter
-- ✅ **04_data_standards.md** - Hashing, validation, data integrity
-- ✅ **05_logging_console_standards.md** - Logging patterns, console output
-- ✅ **07_artifact_release_standards.md** - Artifact registration, provenance
+- ✅ **ST_documentation_standards.md** - Roxygen2 headers, CONTRACT sections
+- ✅ **ST_code_design_standards.md** - Function design, verbose parameter
+- ✅ **ST_data_standards.md** - Hashing, validation, data integrity
+- ✅ **ST_logging_console_standards.md** - Logging patterns, console output
+- ✅ **ST_artifact_release_standards.md** - Artifact registration, provenance
 
 ---
 

@@ -165,7 +165,7 @@ This document summarizes the complete two-phase comprehensive refactoring projec
 
 ### Recommendations by Document
 
-#### 🔴 Critical: `01_architecture_standards.md`
+#### 🔴 Critical: `ST_architecture_standards.md`
 
 **Section 2.2: File Naming Conventions**
 - ADD: Unnumbered module pattern (`finalize_cpn.R`, not `04_finalize_cpn.R`)
@@ -187,7 +187,7 @@ This document summarizes the complete two-phase comprehensive refactoring projec
 - SHOW: File structure before/after refactoring
 - CLARIFY: Module dependencies and orchestration flow
 
-#### 🟠 High: `02_documentation_standards.md`
+#### 🟠 High: `ST_documentation_standards.md`
 
 **Section 2.1 (NEW): Module Documentation**
 - ADD: Self-contained module header template
@@ -196,19 +196,19 @@ This document summarizes the complete two-phase comprehensive refactoring projec
 
 #### 🟡 Medium: Five Additional Documents
 
-**`00_STANDARDS_INDEX.md`**
+**`ST_STANDARDS_INDEX.md`**
 - UPDATE: Quick reference table (distinguish legacy vs refactored)
 
-**`03_code_design_standards.md`**
+**`ST_code_design_standards.md`**
 - ADD: When to extract helper functions (5 criteria)
 
-**`07_artifact_release_standards.md`**
+**`ST_artifact_release_standards.md`**
 - UPDATE: Registration table (reference modules, not legacy workflows)
 
-**`08_development_standards.md`**
+**`ST_development_standards.md`**
 - ADD: Module-specific test files to test naming convention
 
-**`09_appendices.md`**
+**`ST_appendices.md`**
 - ADD: DRY helper extraction reminder to "Before Adding Function" checklist
 
 ### Documentation Created
@@ -277,17 +277,17 @@ This document summarizes the complete two-phase comprehensive refactoring projec
 
 ### Short-Term Actions (Next 1-2 Weeks)
 
-- [ ] Update `01_architecture_standards.md` (Critical sections 2.2, 3.1, 3.3, 4.1)
-- [ ] Update `02_documentation_standards.md` (Add Section 2.1 for modules)
-- [ ] Update `00_STANDARDS_INDEX.md` (Quick reference table)
-- [ ] Add architecture diagram to `01_architecture_standards.md`
+- [ ] Update `ST_architecture_standards.md` (Critical sections 2.2, 3.1, 3.3, 4.1)
+- [ ] Update `ST_documentation_standards.md` (Add Section 2.1 for modules)
+- [ ] Update `ST_STANDARDS_INDEX.md` (Quick reference table)
+- [ ] Add architecture diagram to `ST_architecture_standards.md`
 
 ### Medium-Term Actions (Next Month)
 
-- [ ] Update `03_code_design_standards.md` (Helper extraction guidance)
-- [ ] Update `07_artifact_release_standards.md` (Registration table)
-- [ ] Update `08_development_standards.md` (Test naming)
-- [ ] Update `09_appendices.md` (Checklists)
+- [ ] Update `ST_code_design_standards.md` (Helper extraction guidance)
+- [ ] Update `ST_artifact_release_standards.md` (Registration table)
+- [ ] Update `ST_development_standards.md` (Test naming)
+- [ ] Update `ST_appendices.md` (Checklists)
 - [ ] Create unit tests for 2 new helper functions
 - [ ] Add integration tests for refactored modules
 
@@ -363,13 +363,13 @@ This document summarizes the complete two-phase comprehensive refactoring projec
 - `docs/REFACTORING_CHUNK3_DOCUMENTATION.md` (initial phase)
 
 **Standards Documents (Pending Update):**
-- `docs/00_STANDARDS_INDEX.md` (minor updates needed)
-- `docs/01_architecture_standards.md` (major updates needed)
-- `docs/02_documentation_standards.md` (minor updates needed)
-- `docs/03_code_design_standards.md` (minor updates needed)
-- `docs/07_artifact_release_standards.md` (minor updates needed)
-- `docs/08_development_standards.md` (minor updates needed)
-- `docs/09_appendices.md` (minor updates needed)
+- `docs/ST_STANDARDS_INDEX.md` (minor updates needed)
+- `docs/ST_architecture_standards.md` (major updates needed)
+- `docs/ST_documentation_standards.md` (minor updates needed)
+- `docs/ST_code_design_standards.md` (minor updates needed)
+- `docs/ST_artifact_release_standards.md` (minor updates needed)
+- `docs/ST_development_standards.md` (minor updates needed)
+- `docs/ST_appendices.md` (minor updates needed)
 
 ---
 

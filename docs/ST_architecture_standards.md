@@ -135,16 +135,16 @@ project_root/
 │   └── pipeline_YYYY-MM-DD.log
 │
 ├── docs/
-│   ├── 00_STANDARDS_INDEX.md
-│   ├── 01_architecture_standards.md           # THIS FILE
-│   ├── 02_documentation_standards.md
-│   ├── 03_code_design_standards.md
-│   ├── 04_data_standards.md
-│   ├── 05_logging_console_standards.md
-│   ├── 06_quarto_reporting_standards.md
-│   ├── 07_artifact_release_standards.md
-│   ├── 08_development_standards.md
-│   └── ORCHESTRATION_PHILOSOPHY.md            # NEW: Authoritative orchestration reference
+│   ├── ST_STANDARDS_INDEX.md
+│   ├── ST_architecture_standards.md           # THIS FILE
+│   ├── ST_documentation_standards.md
+│   ├── ST_code_design_standards.md
+│   ├── ST_data_standards.md
+│   ├── ST_logging_console_standards.md
+│   ├── ST_quarto_reporting_standards.md
+│   ├── ST_artifact_release_standards.md
+│   ├── ST_development_standards.md
+│   └── ST_ORCHESTRATION_PHILOSOPHY.md         # NEW: Authoritative orchestration reference
 │
 ├── tests/
 │   ├── Tester.R                               # Phase chaining test script

@@ -22,7 +22,7 @@ If you're upgrading from version 1.x:
 
 1. Review the new architecture in [README.md](README.md)
 2. Check configuration requirements in `inst/config/YAML_PARAMETER_GUIDE.md`
-3. Review workflow documentation in `docs/01_architecture_standards.md`
+3. Review workflow documentation in `docs/ST_architecture_standards.md`
 4. See `docs/QUICKSTART.md` for updated usage instructions (if available)
 
 ---

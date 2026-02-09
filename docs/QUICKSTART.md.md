@@ -437,8 +437,8 @@ quality_plots <- all_plots$quality
 
 For detailed pipeline architecture and standards, see:
 - `README.md` - High-level overview
-- `docs/01_architecture_standards.md` - File structure and organization
-- `docs/00_STANDARDS_INDEX.md` - Complete standards reference
+- `docs/ST_architecture_standards.md` - File structure and organization
+- `docs/ST_STANDARDS_INDEX.md` - Complete standards reference
 
 ---
 

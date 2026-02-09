@@ -11,16 +11,16 @@
 Following Phase 1 DRY refactoring (extraction of 4 self-contained modules with 10 helper functions), this audit reviews all 10 coding standards documents to identify outdated content. The refactoring introduced significant architectural changes that are not yet reflected in the standards documentation.
 
 ### Documents Audited
-1. `00_STANDARDS_INDEX.md` — Core philosophy and standards index
-2. `01_architecture_standards.md` — Directory structure, file naming, orchestrator patterns
-3. `02_documentation_standards.md` — Function and module documentation requirements
-4. `03_code_design_standards.md` — Function design principles, verbose patterns
-5. `04_data_standards.md` — Schema structures, data handling
-6. `05_logging_console_standards.md` — Logging and console output patterns
-7. `06_quarto_reporting_standards.md` — Quarto integration and report generation
-8. `07_artifact_release_standards.md` — Artifact registry and release bundles
-9. `08_development_standards.md` — Testing, version control, dependencies
-10. `09_appendices.md` — Templates, checklists, quick reference
+1. `ST_STANDARDS_INDEX.md` — Core philosophy and standards index
+2. `ST_architecture_standards.md` — Directory structure, file naming, orchestrator patterns
+3. `ST_documentation_standards.md` — Function and module documentation requirements
+4. `ST_code_design_standards.md` — Function design principles, verbose patterns
+5. `ST_data_standards.md` — Schema structures, data handling
+6. `ST_logging_console_standards.md` — Logging and console output patterns
+7. `ST_quarto_reporting_standards.md` — Quarto integration and report generation
+8. `ST_artifact_release_standards.md` — Artifact registry and release bundles
+9. `ST_development_standards.md` — Testing, version control, dependencies
+10. `ST_appendices.md` — Templates, checklists, quick reference
 
 ### Key Findings
 - **8 of 10 documents** require updates
@@ -32,7 +32,7 @@ Following Phase 1 DRY refactoring (extraction of 4 self-contained modules with 1
 
 ## SECTION 1: DOCUMENT-BY-DOCUMENT AUDIT
 
-### 1.1 `00_STANDARDS_INDEX.md`
+### 1.1 `ST_STANDARDS_INDEX.md`
 
 **Status:** ⚠️ **Minor Updates Required**
 
@@ -65,7 +65,7 @@ Following Phase 1 DRY refactoring (extraction of 4 self-contained modules with 1
 
 ---
 
-### 1.2 `01_architecture_standards.md`
+### 1.2 `ST_architecture_standards.md`
 
 **Status:** 🔴 **Major Updates Required**
 
@@ -272,7 +272,7 @@ R/functions/
 
 ---
 
-### 1.3 `02_documentation_standards.md`
+### 1.3 `ST_documentation_standards.md`
 
 **Status:** ⚠️ **Minor Updates Required**
 
@@ -357,7 +357,7 @@ use a hybrid format: orchestrator-style header + standard function Roxygen.
 
 ---
 
-### 1.4 `03_code_design_standards.md`
+### 1.4 `ST_code_design_standards.md`
 
 **Status:** ⚠️ **Minor Updates Required**
 
@@ -403,7 +403,7 @@ use a hybrid format: orchestrator-style header + standard function Roxygen.
 
 ---
 
-### 1.5 `04_data_standards.md`
+### 1.5 `ST_data_standards.md`
 
 **Status:** ✅ **NO CHANGES REQUIRED**
 
@@ -411,7 +411,7 @@ use a hybrid format: orchestrator-style header + standard function Roxygen.
 
 ---
 
-### 1.6 `05_logging_console_standards.md`
+### 1.6 `ST_logging_console_standards.md`
 
 **Status:** ✅ **NO CHANGES REQUIRED**
 
@@ -419,7 +419,7 @@ use a hybrid format: orchestrator-style header + standard function Roxygen.
 
 ---
 
-### 1.7 `06_quarto_reporting_standards.md`
+### 1.7 `ST_quarto_reporting_standards.md`
 
 **Status:** ✅ **NO CHANGES REQUIRED**
 
@@ -427,7 +427,7 @@ use a hybrid format: orchestrator-style header + standard function Roxygen.
 
 ---
 
-### 1.8 `07_artifact_release_standards.md`
+### 1.8 `ST_artifact_release_standards.md`
 
 **Status:** ⚠️ **Minor Updates Required**
 
@@ -471,7 +471,7 @@ Every chunk/workflow/module that produces persistent output MUST register artifa
 
 ---
 
-### 1.9 `08_development_standards.md`
+### 1.9 `ST_development_standards.md`
 
 **Status:** ⚠️ **Minor Updates Required**
 
@@ -506,7 +506,7 @@ tests/
 
 ---
 
-### 1.10 `09_appendices.md`
+### 1.10 `ST_appendices.md`
 
 **Status:** ⚠️ **Minor Updates Required**
 
@@ -547,26 +547,26 @@ tests/
 
 | Document | Section | Issue | Impact |
 |----------|---------|-------|--------|
-| `01_architecture_standards.md` | 2.2 File Naming | Contradicts unnumbered module pattern | 🔴 Critical |
-| `01_architecture_standards.md` | 3.1 Orchestrator Table | Doesn't show 4-module split | 🔴 Critical |
-| `01_architecture_standards.md` | 4.1 Chunk Mapping | Missing Phase 1 architecture | 🔴 Critical |
+| `ST_architecture_standards.md` | 2.2 File Naming | Contradicts unnumbered module pattern | 🔴 Critical |
+| `ST_architecture_standards.md` | 3.1 Orchestrator Table | Doesn't show 4-module split | 🔴 Critical |
+| `ST_architecture_standards.md` | 4.1 Chunk Mapping | Missing Phase 1 architecture | 🔴 Critical |
 
 ### 2.2 High Priority Updates (Should Address)
 
 | Document | Section | Issue | Impact |
 |----------|---------|-------|--------|
-| `01_architecture_standards.md` | 3.3 Helper Functions | Missing 10 Phase 1 helpers | 🟠 High |
-| `02_documentation_standards.md` | 2.0 Module Headers | No guidance for module docs | 🟠 High |
+| `ST_architecture_standards.md` | 3.3 Helper Functions | Missing 10 Phase 1 helpers | 🟠 High |
+| `ST_documentation_standards.md` | 2.0 Module Headers | No guidance for module docs | 🟠 High |
 
 ### 2.3 Medium Priority Updates (Nice to Have)
 
 | Document | Section | Issue | Impact |
 |----------|---------|-------|--------|
-| `00_STANDARDS_INDEX.md` | Quick Reference | Doesn't distinguish legacy vs refactored | 🟡 Medium |
-| `03_code_design_standards.md` | Function Size | Missing helper extraction guidance | 🟡 Medium |
-| `07_artifact_release_standards.md` | Registration Table | References legacy workflows | 🟡 Medium |
-| `08_development_standards.md` | Test Naming | No module test guidance | 🟡 Medium |
-| `09_appendices.md` | Checklists | Missing DRY helper reminder | 🟡 Medium |
+| `ST_STANDARDS_INDEX.md` | Quick Reference | Doesn't distinguish legacy vs refactored | 🟡 Medium |
+| `ST_code_design_standards.md` | Function Size | Missing helper extraction guidance | 🟡 Medium |
+| `ST_artifact_release_standards.md` | Registration Table | References legacy workflows | 🟡 Medium |
+| `ST_development_standards.md` | Test Naming | No module test guidance | 🟡 Medium |
+| `ST_appendices.md` | Checklists | Missing DRY helper reminder | 🟡 Medium |
 
 ### 2.4 Low Priority Updates (Optional)
 
@@ -578,24 +578,24 @@ None identified. All issues above threshold for documentation.
 
 ### 3.1 Immediate Actions
 
-1. **Update 01_architecture_standards.md** (Sections 2.2, 3.1, 3.3, 4.1)
+1. **Update ST_architecture_standards.md** (Sections 2.2, 3.1, 3.3, 4.1)
    - Priority: 🔴 Critical
    - Estimated Time: 2-3 hours
    - Impact: Ensures developers follow correct architecture patterns
 
-2. **Update 02_documentation_standards.md** (Add Section 2.1)
+2. **Update ST_documentation_standards.md** (Add Section 2.1)
    - Priority: 🟠 High
    - Estimated Time: 1 hour
    - Impact: Provides clear module documentation template
 
 ### 3.2 Short-Term Actions (Next Sprint)
 
-3. **Update 00_STANDARDS_INDEX.md** (Quick Reference)
+3. **Update ST_STANDARDS_INDEX.md** (Quick Reference)
    - Priority: 🟡 Medium
    - Estimated Time: 30 minutes
    - Impact: Improves navigation and clarity
 
-4. **Update 03_code_design_standards.md** (Add helper extraction guidance)
+4. **Update ST_code_design_standards.md** (Add helper extraction guidance)
    - Priority: 🟡 Medium
    - Estimated Time: 1 hour
    - Impact: Codifies DRY principles for future refactoring
@@ -613,15 +613,15 @@ None identified. All issues above threshold for documentation.
 
 ### 4.1 Fully Compliant Standards
 
-✅ **04_data_standards.md**
+✅ **ST_data_standards.md**
 - Rationale: Data structures and schema rules are architecture-agnostic
 - No references to specific orchestrators or module structure
 
-✅ **05_logging_console_standards.md**
+✅ **ST_logging_console_standards.md**
 - Rationale: Logging and verbose gating patterns unchanged
 - Standards apply equally to monolithic and modular architectures
 
-✅ **06_quarto_reporting_standards.md**
+✅ **ST_quarto_reporting_standards.md**
 - Rationale: Quarto integration patterns identical between legacy and refactored
 - RDS output structure preserved
 
@@ -643,7 +643,7 @@ None identified. All issues above threshold for documentation.
 
 **Missing:** No visual diagram showing Phase 1 architecture
 
-**Suggested Addition to 01_architecture_standards.md:**
+**Suggested Addition to ST_architecture_standards.md:**
 
 ```
 ## Phase 1 DRY Architecture Diagram
@@ -691,10 +691,10 @@ L = Lines of code
 
 ### Recommended Action Plan
 
-1. **Immediate (This Week):** Update `01_architecture_standards.md` critical sections
-2. **Short-Term (Next 2 Weeks):** Update `02_documentation_standards.md` and `00_STANDARDS_INDEX.md`
+1. **Immediate (This Week):** Update `ST_architecture_standards.md` critical sections
+2. **Short-Term (Next 2 Weeks):** Update `ST_documentation_standards.md` and `ST_STANDARDS_INDEX.md`
 3. **Long-Term (Next Month):** Address remaining medium-priority updates
-4. **Ongoing:** Add architecture diagram to `01_architecture_standards.md`
+4. **Ongoing:** Add architecture diagram to `ST_architecture_standards.md`
 
 ### Benefits of Completing Updates
 

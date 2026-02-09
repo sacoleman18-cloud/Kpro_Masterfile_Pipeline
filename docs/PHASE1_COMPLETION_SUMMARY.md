@@ -97,16 +97,16 @@ R/
 **Task**: Audit 10 coding standards documents for outdated content
 
 **Documents to Review**:
-1. `00_STANDARDS_INDEX.md`
-2. `01_architecture_standards.md`
-3. `02_documentation_standards.md`
-4. `03_code_design_standards.md`
-5. `04_data_standards.md`
-6. `05_logging_console_standards.md`
-7. `06_quarto_reporting_standards.md`
-8. `07_artifact_release_standards.md`
-9. `08_development_standards.md`
-10. `09_appendices.md`
+1. `ST_STANDARDS_INDEX.md`
+2. `ST_architecture_standards.md`
+3. `ST_documentation_standards.md`
+4. `ST_code_design_standards.md`
+5. `ST_data_standards.md`
+6. `ST_logging_console_standards.md`
+7. `ST_quarto_reporting_standards.md`
+8. `ST_artifact_release_standards.md`
+9. `ST_development_standards.md`
+10. `ST_appendices.md`
 
 **Focus Areas**:
 - References to legacy `run_finalize_to_report.R` orchestrator

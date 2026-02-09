@@ -81,7 +81,7 @@ Every legacy workflow script (01, 02, 03, etc.) must have this header:
 ## 2. PHASE ORCHESTRATOR FUNCTION HEADERS
 
 > **NEW in v3.0:** Phase orchestrators replace legacy chunk orchestrators.
-> See [ORCHESTRATION_PHILOSOPHY.md](ORCHESTRATION_PHILOSOPHY.md) for architecture overview.
+> See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) for architecture overview.
 
 Phase orchestrator functions require a specialized header format that documents phase position, checkpoints, human-in-the-loop requirements, and structured result passing.
 
@@ -159,7 +159,7 @@ The Roxygen2 documentation for phase orchestrator functions should include the p
 #' Phase [N] of the KPro Masterfile Pipeline's checkpointed phase orchestration.
 #' [Detailed description of what this phase accomplishes and its role in the overall pipeline.]
 #'
-#' See [ORCHESTRATION_PHILOSOPHY](ORCHESTRATION_PHILOSOPHY.md) for architectural overview.
+#' See [ST_ORCHESTRATION_PHILOSOPHY](ST_ORCHESTRATION_PHILOSOPHY.md) for architectural overview.
 #'
 #' @param phase_result (Phase [N-1] only) List. Result from previous phase containing
 #'   checkpoint data and metadata. Typically: `phase1_result` or `phase2_result`.
@@ -220,7 +220,7 @@ The Roxygen2 documentation for phase orchestrator functions should include the p
 #' from standardized data with user-editable parameters. Requires human review and
 #' editing of the template before Phase 3 can proceed.
 #'
-#' See [ORCHESTRATION_PHILOSOPHY](ORCHESTRATION_PHILOSOPHY.md) §2 for module patterns.
+#' See [ST_ORCHESTRATION_PHILOSOPHY](ST_ORCHESTRATION_PHILOSOPHY.md) §2 for module patterns.
 #'
 #' @param phase1_result List. Result from run_phase1_data_preparation() containing
 #'   kpro_master.csv checkpoint and metadata.

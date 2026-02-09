@@ -22,7 +22,9 @@
 #   Layer 4: validation/
 #   Layer 5: analysis/
 #   Layer 6: output/
-#   Layer 7: pipeline/
+#   Layer 7: pipeline/ (Phase Orchestrators - Checkpointed Execution)
+#   Layer 8: modules/  (7 Processing Modules)
+#   Layer 9: modules/module_runner.R (Module Execution Layer)
 #
 # =============================================================================
 
@@ -307,8 +309,8 @@ message("
           ├─ plotting.R .................  Exploratory visualizations (1 function)
           └─ report_release.R ...........  Report generation & release (1 function)
 
- Layer 9: debug/ (Optional Development Tools)
-          └─ module_runner.R ............  Individual module testing (7 runners)
+ Layer 9: modules/ (Module Execution Layer)
+          └─ module_runner.R ............  Module execution interface (7 runners + 1 runner)
 
  ARCHITECTURE OVERVIEW
  ──────────────────────
@@ -318,9 +320,13 @@ message("
             - Safe I/O, validation, analysis, and visualization helpers
 
  Layer 7: Pipeline Orchestrators (R/pipeline/)
-          - Entry point scripts that coordinate module execution
-          - Thin wrappers calling modules in sequence
-          - Three chunks: Ingest/Standardize, CPN Template, Finalize/Report
+          - PHASE ORCHESTRATORS (Primary Pattern):
+            * run_phase1_data_preparation.R    (Modules 1-2)
+            * run_phase2_template_generation.R (Module 3 + human-in-the-loop)
+            * run_phase3_analysis_reporting.R  (Modules 4-7)
+            * Checkpointed execution with structured result passing
+          - Legacy orchestrators (deprecated):
+            * run_ingest_standardize.R, run_cpn_template.R, run_finalize_to_report.R
 
  Layer 8: Processing Modules (R/modules/)
           - Thematic subsystems with internal staged execution
@@ -328,10 +334,11 @@ message("
           - Each module contains internal "module stages" numbered sequentially
           - Modules are self-contained: load → process → save → validate
 
- Layer 9: Debug Tools (R/debug/)
-          - Individual module runners for testing and development
-          - Run modules one at a time or in custom sequences
-          - Convenience functions for debugging specific pipeline stages
+ Layer 9: Module Execution Layer (R/modules/module_runner.R)
+          - Provides callable interfaces for all 7 pipeline modules
+          - Used by phase orchestrators to execute modules
+          - Supports individual module testing and custom execution sequences
+          - Core infrastructure for checkpointed phase orchestration
 
  LEGACY: Original 01-07 workflow scripts remain in R/ root (preserved for reference)
 
@@ -342,13 +349,13 @@ message("
 ================================================================================
 
  Ready to run:
-   • Production Orchestrators:
-     - run_ingest_standardize()     # Chunk 1
-     - run_cpn_template()           # Chunk 2
-     - run_finalize_to_report()     # Chunk 3
+   • Phase Orchestrators (Checkpointed Pipeline):
+     - run_phase1_data_preparation()      # Phase 1: Modules 1-2
+     - run_phase2_template_generation()   # Phase 2: Module 3 (+ human edits)
+     - run_phase3_analysis_reporting()    # Phase 3: Modules 4-7
    
-   • Debug Module Runners:
-     - source("R/debug/module_runner.R")
+   • Module Execution Layer:
+     - source("R/modules/module_runner.R")
      - run_module_ingestion()
      - run_module_standardization()
      - run_module_cpn_template()
@@ -356,20 +363,30 @@ message("
      - run_module_summary_stats()
      - run_module_plotting()
      - run_module_report_release()
-     - run_all_modules()            # Full pipeline with pauses
+     - run_all_modules()                  # Full pipeline with pauses
+   
+   • Legacy Orchestrators (Deprecated):
+     - run_ingest_standardize()           # Use Phase 1 instead
+     - run_cpn_template()                 # Use Phase 2 instead
+     - run_finalize_to_report()           # Use Phase 3 instead
 
- Usage (Production):
+ Usage (Phase Orchestration - RECOMMENDED):
    source('R/functions/load_all.R')
-   r1 <- run_ingest_standardize(verbose = TRUE)
-   r2 <- run_cpn_template(r1$ingest_standardize$kpro_master, verbose = TRUE)
-   # [User edits template]
-   r3 <- run_finalize_to_report(verbose = TRUE)
+   source('R/pipeline/run_phase1_data_preparation.R')
+   source('R/pipeline/run_phase2_template_generation.R')
+   source('R/pipeline/run_phase3_analysis_reporting.R')
+   
+   phase1 <- run_phase1_data_preparation(verbose = TRUE)
+   phase2 <- run_phase2_template_generation(phase1, verbose = TRUE)
+   # [User edits CPN_Template_EDIT_THIS.csv]
+   phase3 <- run_phase3_analysis_reporting(phase2, verbose = TRUE)
 
- Usage (Debug):
+ Usage (Module Execution):
    source('R/functions/load_all.R')
-   source('R/debug/module_runner.R')
+   source('R/modules/module_runner.R')
    r1 <- run_module_ingestion(verbose = TRUE)
    r2 <- run_module_standardization(r1, verbose = TRUE)
+   r3 <- run_module_cpn_template(r2, verbose = TRUE)
 
 ================================================================================
 ")
