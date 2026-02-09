@@ -278,7 +278,7 @@ assert_row_count <- function(df, expected_rows, arg_name = "Data") {
 #' @param df Data frame to check.
 #' @param required_cols Character vector. Required column names.
 #' @param source_hint Character or NULL. Optional hint about which function/script
-#'   produces this data structure (e.g., "run_ingest_standardize()", "02_standardize.R").
+#'   produces this data structure (e.g., "run_phase1_data_preparation()", "02_standardize.R").
 #'
 #' @return Invisible TRUE if valid, otherwise stops execution.
 #'
@@ -298,7 +298,7 @@ assert_row_count <- function(df, expected_rows, arg_name = "Data") {
 #' assert_columns_exist(
 #'   cpn_final,
 #'   c("Detector", "Night", "CallsPerNight"),
-#'   source_hint = "run_finalize_to_report()"
+#'   source_hint = "run_phase3_analysis_reporting()"
 #' )
 #' }
 #'
@@ -690,7 +690,7 @@ assert_scalar_string <- function(x, arg_name = "Value") {
 #'   cpn_final,
 #'   required_cols = c("Detector", "Night", "CallsPerNight"),
 #'   arg_name = "cpn_final",
-#'   source_hint = "run_finalize_to_report()"
+#'   source_hint = "run_phase3_analysis_reporting()"
 #' )
 #' }
 #'
@@ -765,7 +765,7 @@ validate_cpn_data <- function(cpn_data,
     cpn_data,
     required_cols = required,
     arg_name = "CallsPerNight data",
-    source_hint = "run_finalize_to_report()"
+    source_hint = "run_phase3_analysis_reporting()"
   )
   
   # Type checks
@@ -815,7 +815,7 @@ validate_master_data <- function(master_data) {
     master_data,
     required_cols = required,
     arg_name = "Master data",
-    source_hint = "run_ingest_standardize()"
+    source_hint = "run_phase1_data_preparation()"
   )
   
   invisible(TRUE)

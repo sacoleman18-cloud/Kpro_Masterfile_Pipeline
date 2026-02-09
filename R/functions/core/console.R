@@ -201,8 +201,8 @@ print_stage_header <- function(stage_num, title, width = 65) {
 #' print_stage_banner("FINALIZE CPN", verbose = verbose)
 #' 
 #' # User controls verbosity:
-#' result <- run_finalize_to_report(verbose = TRUE)   # Shows banners
-#' result <- run_finalize_to_report(verbose = FALSE)  # Silent (Shiny mode)
+#' result <- run_phase3_analysis_reporting(verbose = TRUE)   # Shows banners
+#' result <- run_phase3_analysis_reporting(verbose = FALSE)  # Silent (Shiny mode)
 #' ```
 #'
 #' @examples
@@ -325,8 +325,8 @@ print_workflow_summary <- function(workflow, title, items, width = 65) {
 #'
 #' @description
 #' Prints a comprehensive pipeline completion summary with all outputs
-#' and next steps guidance. Used only at the end of Workflow 07 /
-#' run_finalize_to_report().
+#' and next steps guidance. Used only at the end of Phase 3 /
+#' run_phase3_analysis_reporting().
 #'
 #' @param outputs Named list. Output descriptions by workflow
 #' @param next_steps Character vector. Suggested next steps

@@ -3,21 +3,19 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Extracted module from Chunk 3 orchestrator (run_finalize_to_report).
-# Generates exploratory visualizations: Stages 15-21 (note: different Stage 15
-# than Summary Stats!).
+# Plotting Module: Generates exploratory visualizations (Chunk 3).
 #
-# EXTRACTED FROM: run_finalize_to_report.R (Lines ~1001-1300)
-# ORCHESTRATION LAYER: Yes, called by run_finalize_to_report() orchestrator
+# PHASE ARCHITECTURE: Called by run_phase3_analysis_reporting() orchestrator
+# ORCHESTRATION LAYER: Yes, module runner interface
 #
 # WORKFLOW SEQUENCE
 # -----------------
-# This module is called as the THIRD step in Chunk 3:
-#   1. run_finalize_to_report() [orchestrator]
-#      └→ finalize_cpn() — Stages 1-6
-#      └→ module_summary_stats() — Stages 7-16
-#      └→ module_plotting() [this module] — Stages 15-21
-#      └→ module_report_release() — Stages 22-25
+# This module is called as the THIRD step in Phase 3:
+#   1. run_phase3_analysis_reporting() [phase orchestrator]
+#      └→ run_module_finalize_cpn() — Stages 1-6
+#      └→ run_module_summary_stats() — Stages 7-16
+#      └→ run_module_plotting() [this module] — Stages 15-21
+#      └→ run_module_report_release() — Stages 22-25
 #
 # INPUT REQUIREMENTS
 # ------------------

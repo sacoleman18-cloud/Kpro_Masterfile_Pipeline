@@ -43,7 +43,7 @@
 # 6. Template loading
 #    - Discovers and loads most recent template files (ORIGINAL or EDIT_THIS)
 #    - Pattern-based file discovery with timestamp sorting
-#    - Used by run_finalize_to_report() orchestrating function
+#    - Used by run_phase3_analysis_reporting() orchestrating function
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
@@ -135,7 +135,7 @@
 #             - Handles NA inputs gracefully (returns NA in result vector for failed rows)
 #             - Improves performance for large datasets (no loops required)
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
-# 2026-02-01: Confirmed usage in run_cpn_template.R (Chunk 2) and run_finalize_to_report.R (Chunk 3)
+# 2026-02-01: Confirmed usage in run_phase2_template_generation() (Phase 2) and run_phase3_analysis_reporting() (Phase 3)
 # 2024-12-29: Added datetime helpers for Workflow 04 template comparison support
 #
 # =============================================================================
@@ -811,7 +811,7 @@ save_callspernight_with_version <- function(data,
 #'
 #' @description
 #' Discovers and loads the most recent CPN template file. Used by
-#' run_finalize_to_report() to load edited templates for processing.
+#' run_phase3_analysis_reporting() to load edited templates for processing.
 #' Handles the two-file template system: ORIGINAL for tracking and
 #' EDIT_THIS for user modifications.
 #' 
@@ -913,7 +913,7 @@ load_cpn_template <- function(type = "EDIT_THIS",
       directory = output_dir,
       pattern = pattern,
       error_if_none = TRUE,
-      hint = sprintf("Run Chunk 2 (run_cpn_template) first to generate %s template", type)
+      hint = sprintf("Run Phase 2 (run_phase2_template_generation) first to generate %s template", type)
     )
   }
   

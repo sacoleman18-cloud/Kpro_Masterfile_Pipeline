@@ -3,20 +3,19 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Extracted module from Chunk 3 orchestrator (run_finalize_to_report).
-# Renders Quarto report and creates release bundle: Stages 22-25.
+# Report & Release Module: Renders Quarto report and creates release bundle (Chunk 3).
 #
-# EXTRACTED FROM: run_finalize_to_report.R (Lines ~1301-1450)
-# ORCHESTRATION LAYER: Yes, called by run_finalize_to_report() orchestrator
+# PHASE ARCHITECTURE: Called by run_phase3_analysis_reporting() orchestrator
+# ORCHESTRATION LAYER: Yes, module runner interface
 #
 # WORKFLOW SEQUENCE
 # -----------------
-# This module is called as the FINAL step in Chunk 3:
-#   1. run_finalize_to_report() [orchestrator]
-#      └→ finalize_cpn() — Stages 1-6
-#      └→ module_summary_stats() — Stages 7-16
-#      └→ module_plotting() — Stages 15-21
-#      └→ module_report_release() [this module] — Stages 22-25
+# This module is called as the FINAL step in Phase 3:
+#   1. run_phase3_analysis_reporting() [phase orchestrator]
+#      └→ run_module_finalize_cpn() — Stages 1-6
+#      └→ run_module_summary_stats() — Stages 7-16
+#      └→ run_module_plotting() — Stages 15-21
+#      └→ run_module_report_release() [this module] — Stages 22-25
 #
 # INPUT REQUIREMENTS
 # ------------------

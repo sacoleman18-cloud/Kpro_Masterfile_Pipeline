@@ -3,11 +3,10 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Extracted module from Chunk 3 orchestrator (run_finalize_to_report).
-# Handles CPN finalization logic: Stages 1-6.
+# Finalize CPN Module: Handles CPN finalization logic (Chunk 3).
 #
-# EXTRACTED FROM: run_finalize_to_report.R (Lines ~14-570)
-# ORCHESTRATION LAYER: Yes, called by run_finalize_to_report() orchestrator
+# PHASE ARCHITECTURE: Called by run_phase3_analysis_reporting() orchestrator
+# ORCHESTRATION LAYER: Yes, module runner interface
 #
 # DRY REFACTORING APPLIED (Phase 1)
 # ----------------------------------
@@ -21,12 +20,12 @@
 #
 # WORKFLOW SEQUENCE
 # -----------------
-# This module is called as the FIRST step in Chunk 3:
-#   1. run_finalize_to_report() [orchestrator]
-#      └→ finalize_cpn() [this module] — Stages 1-6
-#      └→ summary_stats() — Stages 7-16
-#      └→ plotting() — Stages 15-21
-#      └→ report_release() — Stages 22-25
+# This module is called as the FIRST step in Phase 3:
+#   1. run_phase3_analysis_reporting() [phase orchestrator]
+#      └→ run_module_finalize_cpn() [this module] — Chunk 3, Stages 1-6
+#      └→ run_module_summary_stats() — Chunk 3, Stages 7-16
+#      └→ run_module_plotting() — Chunk 3, Stages 15-21
+#      └→ run_module_report_release() — Chunk 3, Stages 22-25
 #
 # INPUT REQUIREMENTS
 # ------------------
