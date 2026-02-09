@@ -343,6 +343,15 @@ run_module_plotting <- function(summary_stats_result, verbose = FALSE) {
   )
   calls_per_night_final <- safe_read_csv(cpn_final_file)
   
+  # Convert numeric columns after CSV read
+  calls_per_night_final <- calls_per_night_final %>%
+    dplyr::mutate(
+      CallsPerNight = as.numeric(CallsPerNight),
+      RecordingHours = as.numeric(RecordingHours),
+      CallsPerHour = as.numeric(CallsPerHour),
+      Night = as.Date(Night)
+    )
+  
   result <- module_plotting(
     calls_per_night_final = calls_per_night_final,
     kpro_master = kpro_master,
@@ -396,6 +405,15 @@ run_module_report_release <- function(plotting_result,
     hint = "Run run_module_finalize_cpn() first to generate CallsPerNight_final"
   )
   calls_per_night_final <- safe_read_csv(cpn_final_file)
+  
+  # Convert numeric columns after CSV read
+  calls_per_night_final <- calls_per_night_final %>%
+    dplyr::mutate(
+      CallsPerNight = as.numeric(CallsPerNight),
+      RecordingHours = as.numeric(RecordingHours),
+      CallsPerHour = as.numeric(CallsPerHour),
+      Night = as.Date(Night)
+    )
   
   result <- module_report_release(
     calls_per_night_final = calls_per_night_final,
