@@ -1048,7 +1048,7 @@ save_summary_csv <- function(data, filename, output_dir = "results/csv/summary_s
     registry <- save_and_register_rds(
       object = NULL,  # Dummy - we're just registering the file
       file_path = file_path,
-      artifact_type = "csv",
+      artifact_type = "summary_stats",
       artifact_name = artifact_name,
       registry = registry,
       metadata = metadata,
