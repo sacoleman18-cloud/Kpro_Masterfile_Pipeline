@@ -690,35 +690,10 @@ fill_readme_template <- function(template_path,
 # ==============================================================================
 
 
-#' Save Summary CSV with Artifact Registration
 #'
 #' @description
-#' Saves a summary tibble/dataframe as CSV and registers it as an artifact.
-#' Used by summary_stats module for consistent CSV export.
-#'
-#' @param data Tibble or data.frame. Summary data to export.
-#' @param filename Character. Filename (e.g., "detector_summary_20260205.csv").
-#' @param output_dir Character. Output directory path. Default: "results/csv/summary_stats".
-#' @param registry List. Artifact registry from save_checkpoint_and_register().
-#' @param artifact_name Character. Name for artifact registry entry.
-#' @param metadata List. Additional metadata for artifact registration.
-#' @param verbose Logical. Print progress messages. Default FALSE.
-#'
-#' @return List with registry attribute containing file path reference.
-#'
-#' @section CONTRACT:
-#' - Ensures output directory exists
-#' - Saves data as CSV using readr::write_csv
-#' - Registers artifact with SHA256 hash
-#' - Adds file_path attribute for downstream use
-#' - Returns registry with updated artifact entries
-#'
-#' @keywords internal
-#' @export
-save_summary_csv <- function(data, filename, output_dir = "results/csv/summary_stats",
-                             registry = NULL, artifact_name = NULL, metadata = NULL,
-                             verbose = FALSE) {
-#' functions by combining print_stage_header() + log_message() into one call.
+#' Consolidates stage lifecycle logging by combining print_stage_header() + log_message()
+#' into one call. Reduces boilerplate when starting each orchestrator workflow stage.
 #'
 #' @param stage_num Character. Stage number (e.g., "1", "2.3", "7.1")
 #' @param title Character. Stage title (e.g., "Load Configuration")
