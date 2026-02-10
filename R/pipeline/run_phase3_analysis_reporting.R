@@ -205,8 +205,15 @@ run_phase3_analysis_reporting <- function(phase2_result = NULL,
   calls_per_night_final <- module4_result$finalize_cpn$calls_per_night_final
   n_summaries <- length(module5_result$summary_stats$all_summaries)
   n_plots <- sum(unlist(module6_result$plotting$plot_counts))
-  report_path <- module7_result$report_release$report_html
-  release_bundle_path <- module7_result$report_release$release_zip
+  
+  # Safely extract report paths with fallback values
+  report_path <- tryCatch({
+    module7_result$report_release$report_html %||% NULL
+  }, error = function(e) NULL)
+  
+  release_bundle_path <- tryCatch({
+    module7_result$report_release$release_zip %||% NULL
+  }, error = function(e) NULL)
   
   log_message("=== PHASE 3 COMPLETE: Pipeline finished successfully ===")
   
