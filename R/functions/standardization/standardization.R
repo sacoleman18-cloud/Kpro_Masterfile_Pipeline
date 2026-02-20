@@ -4,14 +4,14 @@
 # Classification: Helper/Utility Function Module
 # - Part of R/functions/ → Contains reusable helper functions only
 # - Transforms raw data to unified master schema
-# - Used by ingestion and standardization workflows
+# - Used by ingestion and standardization modules
 # PURPOSE
 # -------
 # Transforms all KPro schema versions into a unified master schema. Handles
 # alternates splitting (including semicolon-delimited variants), species code
 # conversion, column name harmonization across KPro versions, schema
 # unification with row-level detection support, and unified species column
-# generation for analysis workflows.
+# generation for downstream analysis modules.
 #
 # STANDARDIZATION CONTRACT
 # ------------------------
@@ -55,7 +55,7 @@
 #
 # 6. Species unification
 #    - Creates unified 'species' column with priority: manual_id > auto_id > "NoID"
-#    - Used in CPN template generation and finalization workflows
+#    - Used in CPN template generation and finalization phases
 #    - Deterministic priority logic (not configurable)
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
@@ -77,7 +77,7 @@
 #   - dplyr: mutate, case_when, select, bind_rows, coalesce
 #   - purrr: map_chr (for splitting alternates)
 #
-# WORKFLOW INTEGRATION
+# PHASE INTEGRATION
 # --------------------
 # This module is used in Module 2 (Standardization) and Phase 2 (CPN Template):
 #   1. raw_combined (from Module 1) -> detect_row_schema()
@@ -168,7 +168,7 @@
 # 2026-02-04: MODULE SPLIT - Added create_unified_species_column()
 #             - Moved from utilities.R for domain-specific logic
 #             - Species unification is data transformation, not utility
-#             - Updated CONTENTS section and WORKFLOW INTEGRATION
+#             - Updated CONTENTS section and PHASE INTEGRATION
 # 2026-01-30: Refactored to use centralized assert_* functions from validation.R
 # 2026-01-30: Removed redundant validate_unified_schema() (use enforce_unified_schema instead)
 # 2026-01-30: Added verbose gating to all message() calls
@@ -810,7 +810,7 @@ harmonize_column_names <- function(df, verbose = FALSE) {
 #' This is the canonical species identification for each detection, resolving
 #' cases where automated identification may have been corrected by expert review.
 #' 
-#' Used in CPN template generation (Chunk 2) and finalization (Chunk 3) to
+#' Used in CPN template generation (Phase 2) and finalization (Phase 3) to
 #' ensure consistent species assignment across all analysis stages.
 #'
 #' @param data Data frame. Must contain auto_id column at minimum.

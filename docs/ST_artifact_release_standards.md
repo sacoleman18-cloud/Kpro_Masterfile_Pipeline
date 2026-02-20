@@ -1,8 +1,8 @@
 # ==============================================================================
 # ARTIFACT & RELEASE STANDARDS
 # ==============================================================================
-# VERSION: 2.4
-# LAST UPDATED: 2026-02-05
+# VERSION: 3.0
+# LAST UPDATED: 2026-02-19
 # PURPOSE: Artifact registry, tracking, and release bundle creation
 # ==============================================================================
 
@@ -20,18 +20,18 @@ The artifact registry provides formal tracking of all pipeline outputs with cryp
 
 The registry recognizes these artifact types:
 
-| Type | Description | Typical Chunk/Workflow |
+| Type | Description | Typical Phase |
 |------|-------------|------------------------|
-| `raw_input` | Original source files | Chunk 1 / WF01 |
-| `checkpoint` | Intermediate outputs | Chunk 1 / WF01-02 |
-| `masterfile` | Unified master detection file | Chunk 1 / WF02 |
-| `cpn_template` | CallsPerNight template (original + editable) | Chunk 2 / WF03 |
-| `cpn_final` | Finalized CallsPerNight dataset | Chunk 3 / WF04 |
-| `summary_stats` | Summary statistics RDS | Chunk 3 / WF05 |
-| `plot_objects` | Plot objects RDS | Chunk 3 / WF06 |
-| `report` | Rendered Quarto HTML report | Chunk 3 / WF07 |
-| `release_bundle` | Portable zip for downstream projects | Chunk 3 / WF07 |
-| `validation_report` | HTML validation report | Any |
+| `raw_input` | Original source files | Phase 1 |
+| `checkpoint` | Intermediate outputs | Phase 1 |
+| `masterfile` | Unified master detection file | Phase 1 |
+| `cpn_template` | CallsPerNight template (original + editable) | Phase 2 |
+| `cpn_final` | Finalized CallsPerNight dataset | Phase 3 |
+| `summary_stats` | Summary statistics RDS | Phase 3 |
+| `plot_objects` | Plot objects RDS | Phase 3 |
+| `report` | Rendered Quarto HTML report | Phase 3 |
+| `release_bundle` | Portable zip for downstream projects | Phase 3 |
+| `validation_report` | HTML validation report | Any phase |
 
 ### 1.3 Registry Structure
 
@@ -43,7 +43,7 @@ artifacts:
   kpro_master_20260112_020904:
     name: kpro_master_20260112_020904
     type: masterfile
-    workflow: 'chunk1'  # Or '02' for legacy workflows
+    workflow: 'phase1'  # Legacy workflow IDs may still appear in historical registries
     file_path: results/csv/Master_2026-01-12_0209.csv
     file_hash_sha256: 6746c39a45915e...
     file_size_bytes: 792575
@@ -78,7 +78,7 @@ registry <- register_artifact(
   registry = registry,
   artifact_name = sprintf("kpro_master_%s", timestamp),
   artifact_type = "masterfile",
-  workflow = "chunk1",  # Or "02" for legacy
+  workflow = "phase1",  # Or legacy workflow IDs for historical compatibility
   file_path = master_path,
   input_artifacts = "intro_standardized",
   metadata = list(
@@ -120,21 +120,21 @@ all_checkpoints <- list_artifacts(registry, type = "checkpoint")
 
 ### 1.5 Registration Requirements
 
-Every chunk/workflow that produces persistent output MUST register artifacts:
+Every phase that produces persistent output MUST register artifacts:
 
-| Chunk | Legacy Workflow | Required Registrations |
-|-------|-----------------|------------------------|
+| Phase | Legacy Workflow Mapping | Required Registrations |
+|-------|-------------------------|------------------------|
 | 1 | 01 + 02 | `checkpoint` (intro_standardized), `masterfile` (kpro_master) |
 | 2 | 03 | `cpn_template` (original + editable) |
 | 3 | 04-07 | `cpn_final`, `summary_stats`, `plot_objects`, `report`, `release_bundle` |
 
-**Registration pattern in orchestrating functions:**
+**Registration pattern in phase orchestrators:**
 ```r
-run_ingest_standardize <- function(verbose = FALSE) {
+run_phase1_data_preparation <- function(verbose = FALSE) {
   
   # ... processing ...
   
-  # Register artifact (at end of chunk)
+  # Register artifact (at end of phase)
   registry <- init_artifact_registry()
   
   artifact_id <- sprintf("kpro_master_%s", format(Sys.time(), "%Y%m%d_%H%M%S"))
@@ -143,7 +143,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
     registry = registry,
     artifact_name = artifact_id,
     artifact_type = "masterfile",
-    workflow = "chunk1",
+    workflow = "phase1",
     file_path = checkpoint_path,
     input_artifacts = c("raw_inputs"),
     metadata = list(
@@ -154,7 +154,7 @@ run_ingest_standardize <- function(verbose = FALSE) {
   )
   
   # File logging always happens
-  log_message(sprintf("[Chunk 1] Registered artifact: %s", artifact_id))
+  log_message(sprintf("[Phase 1] Registered artifact: %s", artifact_id))
   
   # Return artifact_id in structured result
   list(
@@ -247,7 +247,7 @@ zip_path <- create_release_bundle(
 
 **In orchestrating function context:**
 ```r
-run_finalize_to_report <- function(verbose = FALSE) {
+run_phase3_analysis_reporting <- function(verbose = FALSE) {
   
   # ... earlier stages ...
   
@@ -393,7 +393,7 @@ registry <- register_artifact(
   registry = registry,
   artifact_name = release_name,
   artifact_type = "release_bundle",
-  workflow = "chunk3",  # Or "07" for legacy
+  workflow = "phase3",  # Or legacy workflow IDs for historical compatibility
   file_path = zip_path,
   input_artifacts = c("kpro_master", "cpn_final"),
   metadata = list(
@@ -406,13 +406,13 @@ registry <- register_artifact(
 
 ---
 
-## 3. CHUNK 3 / WORKFLOW 07: COMBINED REPORT & RELEASE
+## 3. PHASE 3: COMBINED REPORT & RELEASE
 
-The final chunk (or Workflow 07) handles both report generation AND release bundle creation. This is the final packaging stage.
+Phase 3 handles both report generation and release bundle creation. This is the final packaging stage.
 
 ### 3.1 Stage Overview
 
-**In Chunk Model (`run_finalize_to_report()`):**
+**In Phase Model (`run_phase3_analysis_reporting()` via Module 7):**
 ```
 Stage 1: Load User-Edited CPN Template
 Stage 2: Calculate Status and CallsPerHour  
@@ -424,7 +424,7 @@ Stage 7: Create Release Bundle
 Stage 8: Finalize Validation Report
 ```
 
-**In Legacy Workflow 07:**
+**Legacy Workflow 07 Mapping (Historical):**
 ```
 Stage 7.1: Load Configuration
 Stage 7.2: Load Pre-computed Objects (RDS)
@@ -487,7 +487,7 @@ validate_rds_structure(rds_files$plot_objects, required = c("quality", "detector
 **Note:** Validation tracking functions moved to separate module for separation of concerns.
 
 **Validation Context:**
-- `create_validation_context()` - Initialize validation tracking for chunk/workflow
+- `create_validation_context()` - Initialize validation tracking for phase/workflow
 - `log_validation_event()` - Record validation event with details
 - `finalize_validation_report()` - Generate HTML/YAML validation report
 - `generate_validation_html()` - Generate HTML from context
@@ -519,10 +519,10 @@ validate_rds_structure(rds_files$plot_objects, required = c("quality", "detector
 
 ## 5. QUICK REFERENCE
 
-### 5.1 End-of-Chunk/Workflow Pattern
+### 5.1 End-of-Phase Pattern
 
 ```r
-# Register artifacts at end of every chunk/workflow
+# Register artifacts at end of every phase
 registry <- init_artifact_registry()
 
 artifact_id <- sprintf("%s_%s", artifact_base, format(Sys.time(), "%Y%m%d_%H%M%S"))
@@ -531,7 +531,7 @@ registry <- register_artifact(
   registry = registry,
   artifact_name = artifact_id,
   artifact_type = "appropriate_type",
-  workflow = "chunk1",  # Or "##" for legacy
+  workflow = "phase1",  # Or legacy workflow ID for historical compatibility
   file_path = output_path,
   input_artifacts = c("upstream1", "upstream2"),
   metadata = list(
@@ -542,7 +542,7 @@ registry <- register_artifact(
 )
 
 # File logging (not gated by verbose)
-log_message(sprintf("[Chunk N] Registered artifact: %s", artifact_id))
+log_message(sprintf("[Phase N] Registered artifact: %s", artifact_id))
 ```
 
 ### 5.2 Downstream Usage Pattern
@@ -568,7 +568,7 @@ stopifnot(expected_hash == actual_hash)
 ### 5.3 Orchestrating Function Return Pattern
 
 ```r
-run_finalize_to_report <- function(verbose = FALSE) {
+run_phase3_analysis_reporting <- function(verbose = FALSE) {
   
   # ... processing stages ...
   

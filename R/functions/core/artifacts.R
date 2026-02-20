@@ -4,7 +4,7 @@
 # Classification: Helper/Utility Function Module
 # - Part of R/functions/ → Contains reusable helper functions only
 # - Manages artifact registry, hashing, and provenance tracking
-# - Used by all modules and workflows
+# - Used by all modules across pipeline phases
 # PURPOSE
 # -------
 # Provides a formal artifact registry for tracking all pipeline outputs,
@@ -47,7 +47,7 @@
 #   - list_artifacts():
 #       Uses packages: base R (data.frame operations, do.call)
 #       Calls internal: none
-#       Purpose: List all artifacts (optionally filtered by type/workflow)
+#       Purpose: List all artifacts (optionally filtered by type/phase identifier)
 #
 #   - get_latest_artifact():
 #       Uses packages: base R (list operations, max, which)
@@ -103,7 +103,7 @@
 #   object = all_summaries,
 #   file_path = here::here("results", "rds", "summary_data_20250203.rds"),
 #   artifact_type = "summary_stats",
-#   workflow = "summary_stats",
+#   phase_id = "summary_stats",
 #   registry = registry,
 #   metadata = list(n_summaries = 8, has_species = TRUE),
 #   verbose = TRUE
@@ -127,14 +127,14 @@
 #             - Atomically saves RDS file and registers with SHA256 hash
 #             - Reduces ~20 lines of boilerplate per usage (Summary Stats, Plotting stages)
 #             - Added Internal Dependencies section to DEPENDENCIES
-# 2026-02-01: Restored hash_dataframe() with enhanced documentation for 3-chunk system
+# 2026-02-01: Restored hash_dataframe() with enhanced documentation for 3-phase system
 #             - Added deterministic sorting recommendations for kpro_master and CPN data
 #             - Enhanced CONTRACT and RECOMMENDED USAGE sections
 #             - Ensures reproducibility tracking for all data artifacts
 # 2026-01-30: Added filter_noid and filter_zero_pulses event tracking
 # 2026-01-30: Enhanced Summary Metrics card with collapsible breakdown
 # 2026-01-30: Added CSS styling for details/summary elements
-# 2026-01-12: Enhanced HTML reports with collapsible details and workflow-specific sections
+# 2026-01-12: Enhanced HTML reports with collapsible details and phase-specific sections
 # 2026-01-12: Added additional summary metrics (files_loaded, schema_unknown, etc.)
 # 2026-01-12: Initial version
 # =============================================================================
@@ -224,12 +224,12 @@ init_artifact_registry <- function(registry_path = REGISTRY_PATH) {
 #'
 #' @description
 #' Adds an artifact to the registry with full provenance metadata including
-#' file hash, optional data hash for reproducibility, source workflow, and timestamps.
+#' file hash, optional data hash for reproducibility, source phase/module identifier, and timestamps.
 #'
 #' @param registry List. Registry object from init_artifact_registry()
 #' @param artifact_name Character. Unique name for this artifact
 #' @param artifact_type Character. One of ARTIFACT_TYPES
-#' @param workflow Character. Workflow that produced this (e.g., "ingest", "cpn_template")
+#' @param phase_id Character. Phase/module identifier that produced this (e.g., "ingest", "cpn_template")
 #' @param file_path Character. Path to artifact file
 #' @param input_artifacts Character vector. Names of input artifacts (for lineage)
 #' @param metadata List. Additional metadata to store
@@ -260,10 +260,10 @@ init_artifact_registry <- function(registry_path = REGISTRY_PATH) {
 #' - Verify file format matches artifact type
 #'
 #' @export
-register_artifact <- function(registry, 
+register_artifact <- function(registry,
                               artifact_name,
                               artifact_type,
-                              workflow,
+                              phase_id,
                               file_path,
                               input_artifacts = NULL,
                               metadata = list(),
@@ -291,7 +291,7 @@ register_artifact <- function(registry,
   artifact_entry <- list(
     name = artifact_name,
     type = artifact_type,
-    workflow = workflow,
+    phase_id = phase_id,
     file_path = file_path,
     file_hash_sha256 = file_hash,
     file_size_bytes = file.info(file_path)$size,
@@ -347,11 +347,11 @@ get_artifact <- function(registry, artifact_name) {
 #'
 #' @description
 #' Returns a data frame summary of all artifacts in the registry,
-#' with optional filtering by type or workflow.
+#' with optional filtering by type or phase/module identifier.
 #'
 #' @param registry List. Registry object
 #' @param type Character. Optional filter by artifact type
-#' @param workflow Character. Optional filter by workflow
+#' @param phase_id Character. Optional filter by phase/module identifier
 #'
 #' @return Data frame. Summary of matching artifacts
 #'
@@ -361,13 +361,13 @@ get_artifact <- function(registry, artifact_name) {
 #' - Preserves chronological order from registry
 #'
 #' @export
-list_artifacts <- function(registry, type = NULL, workflow = NULL) {
+list_artifacts <- function(registry, type = NULL, phase_id = NULL) {
   
   if (length(registry$artifacts) == 0) {
     return(data.frame(
       name = character(),
       type = character(),
-      workflow = character(),
+      phase_id = character(),
       created_utc = character(),
       stringsAsFactors = FALSE
     ))
@@ -378,7 +378,7 @@ list_artifacts <- function(registry, type = NULL, workflow = NULL) {
     data.frame(
       name = a$name,
       type = a$type,
-      workflow = a$workflow,
+      phase_id = if (!is.null(a$phase_id)) a$phase_id else a$workflow,
       created_utc = a$created_utc,
       file_path = a$file_path,
       file_hash = substr(a$file_hash_sha256, 1, 8),  # Truncated for display
@@ -391,8 +391,8 @@ list_artifacts <- function(registry, type = NULL, workflow = NULL) {
     df <- df[df$type == type, ]
   }
   
-  if (!is.null(workflow)) {
-    df <- df[df$workflow == workflow, ]
+  if (!is.null(phase_id)) {
+    df <- df[df$phase_id == phase_id, ]
   }
   
   df
@@ -573,8 +573,8 @@ verify_artifact <- function(registry, artifact_name) {
 #'   here::here("results", "rds", "summary_data_20250203.rds")).
 #' @param artifact_type Character. Type identifier for registry (e.g.,
 #'   "summary_stats", "plot_objects"). Used to generate artifact_name.
-#' @param workflow Character. Workflow name for registry (e.g., "summary_stats",
-#'   "exploratory_plots").
+#' @param phase_id Character. Phase/module identifier for registry (e.g.,
+#'   "summary_stats", "exploratory_plots").
 #' @param registry List. Current artifact registry from init_artifact_registry().
 #' @param metadata List. Additional metadata for registry entry. Default: list().
 #' @param verbose Logical. Print confirmation message to console? Default: FALSE.
@@ -586,7 +586,7 @@ verify_artifact <- function(registry, artifact_name) {
 #' - Saves R object to file_path as RDS
 #' - Generates artifact_name as "{artifact_type}_{YYYYMMDD}"
 #' - Computes SHA256 hash automatically (via register_artifact)
-#' - Registers artifact with type, workflow, path, and metadata
+#' - Registers artifact with type, phase/module identifier, path, and metadata
 #' - Prints confirmation if verbose = TRUE
 #' - Returns updated registry for chaining
 #'
@@ -607,7 +607,7 @@ verify_artifact <- function(registry, artifact_name) {
 #'   object = all_summaries,
 #'   file_path = summary_rds_path,
 #'   artifact_type = "summary_stats",
-#'   workflow = "summary_stats",
+#'   phase_id = "summary_stats",
 #'   registry = registry,
 #'   metadata = list(
 #'     n_summaries = length(all_summaries),
@@ -624,7 +624,7 @@ verify_artifact <- function(registry, artifact_name) {
 #'   object = all_plots,
 #'   file_path = plots_rds_path,
 #'   artifact_type = "plot_objects",
-#'   workflow = "exploratory_plots",
+#'   phase_id = "exploratory_plots",
 #'   registry = registry,
 #'   metadata = list(
 #'     total_plots = 26,
@@ -641,7 +641,7 @@ verify_artifact <- function(registry, artifact_name) {
 save_and_register_rds <- function(object,
                                   file_path,
                                   artifact_type,
-                                  workflow,
+                                  phase_id,
                                   registry,
                                   metadata = list(),
                                   verbose = FALSE) {
@@ -667,7 +667,7 @@ save_and_register_rds <- function(object,
     registry = registry,
     artifact_name = artifact_id,
     artifact_type = artifact_type,
-    workflow = workflow,
+    phase_id = phase_id,
     file_path = file_path,
     metadata = metadata,
     quiet = !verbose  # If verbose=TRUE, show registration message
@@ -700,8 +700,8 @@ save_and_register_rds <- function(object,
 #' Discover Pipeline RDS Files
 #'
 #' @description
-#' Finds the most recent summary_data and plot_objects RDS files from 
-#' Workflows 05-06. Returns paths and validation status.
+#' Finds the most recent summary_data and plot_objects RDS files from
+#' Modules 5-6 (Phase 3). Returns paths and validation status.
 #'
 #' @param rds_dir Character. Path to RDS directory (usually results/rds/)
 #'
@@ -753,8 +753,8 @@ discover_pipeline_rds <- function(rds_dir) {
   )
   
   if (length(summary_files) == 0) {
-    errors <- c(errors, 
-                "No summary_data RDS file found. Did you run Workflow 05?")
+    errors <- c(errors,
+          "No summary_data RDS file found. Did you run Module 5 (Phase 3)?")
     summary_path <- NULL
   } else {
     # Get most recent by modification time
@@ -771,7 +771,7 @@ discover_pipeline_rds <- function(rds_dir) {
   
   if (length(plots_files) == 0) {
     errors <- c(errors,
-                "No plot_objects RDS file found. Did you run Workflow 06?")
+          "No plot_objects RDS file found. Did you run Module 6 (Phase 3)?")
     plots_path <- NULL
   } else {
     # Get most recent by modification time
@@ -794,8 +794,8 @@ discover_pipeline_rds <- function(rds_dir) {
 #' Validates that loaded RDS objects contain required elements for
 #' report generation. Checks summary_data and plot_objects structure.
 #'
-#' @param all_summaries List. Summary data from Workflow 05
-#' @param all_plots List. Plot objects from Workflow 06
+#' @param all_summaries List. Summary data from Module 5 (Phase 3)
+#' @param all_plots List. Plot objects from Module 6 (Phase 3)
 #'
 #' @return List with:
 #'   - valid: Logical. TRUE if structure is valid

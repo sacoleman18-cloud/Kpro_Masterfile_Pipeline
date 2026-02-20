@@ -3,9 +3,9 @@
 # ==============================================================================
 #
 # PURPOSE:
-#   Convenience functions for orchestrator workflow scripts. These functions
+#   Convenience functions for phase orchestrator scripts. These functions
 #   consolidate common patterns in multi-stage pipeline orchestrators, reducing
-#   boilerplate and ensuring consistent pipeline behavior across workflows.
+#   boilerplate and ensuring consistent pipeline behavior across phases.
 #
 #   Extracted from utilities.R (2026-02-09) to separate orchestrator-specific
 #   logic from general utilities. Functions remain in core/ because they have
@@ -78,7 +78,7 @@
 #   source("R/functions/core/orchestration_helpers.R")
 #   
 #   # Initialize pipeline context
-#   context <- setup_pipeline_context(workflow_name = "ingest")
+#   context <- setup_pipeline_context(phase_id = "ingest")
 #   
 #   # Log stage start
 #   log_stage_start("1", "Load Raw Data", verbose = TRUE)
@@ -88,7 +88,7 @@
 #     data = kpro_master,
 #     checkpoint_name = "02_kpro_master",
 #     artifact_type = "masterfile",
-#     workflow = "ingest",
+#     phase_id = "ingest",
 #     metadata = list(n_rows = nrow(kpro_master)),
 #     verbose = TRUE
 #   )
@@ -127,7 +127,7 @@
 #' Consolidates configuration loading, validation context creation, and
 #' directory setup into a single call.
 #'
-#' @param workflow_name Character. Workflow identifier (e.g., "ingest", "finalize_cpn").
+#' @param phase_id Character. Phase/module identifier (e.g., "ingest", "finalize_cpn").
 #' @param yaml_path Character. Path to study configuration YAML.
 #'   Default: "inst/config/study_parameters.yaml"
 #' @param checkpoint_dir Character. Checkpoint directory path.
@@ -158,20 +158,20 @@
 #' @examples
 #' \dontrun{
 #' # Basic usage
-#' context <- setup_pipeline_context(workflow_name = "ingest")
+#' context <- setup_pipeline_context(phase_id = "ingest")
 #' study_name <- context$study_params$study_parameters$study_name
 #' timezone <- context$study_params$study_parameters$timezone
 #'
 #' # Custom paths
 #' context <- setup_pipeline_context(
-#'   workflow_name = "finalize_cpn",
+#'   phase_id = "finalize_cpn",
 #'   yaml_path = "config/custom_study.yaml",
 #'   checkpoint_dir = "data/checkpoints"
 #' )
 #' }
 #'
 #' @export
-setup_pipeline_context <- function(workflow_name,
+setup_pipeline_context <- function(phase_id,
                                    yaml_path = "inst/config/study_parameters.yaml",
                                    checkpoint_dir = "outputs/checkpoints",
                                    outputs_dir = "outputs") {
@@ -188,7 +188,7 @@ setup_pipeline_context <- function(workflow_name,
   study_params <- load_study_parameters(yaml_path)
   
   # Create validation context (requires create_validation_context from validation.R)
-  validation_context <- create_validation_context(workflow = workflow_name)
+  validation_context <- create_validation_context(phase_id = phase_id)
   validation_context$study_name <- study_params$study_parameters$study_name
   
   list(
@@ -237,14 +237,14 @@ load_most_recent_checkpoint <- function(pattern) {
   checkpoint_dir <- here::here("outputs", "checkpoints")
   
   if (!dir.exists(checkpoint_dir)) {
-    stop(sprintf("Checkpoint directory not found: %s\n  Run previous chunk first.", checkpoint_dir))
+    stop(sprintf("Checkpoint directory not found: %s\n  Run previous phase first.", checkpoint_dir))
   }
   
   files <- list.files(checkpoint_dir, pattern = pattern, full.names = TRUE)
   
   if (length(files) == 0) {
     stop(sprintf(
-      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  Run previous chunk first.",
+      "No checkpoint files found matching pattern: %s\n  Directory: %s\n  Run previous phase first.",
       pattern, checkpoint_dir
     ))
   }
@@ -399,7 +399,7 @@ generate_timestamped_filename <- function(prefix, suffix = "") {
 #' @param artifact_name Character. Unique name for artifact registry. If NULL,
 #'   will be generated from checkpoint_name. Default: NULL.
 #' @param artifact_type Character. Type of artifact (e.g., "checkpoint", "masterfile").
-#' @param workflow Character. Workflow that produced this artifact.
+#' @param phase_id Character. Phase/module identifier that produced this artifact.
 #' @param metadata List. Additional metadata for registry entry. Default: list().
 #' @param data_hash Character. Optional data frame hash for reproducibility.
 #'   Default: NULL.
@@ -433,7 +433,7 @@ generate_timestamped_filename <- function(prefix, suffix = "") {
 #'   file_path = here::here("outputs", "checkpoints", "02_kpro_master_20260205.csv"),
 #'   artifact_name = "kpro_master_20260205",
 #'   artifact_type = "masterfile",
-#'   workflow = "ingest",
+#'   phase_id = "ingest",
 #'   metadata = list(n_rows = nrow(kpro_master)),
 #'   verbose = TRUE
 #' )
@@ -444,7 +444,7 @@ generate_timestamped_filename <- function(prefix, suffix = "") {
 #'   checkpoint_name = "CallsPerNight_final",
 #'   output_dir = here::here("results", "csv"),
 #'   artifact_type = "cpn_final",
-#'   workflow = "finalize_cpn",
+#'   phase_id = "finalize_cpn",
 #'   metadata = list(n_rows = nrow(cpn_final)),
 #'   verbose = TRUE
 #' )
@@ -458,7 +458,7 @@ save_checkpoint_and_register <- function(data,
                                         output_dir = "outputs/checkpoints",
                                         artifact_name = NULL,
                                         artifact_type,
-                                        workflow,
+                                        phase_id,
                                         metadata = list(),
                                         data_hash = NULL,
                                         verbose = FALSE,
@@ -526,7 +526,7 @@ save_checkpoint_and_register <- function(data,
     registry = registry,
     artifact_name = artifact_name,
     artifact_type = artifact_type,
-    workflow = workflow,
+    phase_id = phase_id,
     file_path = file_path,
     metadata = metadata,
     data_hash = data_hash,
@@ -558,7 +558,7 @@ save_checkpoint_and_register <- function(data,
 #' @param title Character. Stage title (e.g., "Load Configuration")
 #' @param verbose Logical. Print to console? Default: FALSE
 #' @param log_path Character. Path to log file. Default: "logs/pipeline_log.txt"
-#' @param workflow_prefix Character. Optional prefix for log messages
+#' @param phase_prefix Character. Optional phase/module prefix for log messages
 #'   (e.g., "Finalize CPN"). Default: ""
 #'
 #' @return Invisible NULL.
@@ -581,9 +581,9 @@ save_checkpoint_and_register <- function(data,
 #' # Console: +----STAGE 1: Load Configuration----+
 #' # Log:     [2026-02-05 12:34:56] [Stage 1] Load Configuration
 #'
-#' # With workflow prefix
+#' # With phase/module prefix
 #' log_stage_start("2", "Generate Template", verbose = FALSE,
-#'                workflow_prefix = "Finalize CPN")
+#'                phase_prefix = "Finalize CPN")
 #' # Console: (silent)
 #' # Log:     [2026-02-05 12:34:56] [Finalize CPN - Stage 2] Generate Template
 #' }
@@ -593,7 +593,7 @@ log_stage_start <- function(stage_num,
                            title,
                            verbose = FALSE,
                            log_path = "logs/pipeline_log.txt",
-                           workflow_prefix = "") {
+                           phase_prefix = "") {
   
   # Print to console if verbose
   if (verbose) {
@@ -601,8 +601,8 @@ log_stage_start <- function(stage_num,
   }
   
   # Build log message
-  if (nchar(workflow_prefix) > 0) {
-    log_msg <- sprintf("[%s - Stage %s] %s", workflow_prefix, stage_num, title)
+  if (nchar(phase_prefix) > 0) {
+    log_msg <- sprintf("[%s - Stage %s] %s", phase_prefix, stage_num, title)
   } else {
     log_msg <- sprintf("[Stage %s] %s", stage_num, title)
   }
@@ -623,7 +623,7 @@ log_stage_start <- function(stage_num,
 #'
 #' @param validation_context List. Validation context from create_validation_context().
 #' @param stage_name Character. Optional stage name for display in report.
-#'   Default: NULL (uses workflow from context).
+#'   Default: NULL (uses phase/module identifier from context).
 #' @param verbose Logical. Print confirmation message? Default: FALSE.
 #' @param output_dir Character. Directory for validation HTML.
 #'   Default: "results/validation"

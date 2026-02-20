@@ -36,9 +36,9 @@
 # CHANGELOG
 # ---------
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
-# 2026-02-01: Confirmed usage in run_finalize_to_report.R (Chunk 3, Workflow 07)
+# 2026-02-01: Confirmed usage in run_phase3_analysis_reporting.R (Phase 3, Module 7)
 # 2026-01-19: Fixed execute_dir parameter to ensure project root context
-# 2026-01-12: Initial version (extracted from Workflow 07)
+# 2026-01-12: Initial version (extracted from Module 7 pipeline logic)
 # =============================================================================
 
 library(here)
@@ -71,7 +71,7 @@ library(quarto)
 #' @section CONTRACT:
 #' - Does not compute any statistics
 #' - Does not generate any new plots
-#' - Uses only pre-computed objects from Workflows 05-06
+#' - Uses only pre-computed objects from Modules 5-6
 #' - Produces self-contained HTML file
 #'
 #' @section IMPORTANT IMPLEMENTATION NOTE:

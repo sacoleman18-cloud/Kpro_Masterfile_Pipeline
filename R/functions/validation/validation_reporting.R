@@ -4,7 +4,7 @@
 # Classification: Helper/Utility Function Module
 # - Part of R/functions/ → Contains reusable helper functions only
 # - Tracks validation events and generates HTML reports
-# - Used by all modules and workflows
+# - Used by modules across all pipeline phases
 # PURPOSE
 # -------
 # Tracks execution events during pipeline runs and generates comprehensive
@@ -23,7 +23,7 @@
 # 1. Event Tracking
 #    - create_validation_context: Initialize empty event tracker
 #    - log_validation_event: Append events, update counters
-#    - Events accumulate throughout workflow execution
+#    - Events accumulate throughout phase execution
 #
 # 2. Report Generation
 #    - finalize_validation_report: Save YAML + generate HTML
@@ -64,7 +64,7 @@
 # FUNCTIONS PROVIDED
 # ------------------
 #
-# Event Tracking - Record execution events throughout workflow:
+# Event Tracking - Record execution events throughout a phase:
 #
 #   - create_validation_context():
 #       Uses packages: base R (list operations, Sys.time, format)
@@ -208,9 +208,9 @@ PIPELINE_VERSION <- "2.1"
 #'
 #' @description
 #' Initializes a validation tracking context that accumulates
-#' validation events throughout a workflow run.
+#' validation events throughout a phase run.
 #'
-#' @param workflow Character. Workflow identifier (e.g., "01", "02")
+#' @param phase_id Character. Phase/module identifier (e.g., "01", "02")
 #' @param study_name Character. Study name for context
 #'
 #' @return List. Validation context object
@@ -221,13 +221,13 @@ PIPELINE_VERSION <- "2.1"
 #' - Records start timestamp in UTC
 #'
 #' @section DOES NOT:
-#' - Validate workflow identifier format
+#' - Validate phase/module identifier format
 #' - Check if study exists
 #'
 #' @export
-create_validation_context <- function(workflow, study_name = NULL) {
+create_validation_context <- function(phase_id, study_name = NULL) {
   list(
-    workflow = workflow,
+    phase_id = phase_id,
     study_name = study_name,
     started_utc = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
     pipeline_version = PIPELINE_VERSION,
@@ -399,12 +399,12 @@ finalize_validation_report <- function(context,
   
   # Save YAML
   yaml_path <- file.path(output_dir, sprintf("validation_%s_%s.yaml", 
-                                             context$workflow, timestamp))
+                                             context$phase_id, timestamp))
   yaml::write_yaml(context, yaml_path)
   
   # Generate HTML report
   html_path <- file.path(output_dir, sprintf("validation_%s_%s.html",
-                                             context$workflow, timestamp))
+                                             context$phase_id, timestamp))
   
   generate_validation_html(context, html_path)
   
@@ -418,7 +418,7 @@ finalize_validation_report <- function(context,
 #'
 #' @description
 #' Internal function to generate HTML validation report with enhanced
-#' formatting, collapsible details, workflow-specific sections, and
+#' formatting, collapsible details, phase-specific sections, and
 #' breakdown of rows removed by filter type.
 #'
 #' @param context List. Finalized validation context
@@ -428,21 +428,21 @@ finalize_validation_report <- function(context,
 #' - Generates self-contained HTML file
 #' - Includes inline CSS (no external dependencies)
 #' - Formats event details as collapsible sections
-#' - Creates workflow-specific metric cards
+#' - Creates phase-specific metric cards
 #' - Shows breakdown of rows removed by filter type
 #'
 #' @keywords internal
 generate_validation_html <- function(context, output_path) {
   
   # ============================================================================
-  # WORKFLOW-SPECIFIC CONFIGURATION
+  # PHASE-SPECIFIC CONFIGURATION
   # ============================================================================
   
-  # Customize labels based on which workflow is running
+  # Customize labels based on which phase/module is running
   # Module 1: Ingestion (files -> rows)
   # Module 2: Transformation (input rows -> output rows)
   
-  if (context$workflow == "02") {
+  if (context$phase_id == "02") {
     rows_label <- "Output Rows"
   } else {
     rows_label <- "Rows Processed"
@@ -550,11 +550,11 @@ generate_validation_html <- function(context, output_path) {
   })
   
   # ============================================================================
-  # BUILD WORKFLOW-SPECIFIC SECTIONS
+  # BUILD PHASE-SPECIFIC SECTIONS
   # ============================================================================
   
   # Build data quality section (if module 1)
-  data_quality_section <- if (context$workflow == "01") {
+  data_quality_section <- if (context$phase_id == "01") {
     sprintf('
   <h2>Data Quality</h2>
   <div class="grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -579,7 +579,7 @@ generate_validation_html <- function(context, output_path) {
   }
   
   # Build transformation section (if module 2)
-  transformation_section <- if (context$workflow == "02") {
+  transformation_section <- if (context$phase_id == "02") {
     sprintf('
   <h2>Transformations</h2>
   <div class="grid" style="grid-template-columns: repeat(2, 1fr);">
@@ -628,7 +628,7 @@ generate_validation_html <- function(context, output_path) {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Validation Report - Workflow %s</title>
+  <title>Validation Report - Phase %s</title>
   <style>
     body { 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -766,7 +766,7 @@ generate_validation_html <- function(context, output_path) {
   <h1>KPro Pipeline Validation Report</h1>
   
   <div class="header-info">
-    <p><strong>Workflow:</strong> %s | <strong>Study:</strong> %s</p>
+    <p><strong>Phase:</strong> %s | <strong>Study:</strong> %s</p>
     <p><strong>Generated:</strong> %s | <strong>Pipeline Version:</strong> %s</p>
     <p><strong>Duration:</strong> %.1f seconds</p>
   </div>
@@ -818,9 +818,9 @@ generate_validation_html <- function(context, output_path) {
 </body>
 </html>',
                   # Title
-                  context$workflow,
+                  context$phase_id,
                   # Header info
-                  context$workflow,
+                  context$phase_id,
                   context$study_name %||% "Unknown",
                   context$completed_utc,
                   context$pipeline_version,
@@ -878,7 +878,7 @@ generate_validation_html <- function(context, output_path) {
 #'   (e.g., "finalize_cpn", "summary_stats", "exploratory_plots", "report_release").
 #' @param study_params List. Loaded study parameters from load_study_parameters().
 #'
-#' @return List. Validation context with workflow and study_name populated,
+#' @return List. Validation context with phase/module identifier and study_name populated,
 #'   ready for log_validation_event() calls.
 #'
 #' @section CONTRACT:
@@ -913,7 +913,7 @@ generate_validation_html <- function(context, output_path) {
 init_stage_validation <- function(stage_name, study_params) {
   
   # Create validation context
-  context <- create_validation_context(workflow = stage_name)
+  context <- create_validation_context(phase_id = stage_name)
   
   # Populate study name from parameters (use %||% for null coalescing)
   context$study_name <- study_params$study_parameters$study_name %||% "Unknown"

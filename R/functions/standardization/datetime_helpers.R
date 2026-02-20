@@ -4,7 +4,7 @@
 # Classification: Helper/Utility Function Module
 # - Part of R/functions/ → Contains reusable helper functions only
 # - Provides timezone-aware datetime parsing and conversion
-# - Used by all modules and workflows
+# - Used by modules across all pipeline phases
 # PURPOSE
 # -------
 # Comprehensive datetime/time utilities for parsing, formatting, and converting
@@ -59,7 +59,7 @@
 #   - lubridate: parse_date_time, with_tz, as_date, force_tz, mdy, mdy_hms, mdy_hm
 #   - dplyr: mutate, select
 #
-# WORKFLOW INTEGRATION
+# PHASE INTEGRATION
 # --------------------
 # This module is used across multiple modules:
 #   - Module 2 (Standardization): convert_datetime_to_local()
@@ -445,7 +445,7 @@ is.Date <- function(x) {
 #' Parses full datetime strings in multiple formats commonly produced by
 #' Excel or user editing. Tries AM/PM format first, then 24-hour format,
 #' handling auto-formatting gracefully. Used for template comparison in
-#' Workflow 04.
+#' Module 4 (Phase 3).
 #'
 #' @param dt_string Character scalar datetime string to parse, or NA
 #'

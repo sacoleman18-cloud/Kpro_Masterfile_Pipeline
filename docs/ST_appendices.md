@@ -1,10 +1,12 @@
 # ==============================================================================
 # APPENDICES
 # ==============================================================================
-# VERSION: 2.4
-# LAST UPDATED: 2026-02-05
+# VERSION: 3.0
+# LAST UPDATED: 2026-02-19
 # PURPOSE: Templates, inventories, checklists, and quick reference
 # ==============================================================================
+
+> **v3.0 Note:** This appendix is strict phase-only for orchestration guidance.
 
 ## 1. CHECKLISTS
 
@@ -46,7 +48,7 @@
 - [ ] Function file header updated
 - [ ] **Verbose parameter added** for progress messages
 
-### 1.4 Before Modifying a Chunk/Workflow
+### 1.4 Before Modifying a Phase/Workflow
 
 - [ ] Header documentation updated (stages, outputs, plot inventory)
 - [ ] CHANGELOG entry added with date
@@ -73,9 +75,9 @@
 
 ### 1.6 Before Creating a Release Bundle
 
-- [ ] All chunks (1-3) or workflows (01-06) completed successfully
+- [ ] All phases (1-3) or legacy workflows (01-06) completed successfully
 - [ ] Artifact registry up to date
-- [ ] Validation reports generated for all chunks/workflows
+- [ ] Validation reports generated for all phases/workflows
 - [ ] CPN final passes validation
 - [ ] Manifest metadata complete
 - [ ] All hashes computed and recorded
@@ -92,7 +94,7 @@
 - [ ] Returns structured list with: data, metadata, artifact_id, paths
 - [ ] Registers artifacts at completion
 - [ ] Renders validation HTML at completion
-- [ ] File logging at start and end of chunk
+- [ ] File logging at start and end of phase
 
 ---
 
@@ -115,7 +117,7 @@ read.csv(here::here("data", "file.csv"))
 stop("Error")
 
 # [OK] GOOD:
-stop(sprintf("Required column '%s' not found. Did you run Chunk 1 first?", col_name))
+stop(sprintf("Required column '%s' not found. Did you run Phase 1 first?", col_name))
 ```
 
 **Function Design:**
@@ -140,7 +142,7 @@ if (nrow(df) == 0) stop("df is empty")
 # [OK] GOOD: Centralized assertions
 assert_data_frame(df, "df")
 assert_not_empty(df, "df")
-assert_columns_exist(df, c("Detector", "Night"), source_hint = "Run Chunk 1 first")
+assert_columns_exist(df, c("Detector", "Night"), source_hint = "Run Phase 1 first")
 ```
 
 **Plot Functions:**
@@ -185,7 +187,7 @@ gt_summary <- function(df, title = "Summary", verbose = FALSE) {
 df <- read_csv(file)
 
 # [OK] GOOD:
-assert_file_exists(file, hint = "Run Chunk 1 first")
+assert_file_exists(file, hint = "Run Phase 1 first")
 df <- read_csv(file)
 assert_not_empty(df, "loaded data")
 ```
@@ -238,13 +240,13 @@ my_function <- function(df, verbose = FALSE) {
 **Orchestrating Function Returns:**
 ```r
 # [X] BAD: Just returns data
-run_chunk <- function(verbose = FALSE) {
+run_phase <- function(verbose = FALSE) {
   df <- process_data()
   df
 }
 
 # [OK] GOOD: Returns structured list
-run_chunk <- function(verbose = FALSE) {
+run_phase <- function(verbose = FALSE) {
   df <- process_data()
   
   list(
@@ -323,7 +325,7 @@ function_name <- function(param1, param2 = default, verbose = FALSE) {
 #' @description
 #' [What this plot shows and when to use it]
 #'
-#' @param calls_per_night Data frame. CallsPerNight final from Chunk 3.
+#' @param calls_per_night Data frame. CallsPerNight final from Phase 3.
 #' @param verbose Logical. Print progress messages. Default: FALSE.
 #'
 #' @return ggplot object
@@ -332,7 +334,7 @@ function_name <- function(param1, param2 = default, verbose = FALSE) {
 #' [Additional context about the visualization]
 #'
 #' @section DATA SOURCE:
-#' - Input: `calls_per_night_final` from Chunk 3 / Workflow 04
+#' - Input: `calls_per_night_final` from Phase 3 result
 #' - Required columns: [list columns]
 #'
 #' @section CONTRACT:
@@ -426,7 +428,7 @@ gt_example <- function(data, title = "Example Table", verbose = FALSE) {
 
 ```r
 # ==============================================================================
-# R/pipeline/run_[chunk_name].R
+# R/pipeline/run_phase[N]_[phase_name].R
 # ==============================================================================
 # PURPOSE
 # -------
@@ -434,13 +436,13 @@ gt_example <- function(data, title = "Example Table", verbose = FALSE) {
 #
 # PIPELINE POSITION
 # -----------------
-# Chunk [N] of 3 in the Shiny-driven pipeline:
-#   run_ingest_standardize()  -> Raw CSVs to kpro_master
-#   run_cpn_template()        -> Generate CPN template
-#   run_finalize_to_report()  -> Finalize through report
+# Phase [N] of 3 in checkpointed phase orchestration:
+#   run_phase1_data_preparation()    -> Raw CSVs to kpro_master checkpoint
+#   run_phase2_template_generation() -> Generate editable CPN template
+#   run_phase3_analysis_reporting()  -> Finalize, summarize, plot, report
 #
 # DECISION POINTS (handled by Shiny app):
-#   After Chunk [N]: [What decision the user makes]
+#   After Phase [N]: [What decision the user makes]
 #
 # PROCESSING STAGES
 # -----------------
@@ -472,10 +474,10 @@ gt_example <- function(data, title = "Example Table", verbose = FALSE) {
 # YYYY-MM-DD: Initial version
 # ==============================================================================
 
-#' Run [Chunk Name] Pipeline
+#' Run Phase [N]: [Phase Name]
 #'
 #' @description
-#' Chunk [N] of the KPro pipeline. [Description]
+#' Phase [N] of the KPro pipeline. [Description]
 #'
 #' @param verbose Logical. Print progress messages. Default: FALSE.
 #'
@@ -489,12 +491,12 @@ gt_example <- function(data, title = "Example Table", verbose = FALSE) {
 #'   }
 #'
 #' @export
-run_chunk_name <- function(verbose = FALSE) {
+run_phase_name <- function(verbose = FALSE) {
   
   # =========================================================================
   # FILE LOGGING (never gated)
   # =========================================================================
-  log_message("=== CHUNK N: Chunk Name - START ===")
+  log_message("=== PHASE N: Phase Name - START ===")
   
   # =========================================================================
   # STAGE 1: Load Configuration
@@ -523,7 +525,7 @@ run_chunk_name <- function(verbose = FALSE) {
   if (verbose) print_stage_header("N", "Register Artifact")
   
   # Initialize validation context
-  validation_context <- create_validation_context(workflow = "chunk_name")
+  validation_context <- create_validation_context(workflow = "phase_name")
   
   # Register artifact
   registry <- init_artifact_registry()
@@ -533,7 +535,7 @@ run_chunk_name <- function(verbose = FALSE) {
     registry = registry,
     artifact_name = artifact_id,
     artifact_type = "appropriate_type",
-    workflow = "chunkN",
+    workflow = "phaseN",
     file_path = checkpoint_path,
     metadata = list(
       n_rows = nrow(result_data),
@@ -554,8 +556,8 @@ run_chunk_name <- function(verbose = FALSE) {
   # =========================================================================
   if (verbose) {
     print_workflow_summary(
-      workflow = "CHUNK N",
-      title = "Chunk Name Complete",
+      workflow = "PHASE N",
+      title = "Phase Name Complete",
       items = list(
         "Rows processed" = format(nrow(result_data), big.mark = ","),
         "Checkpoint" = basename(checkpoint_path),
@@ -567,7 +569,7 @@ run_chunk_name <- function(verbose = FALSE) {
   # =========================================================================
   # FILE LOGGING (never gated)
   # =========================================================================
-  log_message("=== CHUNK N: Chunk Name - COMPLETE ===")
+  log_message("=== PHASE N: Phase Name - COMPLETE ===")
   
   # =========================================================================
   # RETURN STRUCTURED LIST
@@ -626,25 +628,25 @@ run_chunk_name <- function(verbose = FALSE) {
 
 ---
 
-## 4. WORKFLOW/CHUNK INVENTORY
+## 4. ORCHESTRATION INVENTORY
 
 ### 4.1 Pipeline Architecture
 
-**Chunk Model (Shiny-Driven):**
+**Phase Model (Authoritative):**
 ```
-run_ingest_standardize()     Chunk 1: Raw CSVs -> kpro_master
+run_phase1_data_preparation()     Phase 1: Raw CSVs -> kpro_master
          |
          v
     [DECISION: Export for Manual ID?]
          |
          v
-run_cpn_template()           Chunk 2: Generate CPN template
+run_phase2_template_generation()  Phase 2: Generate CPN template
          |
          v
     [DECISION: Edit recording hours?]
          |
          v
-run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
+run_phase3_analysis_reporting()   Phase 3: Finalize -> Stats -> Plots -> Report
          |
          v
     [release_bundle.zip]
@@ -676,20 +678,20 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 07_generate_report.R         Render Quarto report, create release bundle
 ```
 
-### 4.2 Chunk-to-Workflow Mapping
+### 4.2 Phase-to-Workflow Mapping
 
-| Chunk | Function | Equivalent Workflows | Primary Output |
-|-------|----------|---------------------|----------------|
-| 1 | `run_ingest_standardize()` | WF01 + WF02 | kpro_master |
-| 2 | `run_cpn_template()` | WF03 | CPN template pair |
-| 3 | `run_finalize_to_report()` | WF04 + WF05 + WF06 + WF07 | Final CPN, report, release |
+| Phase | Function | Equivalent Legacy Workflows | Primary Output |
+|-------|----------|-----------------------------|----------------|
+| 1 | `run_phase1_data_preparation()` | WF01 + WF02 | kpro_master |
+| 2 | `run_phase2_template_generation()` | WF03 | CPN template pair |
+| 3 | `run_phase3_analysis_reporting()` | WF04 + WF05 + WF06 + WF07 | Final CPN, report, release |
 
 ### 4.3 Decision Points
 
 | After | Decision | Options |
 |-------|----------|---------|
-| Chunk 1 | Export master for manual ID? | Yes: Export CSV for review / No: Continue |
-| Chunk 2 | Edit recording hours in template? | Yes: User edits CSV / No: Use auto-generated |
+| Phase 1 | Export master for manual ID? | Yes: Export CSV for review / No: Continue |
+| Phase 2 | Edit recording hours in template? | Yes: User edits CSV / No: Use auto-generated |
 
 ---
 
@@ -885,14 +887,14 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 
 ### 5.7 Pipeline Module (`R/pipeline/`)
 
-**run_ingest_standardize.R** (1 function)
-- `run_ingest_standardize()`: Chunk 1 orchestrating function
+**run_phase1_data_preparation.R** (1 function)
+- `run_phase1_data_preparation()`: Phase 1 orchestrating function
 
-**run_cpn_template.R** (1 function)
-- `run_cpn_template()`: Chunk 2 orchestrating function
+**run_phase2_template_generation.R** (1 function)
+- `run_phase2_template_generation()`: Phase 2 orchestrating function
 
-**run_finalize_to_report.R** (1 function)
-- `run_finalize_to_report()`: Chunk 3 orchestrating function
+**run_phase3_analysis_reporting.R** (1 function)
+- `run_phase3_analysis_reporting()`: Phase 3 orchestrating function
 
 ### 5.8 Function Count Summary
 
@@ -982,8 +984,8 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 
 ### 6.6 Input Data Key
 
-- **CPN:** `calls_per_night_final` from Chunk 3 / Workflow 04
-- **Master:** `kpro_master` from Chunk 1 / Workflow 02-03
+- **CPN:** `calls_per_night_final` from Phase 3
+- **Master:** `kpro_master` from Phase 1/2 outputs
 
 ---
 
@@ -991,12 +993,12 @@ run_finalize_to_report()     Chunk 3: Finalize -> Stats -> Plots -> Report
 
 **v2.3 (2026-01-31)**
 - Transitioned from workflow scripts to Shiny-driven orchestrating functions
-- Added chunk model: run_ingest_standardize(), run_cpn_template(), run_finalize_to_report()
+- Added phase orchestration model: run_phase1_data_preparation(), run_phase2_template_generation(), run_phase3_analysis_reporting()
 - Added orchestrating function template to templates section
 - Updated all checklists with verbose parameter and centralized assertion requirements
 - Added verbose gating examples to quick reference
 - Added structured return examples
-- Updated workflow inventory with chunk-to-workflow mapping
+- Updated orchestration inventory with phase-to-workflow mapping
 - Added pipeline module to function inventory
 - Updated function count to ~95+
 

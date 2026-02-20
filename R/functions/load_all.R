@@ -5,7 +5,7 @@
 # PURPOSE
 # -------
 # Sources all function modules in strict dependency order. Run this once at
-# the top of any workflow script to load the complete function library.
+# the top of any phase orchestrator script to load the complete function library.
 #
 # USAGE
 # -----
@@ -130,6 +130,7 @@ message("[6/9] Loading Layer 6: output/")
 
 # Plot helpers FIRST
 source_module(file.path("R", "functions", "output", "plot_helpers.R"), "plot_helpers.R (shared plotting utilities)")
+source_module(file.path("R", "functions", "output", "table_helpers.R"), "table_helpers.R (shared GT table utilities)")
 
 # Plot modules
 source_module(file.path("R", "functions", "output", "plot_quality.R"),   "plot_quality.R   (data quality visualizations)")
@@ -170,7 +171,7 @@ message("  └── Layer 7 loaded")
 # =============================================================================
 message("[8/9] Loading Layer 8: modules/")
 
-# Chunk 1 modules (Data Ingestion & Standardization)
+# Phase 1 modules (Data Ingestion & Standardization)
 source_module(file.path("R", "modules", "data_ingestion.R"),
               "data_ingestion.R (Raw data loading - Module Stages 1-2)",
               optional = TRUE)
@@ -179,12 +180,12 @@ source_module(file.path("R", "modules", "data_standardization.R"),
               "data_standardization.R (Schema transform & filters - Module Stages 3-8)",
               optional = TRUE)
 
-# Chunk 2 modules (CPN Template)
+# Phase 2 modules (CPN Template)
 source_module(file.path("R", "modules", "cpn_template.R"),
               "cpn_template.R (CPN template generation - Module Stages 1-9)",
               optional = TRUE)
 
-# Chunk 3 modules (Finalize to Report)
+# Phase 3 modules (Finalize to Report)
 source_module(file.path("R", "modules", "finalize_cpn.R"),
               "finalize_cpn.R (CPN finalization - Module Stages 1-6)",
               optional = TRUE)
@@ -229,7 +230,7 @@ message("
           │                            • center_text()
           │                            • print_stage_header()
           │                            • print_stage_banner()
-          │                            • print_workflow_summary()
+          │                            • print_phase_summary()
           │                            • print_pipeline_complete()
           ├─ config.R ...............  YAML parameter management
           │                            (7 functions)
@@ -293,6 +294,8 @@ message("
           │                            (5 functions)
           ├─ plot_temporal.R ........  Temporal pattern plots
           │                            (6 functions)
+          ├─ table_helpers.R ........  Shared GT table utilities
+          │                            (2 functions)
           ├─ tables.R ...............  GT table formatting
           │                            (5 functions)
           └─ report.R ...............  Quarto report generation
@@ -304,14 +307,14 @@ message("
           └─ run_phase3_analysis_reporting.R  Phase 3: Analysis & Reporting (Modules 4-7)
 
  Layer 8: modules/ (Complete Pipeline - 7 Modules)
-          [Chunk 1: Ingestion & Standardization]
+          [Phase 1: Ingestion & Standardization]
           ├─ data_ingestion.R ...........  Raw data loading (1 function)
           └─ data_standardization.R .....  Schema transform & filters (1 function)
           
-          [Chunk 2: CPN Template]
+          [Phase 2: CPN Template]
           └─ cpn_template.R .............  CPN template generation (1 function)
           
-          [Chunk 3: Finalize to Report]
+          [Phase 3: Finalize to Report]
           ├─ finalize_cpn.R .............  CPN finalization (1 function)
           ├─ summary_stats.R ............  Summary statistics (1 function)
           ├─ plotting.R .................  Exploratory visualizations (1 function)
@@ -337,7 +340,7 @@ message("
 
  Layer 8: Processing Modules (R/modules/)
           - Thematic subsystems with internal staged execution
-          - 7 total modules across 3 pipeline chunks
+          - 7 total modules across 3 pipeline phases
           - Each module contains internal 'module stages' numbered sequentially
           - Modules are self-contained: load → process → save → validate
 
@@ -347,12 +350,12 @@ message("
           - Supports individual module testing and custom execution sequences
           - Core infrastructure for checkpointed phase orchestration
 
- LEGACY: Original 01-07 workflow scripts remain in R/ root (preserved for reference)
+ LEGACY: Original 01-07 step scripts remain in R/ root (preserved for reference)
 
 ================================================================================
  TOTAL LOADED: 120+ functions across 27+ modules
  VALIDATION: 2-module system (data validation + execution reporting)
- ORCHESTRATION: All 3 chunks fully modularized
+ ORCHESTRATION: All 3 phases fully modularized
 ================================================================================
 
  Ready to run:

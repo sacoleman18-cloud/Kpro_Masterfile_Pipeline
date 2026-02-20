@@ -1,17 +1,17 @@
 # ==============================================================================
 # ORCHESTRATION PHILOSOPHY: CHECKPOINTED PHASE ORCHESTRATION
 # ==============================================================================
-# VERSION: 1.0
-# LAST UPDATED: 2026-02-08
+# VERSION: 1.1
+# LAST UPDATED: 2026-02-19
 # PURPOSE: Authoritative reference for phase orchestration architecture and philosophy
 # ==============================================================================
 
 ## EXECUTIVE SUMMARY
 
-The KPro Masterfile Pipeline has transitioned from **chunk-based orchestration** to **checkpointed phase orchestration**. This document serves as the authoritative reference for understanding and implementing this architecture.
+The KPro Masterfile Pipeline uses **checkpointed phase orchestration** as the authoritative execution model. This document serves as the reference for understanding and implementing that architecture.
 
 **Key Concepts:**
-- **Phases:** 3 sequential pipeline stages with explicit checkpoints (not chunks)
+- **Phases:** 3 sequential pipeline stages with explicit checkpoints
 - **Checkpoints:** Validated data artifacts produced at end of each phase
 - **Human-in-the-Loop:** Phase 2 requires manual template editing before Phase 3
 - **Module Execution Layer:** Provides callable interfaces for all 7 processing modules
@@ -22,16 +22,16 @@ The KPro Masterfile Pipeline has transitioned from **chunk-based orchestration**
 
 ## 1. CORE CONCEPTS
 
-### 1.1 Phases vs. Chunks
+### 1.1 Phase Model Summary
 
-| Aspect | Phases (NEW) | Chunks (DEPRECATED) |
-|--------|------|-----------|
-| Terminology | Phase 1/2/3 | Chunk 1/2/3 |
-| Orchestrator | `run_phase#_name()` | `run_ingest_standardize()` |
-| Data Passing | Structured phase results | No structured passing |
-| Checkpoints | Explicit at each phase end | Implicit |
-| Validation | HTML reports per phase | Single reports |
-| Human Loop | Explicit in Phase 2 | Implicit template editing |
+| Aspect | Phase Model |
+|--------|-------------|
+| Terminology | Phase 1/2/3 |
+| Orchestrator | `run_phase#_name()` |
+| Data Passing | Structured phase results |
+| Checkpoints | Explicit at each phase end |
+| Validation | HTML reports per phase |
+| Human Loop | Explicit in Phase 2 |
 
 ### 1.2 The Three Phases
 
@@ -442,59 +442,39 @@ Phase orchestrators are pure functions:
 
 ### 6.2 Deprecated Terms (Don't Use)
 
-- ❌ "Chunk" → Use "Phase"
-- ❌ "Chunk orchestrator" → Use "Phase orchestrator"
+- ❌ "Workflow script" (as orchestration term) → Use "Phase" or "Phase orchestrator"
 - ❌ "Debug tool" → Use "Module execution layer"
 - ❌ "R/debug/module_runner.R" → Use "R/modules/module_runner.R"
-- ❌ "Workflow script" → Use "Phase" or "Module"
+- ❌ "Workflow script" (as module term) → Use "Module"
 
 ---
 
-## 7. MIGRATION FROM CHUNKS TO PHASES
+## 7. PHASE CHAINING REFERENCE
 
-### 7.1 Code Replacement Map
-
-```r
-# OLD PATTERN (Chunks)
-result <- run_ingest_standardize(verbose = TRUE)
-
-# NEW PATTERN (Phases)
-result <- run_phase1_data_preparation(verbose = TRUE)
-```
+### 7.1 Standard Execution Pattern
 
 ```r
-# OLD PATTERN (No passing)
-result2 <- run_cpn_template(
-  kpro_master = result$kpro_master,
+phase1_result <- run_phase1_data_preparation(verbose = TRUE)
+
+phase2_result <- run_phase2_template_generation(
+  phase1_result = phase1_result,
   verbose = TRUE
 )
 
-# NEW PATTERN (Structured passing)
-result2 <- run_phase2_template_generation(
-  phase1_result = result,
+# [Edit template at: phase2_result$template_edit_path]
+phase3_result <- run_phase3_analysis_reporting(
+  phase2_result = phase2_result,
+  edited_template_file = phase2_result$template_edit_path,
   verbose = TRUE
 )
 ```
 
-```r
-# OLD PATTERN (Manual editing, no clear checkpoint)
-result3 <- run_finalize_to_report(verbose = TRUE)
+### 7.2 Documentation Rules
 
-# NEW PATTERN (Explicit checkpoint and human loop)
-# [Edit template at: result2$template_edit_path]
-result3 <- run_phase3_analysis_reporting(
-  phase2_result = result2,
-  edited_template_file = result2$template_edit_path,
-  verbose = TRUE
-)
-```
-
-### 7.2 Documentation Updates
-
-- All references to "Chunk 1" → "Phase 1"
-- All examples using run_ingest_standardize() → run_phase1_data_preparation()
-- All data passing examples → Use phase result objects
-- All Shiny examples → Show process with structured results
+- Use "Phase" terminology for orchestration
+- Use phase result objects for all data passing examples
+- Show explicit human-in-the-loop checkpoint in Phase 2
+- Keep Shiny examples aligned with structured phase results
 
 ---
 
@@ -541,8 +521,7 @@ result3 <- run_phase3_analysis_reporting(
 
 Checkpointed phase orchestration represents a significant architectural improvement:
 
-- **Before**: Implicit chunks, no structured passing, unclear checkpoints
-- **After**: Explicit phases, structured results, clear checkpoints and human loops
+- **Current model**: Explicit phases, structured results, clear checkpoints, and human-in-the-loop validation
 
 This philosophy is implemented across all standards documents and should guide all development decisions.
 

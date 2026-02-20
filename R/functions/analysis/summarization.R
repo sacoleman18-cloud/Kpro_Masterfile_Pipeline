@@ -25,14 +25,14 @@
 #    - No "what-if" logic or conditional branching
 #
 # 2. SCHEMA CONTRACT ENFORCEMENT
-#    - All functions expect columns created by upstream workflows
+#    - All functions expect columns created by upstream phases/modules
 #    - species column: created in Module 3 (run_phase2_template_generation)
 #    - Hour_local column: created in Module 2 (run_phase1_data_preparation)
 #    - Night column: created in Module 2 (run_phase1_data_preparation)
 #
-# 3. HELPER FUNCTIONS VS WORKFLOW FUNCTIONS
+# 3. HELPER FUNCTIONS VS PHASE FUNCTIONS
 #    - Helper functions (reused multiple times): CAN have parameters
-#    - Workflow functions (called once): NO configurable parameters
+#    - Phase functions (called once): NO configurable parameters
 #    - save_master_with_timestamp() has parameters because it's a helper
 #    - All summary functions have NO parameters because they're called once
 #
@@ -196,7 +196,7 @@
 #' (e.g., all failed nights) will have NA for CPH metrics rather than Inf/-Inf.
 #' This ensures downstream plotting and table generation functions don't break.
 #'
-#' @param cpn_final Data frame. CallsPerNight final data from Workflow 04.
+#' @param cpn_final Data frame. CallsPerNight final data from Module 4 (Phase 3).
 #'   Must contain columns: Detector, Night, CallsPerNight, RecordingHours, 
 #'   Status, CallsPerHour.
 #'
@@ -434,7 +434,7 @@ create_effort_summary_table <- function(calls_per_night) {
 #' Creates a single-row summary of the entire study. Aggregates across all
 #' detectors and nights. Useful for report headers and study overview tables.
 #'
-#' @param cpn_final Data frame. CallsPerNight final data from Workflow 04.
+#' @param cpn_final Data frame. CallsPerNight final data from Module 4 (Phase 3).
 #'
 #' @return Single-row tibble with columns:
 #'   \describe{
@@ -528,15 +528,11 @@ create_study_summary <- function(cpn_final) {
 #'     \item{var_within}{Within-detector variance (residual)}
 #'     \item{pct_between}{Percent of variance between detectors}
 #'     \item{pct_within}{Percent of variance within detectors}
-#'     \item{icc}{Intraclass correlation coefficient}
-#'     \item{interpretation}{Plain-English interpretation of spatial heterogeneity}
 #'   }
 #'
 #' @section CONTRACT:
 #' - Returns single row
-#' - ICC = var_between / var_total
 #' - pct_between + pct_within = 100 (approximately)
-#' - Interpretation based on ICC thresholds
 #'
 #' @section DOES NOT:
 #' - Perform formal ANOVA or hypothesis testing
@@ -557,9 +553,6 @@ calculate_variance_components <- function(cpn_final) {
       .groups = "drop"
     )
   
-  # Grand mean
-  grand_mean <- mean(cpn_final$CallsPerHour, na.rm = TRUE)
-  
   # Total variance
   var_total <- var(cpn_final$CallsPerHour, na.rm = TRUE)
   
@@ -575,26 +568,12 @@ calculate_variance_components <- function(cpn_final) {
     )
   var_within <- mean(within_vars$var_within, na.rm = TRUE)
   
-  # Calculate ICC
-  icc <- var_between / var_total
-  
-  # Generate interpretation based on ICC
-  interpretation <- dplyr::case_when(
-    icc >= 0.75 ~ "Very high spatial heterogeneity (most variation between sites)",
-    icc >= 0.50 ~ "High spatial heterogeneity (more variation between than within sites)",
-    icc >= 0.25 ~ "Moderate spatial heterogeneity (balanced spatial and temporal variation)",
-    icc >= 0.10 ~ "Low spatial heterogeneity (more variation within sites over time)",
-    TRUE ~ "Very low spatial heterogeneity (most variation is temporal)"
-  )
-  
   tibble::tibble(
     var_total = round(var_total, 2),
     var_between = round(var_between, 2),
     var_within = round(var_within, 2),
     pct_between = round(100 * var_between / var_total, 1),
-    pct_within = round(100 * var_within / var_total, 1),
-    icc = round(icc, 3),
-    interpretation = interpretation
+    pct_within = round(100 * var_within / var_total, 1)
   )
 }
 
@@ -608,15 +587,15 @@ calculate_variance_components <- function(cpn_final) {
 #'
 #' @description
 #' Summarizes species composition for each detector using the unified 'species'
-#' column created by Workflow 03. Shows call counts and percentages for each
+#' column created by Module 3 (Phase 2). Shows call counts and percentages for each
 #' species detected.
 #' 
 #' DETERMINISTIC DESIGN: This function has NO configurable parameters. It
 #' always uses the 'species' column created by create_unified_species_column()
-#' in Workflow 03, which deterministically applies priority: manual_id > auto_id > "NoID".
+#' in Module 3 (Phase 2), which deterministically applies priority: manual_id > auto_id > "NoID".
 #'
-#' @param master_data Data frame. Master file from Workflow 02 with unified
-#'   species column added by Workflow 03. Must contain Detector and species columns.
+#' @param master_data Data frame. Master file from Module 2 (Phase 1) with unified
+#'   species column added by Module 3 (Phase 2). Must contain Detector and species columns.
 #'
 #' @return Tibble with columns:
 #'   \describe{
@@ -629,14 +608,14 @@ calculate_variance_components <- function(cpn_final) {
 #' @section CONTRACT:
 #' - One row per detector-species combination
 #' - Uses ONLY the 'species' column (no configurable column names)
-#' - Species column MUST pre-exist (created in Workflow 03)
+#' - Species column MUST pre-exist (created in Module 3 / Phase 2)
 #' - Excludes NA species values
 #' - Percentages sum to 100 within each detector
 #' - Sorted by Detector, then n_calls descending
 #' - DETERMINISTIC: no configurable parameters, no conditional logic
 #'
 #' @section DOES NOT:
-#' - Create the species column (expects it pre-created in Workflow 03)
+#' - Create the species column (expects it pre-created in Module 3 / Phase 2)
 #' - Accept alternate species column names (violates determinism)
 #' - Make species richness comparisons
 #' - Account for detection probability
@@ -644,7 +623,7 @@ calculate_variance_components <- function(cpn_final) {
 #'
 #' @examples
 #' \dontrun{
-#' # Species column must be created first by Workflow 03
+#' # Species column must be created first by Module 3 (Phase 2)
 #' kpro_master <- create_unified_species_column(kpro_master)
 #' 
 #' # Then generate summary (no parameters needed)
@@ -679,12 +658,12 @@ create_species_summary_by_detector <- function(master_data) {
 #'
 #' @description
 #' Shows cumulative species count over time using the unified 'species' column
-#' created by Workflow 03 and the 'Night' column created by Workflow 02.
+#' created by Module 3 (Phase 2) and the 'Night' column created by Module 2 (Phase 1).
 #' Useful for assessing whether sampling effort was sufficient to detect most species.
 #' 
 #' DETERMINISTIC DESIGN: This function has NO configurable parameters. It
 #' always uses 'species' and 'Night' columns created deterministically by
-#' upstream workflows.
+#' upstream phases/modules.
 #'
 #' @param master_data Data frame. Master file with Night column and unified
 #'   species column. Must contain species and Night columns.
@@ -700,10 +679,10 @@ create_species_summary_by_detector <- function(master_data) {
 #' @section CONTRACT:
 #' - One row per date with detections
 #' - Uses ONLY 'species' and 'Night' columns (no configurable column names)
-#' - Both columns MUST pre-exist (created in Workflows 02-03)
+#' - Both columns MUST pre-exist (created in Modules 2-3)
 #' - Excludes NoID/UNKNOWN/NOISE from species counts
 #' - cumulative_species is monotonically increasing
-#' - Returns Night column for consistency with workflow
+#' - Returns Night column for consistency with phase outputs
 #' - DETERMINISTIC: no configurable parameters, no conditional logic
 #'
 #' @section DOES NOT:
@@ -715,7 +694,7 @@ create_species_summary_by_detector <- function(master_data) {
 #'
 #' @examples
 #' \dontrun{
-#' # Species and Night columns must exist from upstream workflows
+#' # Species and Night columns must exist from upstream phases/modules
 #' species_accum <- create_species_accumulation_summary(kpro_master)
 #' }
 #'
@@ -767,10 +746,10 @@ create_species_accumulation_summary <- function(master_data) {
 #'
 #' @description
 #' Summarizes bat activity by hour of the night using the Hour_local column
-#' created by Workflow 02. Provides study-wide hourly activity patterns.
+#' created by Module 2 (Phase 1). Provides study-wide hourly activity patterns.
 #' 
 #' DETERMINISTIC DESIGN: This function has NO configurable parameters. It
-#' always uses the 'Hour_local' column created deterministically in Workflow 02,
+#' always uses the 'Hour_local' column created deterministically in Module 2 (Phase 1),
 #' and always returns study-wide summaries (not per-detector).
 #'
 #' @param master_data Data frame. Master file with Hour_local column.
@@ -786,13 +765,13 @@ create_species_accumulation_summary <- function(master_data) {
 #' @section CONTRACT:
 #' - One row per hour (0-23)
 #' - Uses ONLY Hour_local column (no conditional DateTime extraction)
-#' - Hour_local MUST pre-exist (created in Workflow 02)
+#' - Hour_local MUST pre-exist (created in Module 2 / Phase 1)
 #' - Returns study-wide summary (not per-detector)
 #' - Percentages sum to 100
 #' - DETERMINISTIC: no configurable parameters, no conditional logic
 #'
 #' @section DOES NOT:
-#' - Create Hour_local column (expects it pre-created in Workflow 02)
+#' - Create Hour_local column (expects it pre-created in Module 2 / Phase 1)
 #' - Extract hours from DateTime_local (Hour_local must exist)
 #' - Provide per-detector breakdown (single output schema only)
 #' - Account for recording effort differences between hours
@@ -800,7 +779,7 @@ create_species_accumulation_summary <- function(master_data) {
 #'
 #' @examples
 #' \dontrun{
-#' # Hour_local column must exist from Workflow 02
+#' # Hour_local column must exist from Module 2 (Phase 1)
 #' hourly_summary <- create_hourly_activity_summary(kpro_master)
 #' 
 #' # Identify peak activity hours

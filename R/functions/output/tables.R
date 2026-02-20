@@ -48,6 +48,9 @@
 #   - dplyr: Data manipulation for pivoting
 #   - tidyr: Pivoting for wide format
 #
+# Internal Dependencies:
+#   - table_helpers.R: validate_summary_for_gt(), apply_kpro_gt_theme()
+#
 # FUNCTIONS PROVIDED
 # ------------------
 #
@@ -85,10 +88,12 @@
 #       Calls internal: none (pure I/O)
 #       Purpose: Export GT table to PNG and/or HTML formats (300 DPI)
 #
-# Last Modified: 2026-02-09
+# Last Modified: 2026-02-20
 #
 # CHANGELOG
 # ---------
+# 2026-02-20: Moved shared GT helpers to table_helpers.R
+# 2026-02-20: Replaced duplicated validator blocks with validate_summary_for_gt()
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
 # 2026-02-08: Confirmed usage in run_phase3_analysis_reporting() (Phase 3, Module 5)
 # 2024-12-29: Initial version with core formatting functions
@@ -151,20 +156,13 @@ format_detector_summary_gt <- function(detector_summary,
   # Input validation
   # -------------------------
   
-  if (!is.data.frame(detector_summary)) {
-    stop("detector_summary must be a data frame")
-  }
-  
-  required_cols <- c("Detector", "n_nights", "total_hours", "mean_cph", 
-                     "median_cph", "sd_cph", "cv_pct", "total_calls")
-  missing_cols <- setdiff(required_cols, names(detector_summary))
-  
-  if (length(missing_cols) > 0) {
-    stop(sprintf(
-      "detector_summary is missing required columns: %s\nDid you use create_detector_activity_summary()?",
-      paste(missing_cols, collapse = ", ")
-    ))
-  }
+  validate_summary_for_gt(
+    detector_summary,
+    required_cols = c("Detector", "n_nights", "total_hours", "mean_cph", 
+                      "median_cph", "sd_cph", "cv_pct", "total_calls"),
+    arg_name = "detector_summary",
+    source_function = "create_detector_activity_summary"
+  )
   
   # -------------------------
   # Select and order columns for display
@@ -188,12 +186,6 @@ format_detector_summary_gt <- function(detector_summary,
   gt_table <- display_df %>%
     gt::gt() %>%
     
-    # Title and subtitle
-    gt::tab_header(
-      title = gt::md(paste0("**", title, "**")),
-      subtitle = subtitle
-    ) %>%
-    
     # Column spanners (grouping headers)
     gt::tab_spanner(
       label = gt::md("**Effort**"),
@@ -208,19 +200,33 @@ format_detector_summary_gt <- function(detector_summary,
       columns = c(sd_cph, cv_pct, pct_zero)
     ) %>%
     
+    # Soft color-coding for grouped spanners
+    gt::tab_style(
+      style = gt::cell_fill(color = "#DBEAFE20"),
+      locations = gt::cells_column_spanners(spanners = "**Effort**")
+    ) %>%
+    gt::tab_style(
+      style = gt::cell_fill(color = "#D1FAE520"),
+      locations = gt::cells_column_spanners(spanners = "**Activity**")
+    ) %>%
+    gt::tab_style(
+      style = gt::cell_fill(color = "#FEF3C720"),
+      locations = gt::cells_column_spanners(spanners = "**Variability**")
+    ) %>%
+    
     # Column labels (human-readable names)
     gt::cols_label(
       Detector = gt::md("**Detector**"),
-      n_nights = "Nights",
-      total_hours = "Total Hrs",
-      mean_hours = "Mean Hrs",
-      pct_success = "Success %",
+      n_nights = "Nights Sampled",
+      total_hours = "Total Hours",
+      mean_hours = "Avg. Hours/Night",
+      pct_success = "Detection Success %",
       total_calls = "Total Calls",
-      mean_cph = "Mean CPH",
-      median_cph = "Median CPH",
-      sd_cph = "SD",
-      cv_pct = "CV %",
-      pct_zero = "Zero %"
+      mean_cph = "Mean Calls/Hour",
+      median_cph = "Median Calls/Hour",
+      sd_cph = "Std. Deviation",
+      cv_pct = "Variability (CV%)",
+      pct_zero = "Silent Nights %"
     ) %>%
     
     # Number formatting
@@ -246,34 +252,14 @@ format_detector_summary_gt <- function(detector_summary,
       style = gt::cell_text(weight = "bold"),
       locations = gt::cells_body(columns = Detector)
     ) %>%
-    
-    # Header styling
-    gt::tab_style(
-      style = list(
-        gt::cell_fill(color = "#f0f0f0"),
-        gt::cell_text(weight = "bold")
-      ),
-      locations = gt::cells_column_labels()
-    ) %>%
-    
-    # Alternating row colors
-    gt::opt_row_striping() %>%
-    
-    # Table options
-    gt::tab_options(
-      table.font.size = gt::px(12),
-      heading.title.font.size = gt::px(16),
-      heading.subtitle.font.size = gt::px(12),
-      column_labels.font.size = gt::px(11),
-      table.border.top.style = "solid",
-      table.border.top.width = gt::px(2),
-      table.border.top.color = "#333333",
-      table.border.bottom.style = "solid",
-      table.border.bottom.width = gt::px(2),
-      table.border.bottom.color = "#333333",
-      heading.border.bottom.style = "solid",
-      heading.border.bottom.width = gt::px(1),
-      heading.border.bottom.color = "#666666"
+    apply_kpro_gt_theme(
+      title = title,
+      subtitle = subtitle,
+      table_font_size = 12,
+      heading_title_font_size = 16,
+      heading_subtitle_font_size = 12,
+      column_labels_font_size = 11,
+      row_striping = TRUE
     ) %>%
     
     # Footnote explaining abbreviations
@@ -342,19 +328,12 @@ format_species_summary_gt <- function(species_summary,
   # Input validation
   # -------------------------
   
-  if (!is.data.frame(species_summary)) {
-    stop("species_summary must be a data frame")
-  }
-  
-  required_cols <- c("Detector", "species", "n_calls", "pct_of_detector")
-  missing_cols <- setdiff(required_cols, names(species_summary))
-  
-  if (length(missing_cols) > 0) {
-    stop(sprintf(
-      "species_summary is missing required columns: %s\nDid you use create_species_summary_by_detector()?",
-      paste(missing_cols, collapse = ", ")
-    ))
-  }
+  validate_summary_for_gt(
+    species_summary,
+    required_cols = c("Detector", "species", "n_calls", "pct_of_detector"),
+    arg_name = "species_summary",
+    source_function = "create_species_summary_by_detector"
+  )
   
   if (!format %in% c("long", "wide")) {
     stop("format must be 'long' or 'wide'")
@@ -382,12 +361,6 @@ format_species_summary_gt <- function(species_summary,
     
     gt_table <- display_df %>%
       gt::gt(groupname_col = "Detector") %>%
-      
-      # Title
-      gt::tab_header(
-        title = gt::md(paste0("**", title, "**")),
-        subtitle = subtitle
-      ) %>%
       
       # Column labels
       gt::cols_label(
@@ -418,25 +391,17 @@ format_species_summary_gt <- function(species_summary,
         ),
         locations = gt::cells_row_groups()
       ) %>%
-      
-      # Header styling
-      gt::tab_style(
-        style = list(
-          gt::cell_fill(color = "#f0f0f0"),
-          gt::cell_text(weight = "bold")
-        ),
-        locations = gt::cells_column_labels()
-      ) %>%
-      
-      # Table options
-      gt::tab_options(
-        table.font.size = gt::px(11),
-        heading.title.font.size = gt::px(16),
-        row_group.padding = gt::px(6),
-        table.border.top.style = "solid",
-        table.border.top.width = gt::px(2),
-        table.border.bottom.style = "solid",
-        table.border.bottom.width = gt::px(2)
+      apply_kpro_gt_theme(
+        title = title,
+        subtitle = subtitle,
+        table_font_size = 11,
+        heading_title_font_size = 16,
+        heading_subtitle_font_size = 12,
+        column_labels_font_size = 11,
+        row_striping = FALSE,
+        tab_options_extra = list(
+          row_group.padding = gt::px(6)
+        )
       )
     
   } else {
@@ -454,12 +419,6 @@ format_species_summary_gt <- function(species_summary,
     
     gt_table <- display_df %>%
       gt::gt() %>%
-      
-      # Title
-      gt::tab_header(
-        title = gt::md(paste0("**", title, "**")),
-        subtitle = subtitle
-      ) %>%
       
       # Bold Detector column
       gt::cols_label(
@@ -483,27 +442,14 @@ format_species_summary_gt <- function(species_summary,
         style = gt::cell_text(font = gt::google_font("Roboto Mono"), size = gt::px(10)),
         locations = gt::cells_column_labels(columns = dplyr::all_of(species_cols))
       ) %>%
-      
-      # Header row styling
-      gt::tab_style(
-        style = list(
-          gt::cell_fill(color = "#f0f0f0"),
-          gt::cell_text(weight = "bold")
-        ),
-        locations = gt::cells_column_labels()
-      ) %>%
-      
-      # Row striping
-      gt::opt_row_striping() %>%
-      
-      # Table options
-      gt::tab_options(
-        table.font.size = gt::px(11),
-        heading.title.font.size = gt::px(16),
-        table.border.top.style = "solid",
-        table.border.top.width = gt::px(2),
-        table.border.bottom.style = "solid",
-        table.border.bottom.width = gt::px(2)
+      apply_kpro_gt_theme(
+        title = title,
+        subtitle = subtitle,
+        table_font_size = 11,
+        heading_title_font_size = 16,
+        heading_subtitle_font_size = 12,
+        column_labels_font_size = 11,
+        row_striping = TRUE
       )
   }
   
@@ -582,7 +528,6 @@ format_study_summary_gt <- function(study_summary,
     
     gt_table <- display_df %>%
       gt::gt() %>%
-      gt::tab_header(title = gt::md(paste0("**", title, "**"))) %>%
       gt::cols_label(
         n_detectors = "Detectors",
         n_detector_nights = "Detector-Nights",
@@ -602,23 +547,17 @@ format_study_summary_gt <- function(study_summary,
                      decimals = 1, pattern = "{x}%") %>%
       gt::fmt_date(columns = c(study_start, study_end), date_style = "yMd") %>%
       gt::tab_style(
-        style = list(
-          gt::cell_fill(color = "#f0f0f0"),
-          gt::cell_text(weight = "bold")
-        ),
-        locations = gt::cells_column_labels()
-      ) %>%
-      gt::tab_style(
         style = gt::cell_text(weight = "bold", size = gt::px(14)),
         locations = gt::cells_body(columns = c(total_calls, total_hours))
       ) %>%
-      gt::tab_options(
-        table.font.size = gt::px(12),
-        heading.title.font.size = gt::px(16),
-        table.border.top.style = "solid",
-        table.border.top.width = gt::px(2),
-        table.border.bottom.style = "solid",
-        table.border.bottom.width = gt::px(2)
+      apply_kpro_gt_theme(
+        title = title,
+        subtitle = NULL,
+        table_font_size = 12,
+        heading_title_font_size = 16,
+        heading_subtitle_font_size = 12,
+        column_labels_font_size = 11,
+        row_striping = FALSE
       )
     
   } else {
@@ -665,7 +604,6 @@ format_study_summary_gt <- function(study_summary,
     
     gt_table <- display_df %>%
       gt::gt() %>%
-      gt::tab_header(title = gt::md(paste0("**", title, "**"))) %>%
       gt::cols_label(
         Metric = gt::md("**Metric**"),
         Value = gt::md("**Value**")
@@ -684,21 +622,14 @@ format_study_summary_gt <- function(study_summary,
           rows = Metric %in% c("Total Bat Calls", "Total Recording Hours")
         )
       ) %>%
-      gt::tab_style(
-        style = list(
-          gt::cell_fill(color = "#f0f0f0"),
-          gt::cell_text(weight = "bold")
-        ),
-        locations = gt::cells_column_labels()
-      ) %>%
-      gt::opt_row_striping() %>%
-      gt::tab_options(
-        table.font.size = gt::px(12),
-        heading.title.font.size = gt::px(16),
-        table.border.top.style = "solid",
-        table.border.top.width = gt::px(2),
-        table.border.bottom.style = "solid",
-        table.border.bottom.width = gt::px(2)
+      apply_kpro_gt_theme(
+        title = title,
+        subtitle = NULL,
+        table_font_size = 12,
+        heading_title_font_size = 16,
+        heading_subtitle_font_size = 12,
+        column_labels_font_size = 11,
+        row_striping = TRUE
       )
   }
   
@@ -764,20 +695,13 @@ format_hourly_summary_gt <- function(hourly_summary,
   # Input validation
   # -------------------------
   
-  if (!is.data.frame(hourly_summary)) {
-    stop("hourly_summary must be a data frame")
-  }
-  
   # Expect fixed schema from create_hourly_activity_summary()
-  required_cols <- c("Hour_local", "n_calls", "pct_of_total")
-  missing_cols <- setdiff(required_cols, names(hourly_summary))
-  
-  if (length(missing_cols) > 0) {
-    stop(sprintf(
-      "hourly_summary is missing required columns: %s\nDid you use create_hourly_activity_summary()?",
-      paste(missing_cols, collapse = ", ")
-    ))
-  }
+  validate_summary_for_gt(
+    hourly_summary,
+    required_cols = c("Hour_local", "n_calls", "pct_of_total"),
+    arg_name = "hourly_summary",
+    source_function = "create_hourly_activity_summary"
+  )
   
   # -------------------------
   # Format Hour as HH:00 (with robust type handling)
@@ -809,12 +733,6 @@ format_hourly_summary_gt <- function(hourly_summary,
   gt_table <- display_df %>%
     gt::gt() %>%
     
-    # Title
-    gt::tab_header(
-      title = gt::md(paste0("**", title, "**")),
-      subtitle = subtitle
-    ) %>%
-    
     # Column labels
     gt::cols_label(
       Hour = gt::md("**Hour**"),
@@ -837,24 +755,14 @@ format_hourly_summary_gt <- function(hourly_summary,
       style = gt::cell_text(color = "#999999"),
       locations = gt::cells_body(rows = n_calls == 0)
     ) %>%
-    
-    # Header styling
-    gt::tab_style(
-      style = list(
-        gt::cell_fill(color = "#f0f0f0"),
-        gt::cell_text(weight = "bold")
-      ),
-      locations = gt::cells_column_labels()
-    ) %>%
-    
-    # Table options
-    gt::tab_options(
-      table.font.size = gt::px(11),
-      heading.title.font.size = gt::px(16),
-      table.border.top.style = "solid",
-      table.border.top.width = gt::px(2),
-      table.border.bottom.style = "solid",
-      table.border.bottom.width = gt::px(2)
+    apply_kpro_gt_theme(
+      title = title,
+      subtitle = subtitle,
+      table_font_size = 11,
+      heading_title_font_size = 16,
+      heading_subtitle_font_size = 12,
+      column_labels_font_size = 11,
+      row_striping = FALSE
     )
   
   # -------------------------
@@ -1019,7 +927,7 @@ save_gt_table <- function(gt_table,
 #'   If provided, artifact will be registered with hash. Default: NULL (no registration)
 #' @param artifact_name Character. Name for artifact registry entry. Required if registry provided.
 #' @param artifact_type Character. Type for artifact registry. Default: "summary_stats"
-#' @param workflow Character. Workflow identifier. Default: "05"
+#' @param phase_id Character. Phase/module identifier. Default: "05"
 #' @param metadata List. Additional metadata for registry. Default: list()
 #' @param verbose Logical. Print progress messages? Default: TRUE
 #'
@@ -1075,7 +983,7 @@ save_summary_csv <- function(summary_df,
                              registry = NULL,
                              artifact_name = NULL,
                              artifact_type = "summary_stats",
-                             workflow = "05",
+                             phase_id = "05",
                              metadata = list(),
                              verbose = TRUE) {
   
@@ -1144,7 +1052,7 @@ save_summary_csv <- function(summary_df,
       registry = registry,
       artifact_name = artifact_name,
       artifact_type = artifact_type,
-      workflow = workflow,
+      phase_id = phase_id,
       file_path = file_path,
       metadata = metadata
     )
@@ -1162,83 +1070,56 @@ save_summary_csv <- function(summary_df,
 }
 
 
-# ------------------------------------------------------------------------------
-# Build Excel Workbook from CSV Files
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# BUILD EXCEL WORKBOOK FROM SUMMARY TIBBLES
+# ==============================================================================
 
-#' Build Excel Workbook from Summary CSV Files
+#' Build Excel Workbook from Summary Tibbles
 #'
-#' @description
-#' Creates a multi-sheet Excel workbook by reading individual summary CSV files.
-#' This ensures the Excel workbook is built from the same CSV artifacts that
-#' are registered and validated, maintaining consistency across output formats.
+#' Creates a multi-sheet Excel workbook directly from summary tibbles, without
+#' requiring CSV files. Writes all exports from in-memory tibbles in parallel.
 #'
-#' @param csv_files Named character vector. Paths to CSV files, with names
-#'   being the sheet names. Example: c("Detector Summary" = "path/to/detector.csv")
-#' @param output_file Character. Path for output Excel file
-#' @param registry List. Artifact registry object. If provided, workbook will be registered.
-#'   Default: NULL (no registration)
-#' @param artifact_name Character. Name for artifact registry entry. Required if registry provided.
-#' @param workflow Character. Workflow identifier. Default: "05"
-#' @param metadata List. Additional metadata for registry. Default: list()
-#' @param verbose Logical. Print progress messages? Default: TRUE
+#' @param summary_list Named list of data frames/tibbles to export. Names become
+#'   sheet names in the Excel workbook. List should contain elements like:
+#'   - detector_summary
+#'   - study_summary
+#'   - species_summary
+#'   - etc.
+#' @param output_file Character string. Full path to output Excel file
+#' @param sheet_names Optional named character vector mapping list names to
+#'   sheet names. If NULL, uses names from summary_list with basic formatting.
+#' @param registry Optional. Artifact registry object (from create_registry())
+#' @param artifact_name Character string. Name for registered artifact (required
+#'   if registry provided)
+#' @param phase_id Character string. Phase identifier for artifact (default: "05")
+#' @param metadata Named list. Additional metadata to attach to artifact
+#' @param verbose Logical. Print progress messages? (default: TRUE)
 #'
-#' @return Character. Path to saved Excel file (invisibly). If registry provided,
-#'   returns updated registry (invisibly) with 'file_path' attribute.
-#'
-#' @details
-#' **Workflow:**
-#' 1. Reads each CSV file
-#' 2. Creates Excel workbook with openxlsx
-#' 3. Adds one sheet per CSV file
-#' 4. Writes formatted data (auto column widths)
-#' 5. Optionally registers as artifact
-#'
-#' **Sheet naming:**
-#' - Uses names from csv_files vector as sheet names
-#' - Sheet order matches csv_files order
-#'
-#' **Excel formatting:**
-#' - Auto-sized columns for readability
-#' - Header row frozen
-#' - Standard formatting (no colors or complex styling)
-#'
-#' **Requires:** openxlsx package must be installed
-#'
-#' @section CONTRACT:
-#' - All CSV files must exist and be readable
-#' - Creates output directory if needed
-#' - Overwrites existing Excel file
-#' - Returns path to created file
-#' - If registry provided, returns updated registry
-#'
-#' @section DOES NOT:
-#' - Validate CSV content or structure
-#' - Apply complex Excel formatting
-#' - Create visualizations or charts
-#' - Handle non-CSV input files
+#' @return If registry provided, returns updated registry (invisibly) with
+#'   file_path attribute. Otherwise returns output_file path (invisibly).
 #'
 #' @examples
 #' \dontrun{
-#' csv_files <- c(
-#'   "Detector Summary" = "results/csv/summary_stats/detector_summary.csv",
-#'   "Study Summary" = "results/csv/summary_stats/study_summary.csv"
-#' )
-#' 
-#' build_excel_from_csv(
-#'   csv_files,
-#'   output_file = "results/xlsx/summary_stats.xlsx"
+#' # Build workbook from all_summaries list
+#' build_excel_from_summaries(
+#'   all_summaries,
+#'   output_file = "results/xlsx/summary_stats.xlsx",
+#'   sheet_names = c(
+#'     detector_summary = "Detector Activity",
+#'     study_summary = "Study Overview"
+#'   )
 #' )
 #' }
 #'
 #' @export
-build_excel_from_csv <- function(csv_files,
-                                 output_file,
-                                 registry = NULL,
-                                 artifact_name = NULL,
-                                 workflow = "05",
-                                 metadata = list(),
-                                 verbose = TRUE) {
+build_excel_from_summaries <- function(summary_list,
+                                       output_file,
+                                       sheet_names = NULL,
+                                       registry = NULL,
+                                       artifact_name = NULL,
+                                       phase_id = "05",
+                                       metadata = list(),
+                                       verbose = TRUE) {
   
   # -------------------------
   # Input validation
@@ -1248,30 +1129,64 @@ build_excel_from_csv <- function(csv_files,
     stop("Package 'openxlsx' is required for Excel export. Install with: install.packages('openxlsx')")
   }
   
-  if (!is.character(csv_files) || length(csv_files) == 0) {
-    stop("csv_files must be a non-empty character vector")
+  if (!is.list(summary_list) || length(summary_list) == 0) {
+    stop("summary_list must be a non-empty list")
   }
   
-  if (is.null(names(csv_files)) || any(names(csv_files) == "")) {
-    stop("csv_files must be a named vector with sheet names")
+  if (is.null(names(summary_list)) || any(names(summary_list) == "")) {
+    stop("summary_list must be a named list")
   }
   
   if (!is.character(output_file) || length(output_file) != 1) {
     stop("output_file must be a single character string")
   }
   
-  # Check all CSV files exist
-  missing_files <- csv_files[!file.exists(csv_files)]
-  if (length(missing_files) > 0) {
-    stop(sprintf(
-      "CSV files not found:\n  %s",
-      paste(missing_files, collapse = "\n  ")
-    ))
+  # Filter to only data frames/tibbles
+  summary_dfs <- summary_list[sapply(summary_list, function(x) is.data.frame(x) && nrow(x) > 0)]
+  
+  if (length(summary_dfs) == 0) {
+    stop("summary_list contains no valid data frames with rows")
   }
   
   # If registry provided, artifact_name is required
   if (!is.null(registry) && is.null(artifact_name)) {
     stop("artifact_name is required when registry is provided")
+  }
+  
+  # -------------------------
+  # Prepare sheet names
+  # -------------------------
+  
+  if (is.null(sheet_names)) {
+    # Generate default sheet names from list names
+    sheet_names <- setNames(
+      gsub("_", " ", names(summary_dfs)),
+      names(summary_dfs)
+    )
+    # Title case first letter
+    sheet_names <- sapply(sheet_names, function(s) {
+      paste0(toupper(substring(s, 1, 1)), substring(s, 2))
+    }, USE.NAMES = FALSE)
+    names(sheet_names) <- names(summary_dfs)
+  } else {
+    # Fill in any missing sheet names with defaults
+    missing_names <- setdiff(names(summary_dfs), names(sheet_names))
+    if (length(missing_names) > 0) {
+      default_names <- setNames(
+        gsub("_", " ", missing_names),
+        missing_names
+      )
+      default_names <- sapply(default_names, function(s) {
+        paste0(toupper(substring(s, 1, 1)), substring(s, 2))
+      }, USE.NAMES = TRUE)
+      sheet_names <- c(sheet_names, default_names)
+      if (verbose) {
+        message(sprintf(
+          "  [INFO] Added default sheet names for: %s",
+          paste(missing_names, collapse = ", ")
+        ))
+      }
+    }
   }
   
   # -------------------------
@@ -1289,27 +1204,24 @@ build_excel_from_csv <- function(csv_files,
   # -------------------------
   
   if (verbose) {
-    message(sprintf("Building Excel workbook from %d CSV files...", length(csv_files)))
+    message(sprintf("Building Excel workbook from %d summary tibbles...", length(summary_dfs)))
   }
   
   wb <- openxlsx::createWorkbook()
   
-  # Add each CSV as a sheet
-  for (i in seq_along(csv_files)) {
-    sheet_name <- names(csv_files)[i]
-    csv_path <- csv_files[i]
+  # Add each summary as a sheet
+  for (list_name in names(summary_dfs)) {
+    sheet_name <- sheet_names[list_name]
+    df <- summary_dfs[[list_name]]
     
     if (verbose) {
-      message(sprintf("  Adding sheet: %s", sheet_name))
+      message(sprintf("  Adding sheet: %s (%d rows)", sheet_name, nrow(df)))
     }
-    
-    # Read CSV
-    df <- read.csv(csv_path, stringsAsFactors = FALSE)
     
     # Add worksheet
     openxlsx::addWorksheet(wb, sheet_name)
     
-    # Write data
+    # Write data (preserves R types better than CSV round-trip)
     openxlsx::writeData(wb, sheet_name, df)
     
     # Auto-size columns for readability
@@ -1336,15 +1248,15 @@ build_excel_from_csv <- function(csv_files,
   if (!is.null(registry)) {
     
     # Add workbook metadata
-    metadata$n_sheets <- length(csv_files)
-    metadata$sheet_names <- names(csv_files)
-    metadata$source_csvs <- unname(csv_files)
+    metadata$n_sheets <- length(summary_dfs)
+    metadata$sheet_names <- unname(sheet_names[names(summary_dfs)])
+    metadata$generated_from <- "summary_tibbles"
     
     registry <- register_artifact(
       registry = registry,
       artifact_name = artifact_name,
       artifact_type = "summary_stats",
-      workflow = workflow,
+      phase_id = phase_id,
       file_path = output_file,
       metadata = metadata
     )
@@ -1360,11 +1272,6 @@ build_excel_from_csv <- function(csv_files,
   
   invisible(output_file)
 }
-
-
-# ==============================================================================
-# NEW HELPER FUNCTIONS (Added for Module Refactoring)
-# ==============================================================================
 
 # ==============================================================================
 # END OF FILE

@@ -173,7 +173,7 @@ log_message <- function(msg, log_path = "logs/pipeline_log.txt") {
 #'
 #' @description
 #' Creates log file with header for new pipeline run. Call at start of
-#' each workflow script or orchestrating function. The header provides
+#' each phase orchestrator script or orchestrating function. The header provides
 #' visual separation between pipeline runs in the log file.
 #'
 #' @param log_path Character. Path to log file. Default: "logs/pipeline_log.txt"
@@ -196,7 +196,7 @@ log_message <- function(msg, log_path = "logs/pipeline_log.txt") {
 #' \dontrun{
 #' # At start of pipeline run
 #' initialize_pipeline_log()
-#' log_message("=== CHUNK 1: Ingest & Standardize - START ===")
+#' log_message("=== PHASE 1: Data Preparation - START ===")
 #'
 #' # Custom log path
 #' initialize_pipeline_log(log_path = "logs/debug.txt")

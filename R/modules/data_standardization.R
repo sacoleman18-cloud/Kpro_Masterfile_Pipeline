@@ -58,7 +58,7 @@
 #'
 #' @return Named list containing:
 #'   \itemize{
-#'     \item \code{standardization}: List with kpro_master and metadata
+#'     \item \code{standardization}: List with kpro_master, metadata, artifact_id, and checkpoint_path
 #'     \item \code{validation_html_paths}: Character vector of validation HTML paths
 #'   }
 #'
@@ -98,7 +98,7 @@ module_data_standardization <- function(raw_data,
   # ===========================================================================
   
   log_stage_start("3", "Schema Transformation", verbose = verbose,
-                  workflow_prefix = "Data Standardization")
+                  phase_prefix = "Data Standardization")
   
   # Capture schema distribution before transformation
   schema_before <- table(raw_data$schema_version)
@@ -128,7 +128,7 @@ module_data_standardization <- function(raw_data,
   # ===========================================================================
   
   log_stage_start("4", "Detector Mapping", verbose = verbose,
-                  workflow_prefix = "Data Standardization")
+                  phase_prefix = "Data Standardization")
   
   # Get detector mapping from configuration
   detector_mapping <- study_params$study_parameters$detector_mapping
@@ -193,7 +193,7 @@ module_data_standardization <- function(raw_data,
   # ===========================================================================
   
   log_stage_start("5", "Time Conversion", verbose = verbose,
-                  workflow_prefix = "Data Standardization")
+                  phase_prefix = "Data Standardization")
   
   target_tz <- study_params$study_parameters$timezone
   
@@ -230,7 +230,7 @@ module_data_standardization <- function(raw_data,
   # ===========================================================================
   
   log_stage_start("6", "Finalize & Deduplicate", verbose = verbose,
-                  workflow_prefix = "Data Standardization")
+                  phase_prefix = "Data Standardization")
   
   # Enforce unified schema (using validation.R function)
   kpro_master <- enforce_unified_schema(unified_data)
@@ -294,7 +294,7 @@ module_data_standardization <- function(raw_data,
   # ===========================================================================
   
   log_stage_start("7", "Data Filters", verbose = verbose,
-                  workflow_prefix = "Data Standardization")
+                  phase_prefix = "Data Standardization")
   
   # Read filter configuration from YAML (with defensive defaults)
   data_filters <- study_params$study_parameters$data_filters
@@ -389,7 +389,7 @@ module_data_standardization <- function(raw_data,
   # ===========================================================================
   
   log_stage_start("8", "Save, Register & Validate", verbose = verbose,
-                  workflow_prefix = "Data Standardization")
+                  phase_prefix = "Data Standardization")
   
   # Generate timestamped checkpoint filename
   checkpoint_filename <- generate_timestamped_filename("02_kpro_master")
@@ -408,7 +408,7 @@ module_data_standardization <- function(raw_data,
     file_path = checkpoint_path,
     artifact_name = artifact_id,
     artifact_type = "masterfile",
-    workflow = "standardize",
+    phase_id = "standardize",
     data_hash = data_hash,
     metadata = list(
       n_rows_final = nrow(kpro_master),

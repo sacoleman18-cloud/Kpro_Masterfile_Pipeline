@@ -80,7 +80,7 @@ Every legacy workflow script (01, 02, 03, etc.) must have this header:
 
 ## 2. PHASE ORCHESTRATOR FUNCTION HEADERS
 
-> **NEW in v3.0:** Phase orchestrators replace legacy chunk orchestrators.
+> **NEW in v3.0:** Phase orchestrators are the required orchestration pattern.
 > See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) for architecture overview.
 
 Phase orchestrator functions require a specialized header format that documents phase position, checkpoints, human-in-the-loop requirements, and structured result passing.

@@ -59,6 +59,7 @@
 #'     \item \code{kpro_master}: Tibble with standardized master data
 #'     \item \code{metadata}: List with processing statistics
 #'     \item \code{checkpoint_path}: Path to kpro_master checkpoint
+#'     \item \code{artifact_ids}: Character vector of registered artifact IDs
 #'     \item \code{validation_html_paths}: Character vector of validation reports
 #'     \item \code{next_phase}: Instructions for Phase 2
 #'   }
@@ -141,7 +142,8 @@ run_phase1_data_preparation <- function(verbose = FALSE) {
   
   kpro_master <- module2_result$standardization$kpro_master
   metadata <- module2_result$standardization$metadata
-  checkpoint_path <- module2_result$standardization$checkpoint_path
+  checkpoint_path <- module2_result$checkpoint_path %||% module2_result$standardization$checkpoint_path
+  phase_artifact_ids <- module2_result$artifact_ids %||% unlist(list(module2_result$standardization$artifact_id), use.names = FALSE)
   
   log_message(sprintf("=== PHASE 1 COMPLETE: %d rows, %d detectors ===",
                       metadata$n_rows,
@@ -172,6 +174,7 @@ run_phase1_data_preparation <- function(verbose = FALSE) {
     kpro_master = kpro_master,
     metadata = metadata,
     checkpoint_path = checkpoint_path,
+    artifact_ids = phase_artifact_ids,
     validation_html_paths = module2_result$validation_html_paths,
     next_phase = "Phase 2: Template Generation (run_phase2_template_generation)",
     

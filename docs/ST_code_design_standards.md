@@ -110,7 +110,7 @@ process_data <- function(df, verbose = FALSE) {
 
 ### 1.9 Structured Return Pattern for Phase Orchestrator Functions
 
-> **NEW in v3.0:** Phase orchestrators replace legacy chunk orchestrators.
+> **NEW in v3.0:** Phase orchestrators are the required orchestration pattern.
 > See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md) for complete patterns.
 
 Phase orchestrator functions must return comprehensive structured results with explicit phase information:
@@ -364,7 +364,7 @@ registry <- save_and_register_rds(
 
 **Pattern: Store Stage Results (Multi-Stage Orchestrators)**
 ```r
-# For orchestrators with multiple stages (e.g., run_finalize_to_report)
+# For orchestrators with multiple stages (e.g., run_phase3_analysis_reporting)
 # Consolidates stage outputs and tracks validation reports
 
 # Initialize result object
@@ -509,11 +509,11 @@ if (verbose) print_stage_header("2.1", "Apply Detector Mapping")
 
 **Workflow Summary (from console.R):**
 ```r
-# Use at chunk/workflow completion
+# Use at phase completion
 if (verbose) {
   print_workflow_summary(
-    workflow = "CHUNK 1",
-    title = "Ingest & Standardize Complete",
+    workflow = "PHASE 1",
+    title = "Data Preparation Complete",
     items = list(
       "Rows processed" = format(nrow(df), big.mark = ","),
       "Checkpoint" = basename(checkpoint_path),
@@ -548,19 +548,19 @@ if (verbose) {
 **Always Active (Never Gated):**
 ```r
 # From logging.R - file logging always happens regardless of verbose
-log_message("=== CHUNK 1: Ingest & Standardize Started ===")
+log_message("=== PHASE 1: Data Preparation - START ===")
 log_message(sprintf("Loaded %d rows from %d files", n_rows, n_files))
 log_message("Checkpoint saved: outputs/checkpoints/02_kpro_master.csv")
-log_message("=== CHUNK 1: Complete ===")
+log_message("=== PHASE 1: Data Preparation - COMPLETE ===")
 
 # Writes to logs/pipeline_YYYY-MM-DD.log with timestamps
-# [2026-02-05 14:30:22] === CHUNK 1: Ingest & Standardize Started ===
+# [2026-02-05 14:30:22] === PHASE 1: Data Preparation - START ===
 ```
 
 **Initialize Pipeline Log:**
 ```r
 # Initialize at start of orchestrator function
-initialize_pipeline_log("run_ingest_standardize")
+initialize_pipeline_log("PHASE 1: Data Preparation")
 
 # Creates/appends to daily log file, writes header
 ```
@@ -569,10 +569,10 @@ initialize_pipeline_log("run_ingest_standardize")
 
 **Orchestrator functions must gate all console output:**
 ```r
-run_my_chunk <- function(verbose = FALSE) {
+run_my_phase <- function(verbose = FALSE) {
   
   # File logging: NEVER gated
-  log_message("=== Starting chunk ===")
+  log_message("=== Starting phase ===")
   
   # Stage headers: GATED
   if (verbose) print_stage_header("1", "Load Data")
@@ -590,7 +590,7 @@ run_my_chunk <- function(verbose = FALSE) {
   if (verbose) message("  [OK] Complete")
   
   # File logging: NEVER gated
-  log_message("=== Chunk complete ===")
+  log_message("=== Phase complete ===")
 }
 ```
 
@@ -641,18 +641,18 @@ registry <- save_and_register_rds(
 **Initialize Validation Context:**
 ```r
 # Option 1: Using helper wrapper
-validation_context <- init_stage_validation("chunk_1", study_params)
+validation_context <- init_stage_validation("phase_1", study_params)
 
 # Option 2: Direct creation
 validation_context <- create_validation_context(
-  workflow = "chunk_1",
+  workflow = "phase_1",
   study_name = study_params$study_name
 )
 ```
 
 **Log Events During Processing:**
 ```r
-# Track important events during chunk execution
+# Track important events during phase execution
 validation_context <- log_validation_event(
   validation_context,
   event_type = "data_loaded",
@@ -675,7 +675,7 @@ validation_context <- log_validation_event(
 validation_html_path <- complete_stage_validation(
   validation_context = validation_context,
   validation_dir = here("results", "validation"),
-  stage_name = "CHUNK 1",
+  stage_name = "PHASE 1",
   verbose = verbose
 )
 
@@ -690,11 +690,11 @@ validation_html_path <- validation_context$html_path
 ### 5.3 Combined Pattern in Orchestrator
 
 ```r
-run_my_chunk <- function(verbose = FALSE) {
+run_my_phase <- function(verbose = FALSE) {
   
   # Initialize both registry and validation
   registry <- init_artifact_registry()
-  validation_context <- init_stage_validation("my_chunk", study_params)
+  validation_context <- init_stage_validation("my_phase", study_params)
   
   # ... processing stages ...
   
@@ -712,7 +712,7 @@ run_my_chunk <- function(verbose = FALSE) {
   
   # Finalize validation
   validation_html <- complete_stage_validation(
-    validation_context, validation_dir, "MY CHUNK", verbose
+    validation_context, validation_dir, "MY PHASE", verbose
   )
   
   # Return structured list
@@ -826,7 +826,7 @@ print_stage_header("1.2", "Apply Intro Standardization")
 Gate all console output with verbose:
 
 ```r
-run_my_chunk <- function(verbose = FALSE) {
+run_my_phase <- function(verbose = FALSE) {
   
   # Stage headers gated
   if (verbose) print_stage_header("1", "Load Configuration")
@@ -837,7 +837,7 @@ run_my_chunk <- function(verbose = FALSE) {
   if (verbose) message("  [OK] Configuration loaded")
   
   # File logging always happens
-  log_message("=== CHUNK N: Started ===")
+  log_message("=== PHASE N: Started ===")
   
   # ... rest of processing ...
 }
@@ -927,7 +927,7 @@ read.csv(here::here("data", "file.csv"))
 stop("Error")
 
 # [OK] GOOD:
-stop(sprintf("Required column '%s' not found. Did you run Chunk 1 first?", col_name))
+stop(sprintf("Required column '%s' not found. Did you run Phase 1 first?", col_name))
 ```
 
 **Function Design:**
@@ -993,22 +993,22 @@ gt_summary <- function(df, title = "Summary", verbose = FALSE) {
 **Orchestrating Functions:**
 ```r
 # [X] BAD: Just returns data
-run_chunk <- function() {
+run_phase <- function() {
   df <- process_data()
   df
 }
 
 # [OK] GOOD: Returns structured list
-run_chunk <- function(verbose = FALSE) {
+run_phase <- function(verbose = FALSE) {
   if (verbose) message("  Processing...")
   df <- process_data()
   
   list(
     data = df,
     metadata = list(n_rows = nrow(df)),
-    artifact_id = "chunk_20260131",
-    checkpoint_path = here("outputs", "checkpoints", "chunk.csv"),
-    validation_html_path = here("results", "validation", "chunk.html")
+    artifact_id = "phase_20260131",
+    checkpoint_path = here("outputs", "checkpoints", "phase.csv"),
+    validation_html_path = here("results", "validation", "phase.html")
   )
 }
 ```
@@ -1085,7 +1085,7 @@ if (verbose) message("Complete!")
 # [OK] GOOD: Use workflow summary
 if (verbose) {
   print_workflow_summary(
-    workflow = "CHUNK 1",
+    workflow = "PHASE 1",
     title = "Processing Complete",
     items = list("Rows" = nrow(df), "Time" = elapsed_time)
   )
@@ -1100,12 +1100,12 @@ events[[1]] <- list(type = "data_loaded", count = nrow(df))
 # ... more manual tracking ...
 
 # [OK] GOOD: Use validation helpers
-validation_context <- init_stage_validation("chunk_1", study_params)
+validation_context <- init_stage_validation("phase_1", study_params)
 validation_context <- log_validation_event(
   validation_context, "data_loaded", "Raw data loaded", nrow(df)
 )
 validation_html <- complete_stage_validation(
-  validation_context, validation_dir, "CHUNK 1", verbose
+  validation_context, validation_dir, "PHASE 1", verbose
 )
 ```
 

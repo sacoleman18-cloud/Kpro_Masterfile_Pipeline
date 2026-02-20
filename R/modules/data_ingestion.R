@@ -54,6 +54,8 @@
 #'     \item \code{study_params}: List from load_study_parameters()
 #'     \item \code{validation_context}: Validation context object
 #'     \item \code{metadata}: List with source breakdown and row counts
+#'     \item \code{checkpoint_path}: NULL (no checkpoint written by ingestion module)
+#'     \item \code{artifact_ids}: Character vector (empty; no artifacts registered in ingestion module)
 #'   }
 #'
 #' @examples
@@ -76,7 +78,9 @@ module_data_ingestion <- function(verbose = FALSE) {
     raw_data = NULL,
     study_params = NULL,
     validation_context = NULL,
-    metadata = list()
+    metadata = list(),
+    checkpoint_path = NULL,
+    artifact_ids = character()
   )
   
   # ===========================================================================
@@ -84,7 +88,7 @@ module_data_ingestion <- function(verbose = FALSE) {
   # ===========================================================================
   
   log_stage_start("1", "Load Configuration", verbose = verbose, 
-                  workflow_prefix = "Data Ingestion")
+                  phase_prefix = "Phase 1 - Module 1 (Data Ingestion)")
   
   # Setup pipeline context (deterministic - no parameters)
   ctx <- setup_pipeline_context("ingest")
@@ -98,14 +102,14 @@ module_data_ingestion <- function(verbose = FALSE) {
   # Standard paths (not configurable - derived from project structure)
   raw_data_dir <- here::here("data", "raw")
   
-  log_message(sprintf("[Stage 1] Configuration loaded from %s", yaml_path))
+  log_message(sprintf("[Phase 1 - Module 1 - Stage 1] Configuration loaded from %s", yaml_path))
   
   # ===========================================================================
   # STAGE 2: LOAD RAW DATA
   # ===========================================================================
   
   log_stage_start("2", "Load Raw Data", verbose = verbose,
-                  workflow_prefix = "Data Ingestion")
+                  phase_prefix = "Phase 1 - Module 1 (Data Ingestion)")
   
   # Initialize tracking variables
   local_data <- NULL
@@ -258,7 +262,7 @@ module_data_ingestion <- function(verbose = FALSE) {
     )
   )
   
-  log_message(sprintf("[Stage 2] Loaded %d rows from %d source(s)",
+  log_message(sprintf("[Phase 1 - Module 1 - Stage 2] Loaded %d rows from %d source(s)",
                       nrow(raw_combined),
                       (n_local > 0) + length(external_datasets)))
   
@@ -276,6 +280,9 @@ module_data_ingestion <- function(verbose = FALSE) {
     sources_count = (n_local > 0) + length(external_datasets),
     rows_removed_invalid = total_rows_removed
   )
+
+  result$checkpoint_path <- NULL
+  result$artifact_ids <- character()
   
   return(result)
 }

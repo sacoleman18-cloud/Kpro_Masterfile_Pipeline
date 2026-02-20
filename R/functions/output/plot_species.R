@@ -535,11 +535,11 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
 #' - Shows percentage (not count) of each species' activity by hour
 #' - Only top_n species displayed
 #' - All 24 hours shown on x-axis
-#' - Hour_local MUST pre-exist (created in Workflow 02)
+#' - Hour_local MUST pre-exist (created in Module 2 / Phase 1)
 #' - DETERMINISTIC: no conditional column creation
 #'
 #' @section DOES NOT:
-#' - Create Hour_local column (expects it pre-created in Workflow 02)
+#' - Create Hour_local column (expects it pre-created in Module 2 / Phase 1)
 #' - Extract hours from DateTime_local (Hour_local must exist)
 #' - Account for variable sunset/sunrise times
 #' - Show confidence intervals

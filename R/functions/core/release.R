@@ -378,7 +378,7 @@ create_release_bundle <- function(study_id,
     registry = registry,
     artifact_name = release_name,
     artifact_type = "release_bundle",
-    workflow = "release",
+    phase_id = "release",
     file_path = zip_path,
     input_artifacts = c("kpro_master", "cpn_final"),
     metadata = list(

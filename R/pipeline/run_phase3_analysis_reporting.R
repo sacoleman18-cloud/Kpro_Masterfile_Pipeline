@@ -73,7 +73,9 @@
 #'     \item \code{calls_per_night_final}: Final CPN tibble
 #'     \item \code{report_path}: Path to generated HTML report
 #'     \item \code{release_bundle_path}: Path to release ZIP
+#'     \item \code{checkpoint_path}: Path to primary phase output artifact
 #'     \item \code{metadata}: List with output statistics
+#'     \item \code{artifact_ids}: Character vector of registered artifact IDs
 #'     \item \code{validation_html_paths}: Character vector of validation reports
 #'     \item \code{pipeline_complete}: TRUE
 #'   }
@@ -250,6 +252,19 @@ run_phase3_analysis_reporting <- function(phase2_result = NULL,
     module6_result$validation_html_paths,
     module7_result$validation_html_paths
   )
+
+  report_generated <- !is.null(report_path) && is.character(report_path) &&
+    length(report_path) == 1 && nzchar(report_path) && file.exists(report_path)
+
+  release_bundle_created <- !is.null(release_bundle_path) && is.character(release_bundle_path) &&
+    length(release_bundle_path) == 1 && nzchar(release_bundle_path) && file.exists(release_bundle_path)
+
+  all_artifact_ids <- unique(c(
+    module4_result$artifact_ids %||% character(0),
+    module5_result$artifact_ids %||% character(0),
+    module6_result$artifact_ids %||% character(0),
+    module7_result$artifact_ids %||% character(0)
+  ))
   
   list(
     phase = 3,
@@ -257,13 +272,15 @@ run_phase3_analysis_reporting <- function(phase2_result = NULL,
     calls_per_night_final = calls_per_night_final,
     report_path = report_path,
     release_bundle_path = release_bundle_path,
+    checkpoint_path = report_path,
     metadata = list(
       n_cpn_rows = nrow(calls_per_night_final),
       n_summaries = n_summaries,
       n_plots = n_plots,
-      report_generated = file.exists(report_path),
-      release_bundle_created = file.exists(release_bundle_path)
+      report_generated = report_generated,
+      release_bundle_created = release_bundle_created
     ),
+    artifact_ids = all_artifact_ids,
     validation_html_paths = all_validation_paths,
     pipeline_complete = TRUE,
     

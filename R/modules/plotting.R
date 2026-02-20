@@ -3,13 +3,13 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Plotting Module: Generates exploratory visualizations (Chunk 3).
+# Plotting Module: Generates exploratory visualizations (Phase 3).
 #
 # PHASE ARCHITECTURE: Called by run_phase3_analysis_reporting() orchestrator
 # ORCHESTRATION LAYER: Yes, module runner interface
 #
-# WORKFLOW SEQUENCE
-# -----------------
+# EXECUTION SEQUENCE
+# ------------------
 # This module is called as the THIRD step in Phase 3:
 #   1. run_phase3_analysis_reporting() [phase orchestrator]
 #      └→ run_module_finalize_cpn() — Stages 1-6
@@ -89,7 +89,7 @@
 # ----------------
 # **Previous module dependencies:**
 #   - calls_per_night_final from finalize_cpn()
-#   - kpro_master from original Chunk 2 (passed through)
+#   - kpro_master from original Phase 2 output (passed through)
 #
 # **Internal stages:**
 #   - Stages 15-21 sequentially: 15 → 16 → 17 → 18 → 19 → 20 → 21
@@ -110,7 +110,7 @@
 #' Generate Exploratory Plots
 #'
 #' @description
-#' Chunk 3, Stages 15-21: Generates 26 exploratory visualizations across
+#' Phase 3, Stages 15-21: Generates 26 exploratory visualizations across
 #' quality, detector, species, and temporal categories. Exports PNG files
 #' and RDS object archive.
 #'
@@ -119,7 +119,7 @@
 #'
 #' @param calls_per_night_final Tibble. Final CPN from finalize_cpn module.
 #'   Must have columns: Detector, Night, CallsPerNight, RecordingHours, Status, CallsPerHour.
-#' @param kpro_master Tibble. Master dataset from Chunk 2. Required for
+#' @param kpro_master Tibble. Master dataset from Phase 2. Required for
 #'   species and temporal plot generation.
 #' @param study_params List. Study parameters from load_study_parameters().
 #' @param registry List. Artifact registry (will be updated).
@@ -131,6 +131,8 @@
 #'     - plots_rds: Path to RDS file with plot objects
 #'     - files_created: Vector of exported PNG file paths
 #'     - plot_counts: Named list with counts by category
+#'   - checkpoint_path: Character path to primary module checkpoint/output
+#'   - artifact_ids: Character vector of artifacts registered in this module call
 #'   - validation_html_paths: Character vector with validation report path
 #'   - summary: Metadata list
 #'
@@ -182,6 +184,8 @@ module_plotting <- function(calls_per_night_final,
   if (is.null(registry)) {
     registry <- list()
   }
+
+  artifact_names_before <- names(registry$artifacts %||% list())
   
   result <- list(plotting = list(), validation_html_paths = character())
   
@@ -202,7 +206,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 15: CONFIGURE PLOT SETTINGS
   # ===========================================================================
   
-  log_stage_start("15", "Configure Plot Settings", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("15", "Configure Plot Settings", verbose = verbose, phase_prefix = "Plots")
   
   # Create plot output directories
   create_plot_directories(verbose = verbose)
@@ -213,7 +217,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 16: GENERATE QUALITY PLOTS (8)
   # ===========================================================================
   
-  log_stage_start("16", "Generate Quality Plots", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("16", "Generate Quality Plots", verbose = verbose, phase_prefix = "Plots")
   
   quality_plots <- list()
   
@@ -239,7 +243,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 17: GENERATE DETECTOR PLOTS (7)
   # ===========================================================================
   
-  log_stage_start("17", "Generate Detector Plots", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("17", "Generate Detector Plots", verbose = verbose, phase_prefix = "Plots")
   
   detector_plots <- list()
   
@@ -264,7 +268,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 18: GENERATE SPECIES PLOTS (5)
   # ===========================================================================
   
-  log_stage_start("18", "Generate Species Plots", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("18", "Generate Species Plots", verbose = verbose, phase_prefix = "Plots")
   
   species_plots <- list()
   
@@ -275,7 +279,7 @@ module_plotting <- function(calls_per_night_final,
     species_plots$species_hourly_profile <- plot_species_hourly_profile(kpro_master)
     species_plots$noid_proportion <- plot_noid_proportion(kpro_master)
     
-    message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
+    if (verbose) message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
   }, error = function(e) {
     stop(sprintf(
       "Failed to generate species plots.\n  Species column was validated in Stage 2, but plot generation failed.\n  Original error: %s\n  Check that kpro_master has valid species data for visualization.",
@@ -289,7 +293,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 19: GENERATE TEMPORAL PLOTS (6)
   # ===========================================================================
   
-  log_stage_start("19", "Generate Temporal Plots", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("19", "Generate Temporal Plots", verbose = verbose, phase_prefix = "Plots")
   
   temporal_plots <- list()
   
@@ -313,7 +317,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 20: EXPORT PLOTS AS PNG
   # ===========================================================================
   
-  log_stage_start("20", "Export Plots to PNG", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("20", "Export Plots to PNG", verbose = verbose, phase_prefix = "Plots")
   
   export_result <- export_plots_png(
     all_plots,
@@ -339,7 +343,7 @@ module_plotting <- function(calls_per_night_final,
   # STAGE 21: SAVE PLOT OBJECTS RDS
   # ===========================================================================
   
-  log_stage_start("21", "Save Plot Objects RDS", verbose = verbose, workflow_prefix = "Plots")
+  log_stage_start("21", "Save Plot Objects RDS", verbose = verbose, phase_prefix = "Plots")
   
   timestamp_06 <- format(Sys.time(), "%Y%m%d")
   plots_rds_path <- here::here("results", "rds", sprintf("plot_objects_%s.rds", timestamp_06))
@@ -348,7 +352,7 @@ module_plotting <- function(calls_per_night_final,
     object = all_plots,
     file_path = plots_rds_path,
     artifact_type = "plot_objects",
-    workflow = "exploratory_plots",
+    phase_id = "exploratory_plots",
     registry = registry,
     metadata = list(
       total_plots = total_plots_exported,
@@ -383,6 +387,9 @@ module_plotting <- function(calls_per_night_final,
   )
   
   result$validation_html_paths <- c(result$validation_html_paths, validation_html)
+
+  result$checkpoint_path <- plots_rds_path
+  result$artifact_ids <- setdiff(names(registry$artifacts %||% list()), artifact_names_before)
   
   result$summary <- list(
     total_plots_exported = total_plots_exported,

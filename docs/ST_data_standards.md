@@ -1,8 +1,8 @@
 # ==============================================================================
 # DATA STANDARDS
 # ==============================================================================
-# VERSION: 2.4
-# LAST UPDATED: 2026-02-05
+# VERSION: 3.0
+# LAST UPDATED: 2026-02-19
 # PURPOSE: Data handling, schema structures, quality validation, fingerprinting, and validation reports
 # ==============================================================================
 
@@ -30,6 +30,7 @@ df <- tibble(
 - [OK] Use `tibble()` instead of `data.frame()`
 - [OK] Keep column names consistent across workflow
 - [OK] Document expected columns in function headers
+- [OK] Write exports directly from in-memory tibbles (no output read-back)
 - [X] NEVER modify column names after standardization
 - [X] NEVER use row names (use explicit ID column)
 
@@ -39,7 +40,7 @@ df <- tibble(
 
 ### 2.1 Schema Evolution Overview
 
-The pipeline handles three KPro schema versions, each with different column structures and species code formats. All schemas are transformed to a unified master schema during Chunk 1 processing.
+The pipeline handles three KPro schema versions, each with different column structures and species code formats. All schemas are transformed to a unified master schema during Phase 1 data preparation.
 
 | Schema | Era | Species Codes | Alternates | Key Identifier Column |
 |--------|-----|---------------|------------|----------------------|
@@ -107,7 +108,7 @@ FOLDER, IN FILE, DATE, TIME, AUTO ID, alternate_1, alternate_2
 
 ### 2.5 Unified Master Schema
 
-All schema versions are transformed into this unified format during Chunk 1:
+All schema versions are transformed into this unified format during Phase 1:
 
 **Required Columns:**
 ```r
@@ -285,21 +286,21 @@ Date
 
 ## 5. DATA QUALITY VALIDATION
 
-### 5.1 Validation Checkpoints by Chunk
+### 5.1 Validation Checkpoints by Phase
 
-| Chunk | Function | Validation Points |
+| Phase | Function | Validation Points |
 |-------|----------|-------------------|
-| 1 | `run_ingest_standardize()` | After loading CSVs, after schema transform, after filters, before checkpoint |
-| 2 | `run_cpn_template()` | After loading master, after template generation, before save |
-| 3 | `run_finalize_to_report()` | After loading CPN, after status calc, after plot generation, before report |
+| 1 | `run_phase1_data_preparation()` | After loading CSVs, after schema transform, after filters, before checkpoint |
+| 2 | `run_phase2_template_generation()` | After loading master, after template generation, before save |
+| 3 | `run_phase3_analysis_reporting()` | After loading CPN, after status calc, after plot generation, before report |
 
-**Legacy Workflow Mapping:**
+**Legacy Workflow Mapping (Historical):**
 
-| Workflow | Equivalent Chunk Stage | Validation Points |
-|----------|------------------------|-------------------|
-| 01 + 02 | Chunk 1 | After loading each CSV, after schema detection, after transformation |
-| 03 | Chunk 2 | After loading master, after filtering NoID, after species unification |
-| 04-07 | Chunk 3 | After CPN finalization, after stats, after plots, before report |
+| Legacy Workflow | Equivalent Phase | Validation Points |
+|-----------------|------------------|-------------------|
+| 01 + 02 | Phase 1 | After loading each CSV, after schema detection, after transformation |
+| 03 | Phase 2 | After loading master, after filtering NoID, after species unification |
+| 04-07 | Phase 3 | After CPN finalization, after stats, after plots, before report |
 
 ### 5.2 Post-Load Validation Example
 
@@ -312,7 +313,7 @@ assert_not_empty(df, "cpn_final")
 # Checkpoint 2: Required columns
 assert_columns_exist(df, 
   c("Detector", "Night", "TotalCalls", "Status", "CallsPerHour"),
-  source_hint = "run_finalize_to_report()"
+  source_hint = "run_phase3_analysis_reporting()"
 )
 
 # Checkpoint 3: Data types
@@ -387,16 +388,16 @@ if (verbose) {
 
 ## 6. VALIDATION REPORT SYSTEM
 
-Every chunk/workflow generates a human-readable validation report documenting all operations performed, data quality checks, and transformation summaries. These reports provide QA documentation and audit trails.
+Every phase generates a human-readable validation report documenting all operations performed, data quality checks, and transformation summaries. These reports provide QA documentation and audit trails.
 
 ### 6.1 Output Locations
 
-- YAML: `results/validation/validation_[chunk]_YYYYMMDD_HHMMSS.yaml`
-- HTML: `results/validation/validation_[chunk]_YYYYMMDD_HHMMSS.html`
+- YAML: `results/validation/validation_phase[1-3]_YYYYMMDD_HHMMSS.yaml`
+- HTML: `results/validation/validation_phase[1-3]_YYYYMMDD_HHMMSS.html`
 
 ### 6.2 Validation Context
 
-A validation context tracks events throughout chunk/workflow execution. Validation context functions are provided in `validation_reporting.R`.
+A validation context tracks events throughout phase execution. Validation context functions are provided in `validation_reporting.R`.
 
 **Core Functions:**
 ```r
@@ -416,8 +417,8 @@ complete_stage_validation(validation_context, validation_dir, stage_name, verbos
 
 **Pattern:**
 ```r
-# Initialize at chunk start
-validation_context <- init_stage_validation("chunk_1", study_params)
+# Initialize at phase start
+validation_context <- init_stage_validation("phase_1", study_params)
 # Or directly:
 validation_context <- create_validation_context(
   workflow = "ingest",
@@ -436,11 +437,11 @@ validation_context <- log_validation_event(
   )
 )
 
-# Finalize at chunk end (using wrapper)
+# Finalize at phase end (using wrapper)
 validation_html_path <- complete_stage_validation(
   validation_context,
   validation_dir = here("results", "validation"),
-  stage_name = "CHUNK 1",
+  stage_name = "PHASE 1",
   verbose = verbose
 )
 # Or directly:
@@ -538,7 +539,7 @@ validation_context <- log_validation_event(
 
 Generated HTML reports contain:
 
-1. **Header** - Chunk/workflow name, timestamp, pipeline version
+1. **Header** - Phase/workflow name, timestamp, pipeline version
 2. **Summary Statistics** - Auto-accumulated counts
 3. **Data Quality Section** - Rows removed, duplicates, schema issues
 4. **Transformation Section** - Applied transformations with details
@@ -551,10 +552,10 @@ Generated HTML reports contain:
 
 **Orchestrating Function Pattern (Preferred):**
 ```r
-run_my_chunk <- function(verbose = FALSE) {
+run_my_phase <- function(verbose = FALSE) {
   
   # Initialize using helper wrapper
-  validation_context <- init_stage_validation("chunk_name", study_params)
+  validation_context <- init_stage_validation("phase_name", study_params)
   
   # ... processing with log_validation_event() calls ...
   
@@ -562,7 +563,7 @@ run_my_chunk <- function(verbose = FALSE) {
   validation_html_path <- complete_stage_validation(
     validation_context,
     validation_dir = here("results", "validation"),
-    stage_name = "CHUNK NAME",
+    stage_name = "PHASE NAME",
     verbose = verbose
   )
   
@@ -602,7 +603,7 @@ log_message(sprintf("[Workflow ##] Validation report: %s",
 
 ### 6.7 Validation Report Naming
 
-Reports are named with chunk/workflow identifier and timestamp:
+Reports are named with phase/workflow identifier and timestamp:
 ```
 validation_ingest_20260112_014129.html
 validation_ingest_20260112_014129.yaml
@@ -614,7 +615,7 @@ This allows multiple runs to be preserved and compared.
 
 ### 6.8 User-Configured Data Filters
 
-The pipeline supports YAML-configured data filters that are applied during Chunk 1 processing. These are tracked as validation events.
+The pipeline supports YAML-configured data filters that are applied during Phase 1 processing. These are tracked as validation events.
 
 **Configuration (in `study_parameters.yaml`):**
 ```yaml

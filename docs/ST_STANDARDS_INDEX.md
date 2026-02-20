@@ -38,7 +38,7 @@ Phase 3: Analysis & Reporting      → Final outputs (report, bundle)
 **Authoritative Reference:** See [ST_ORCHESTRATION_PHILOSOPHY.md](ST_ORCHESTRATION_PHILOSOPHY.md)
 
 Key improvements in v3.0:
-- Explicit phases with clear checkpoints (not implicit chunks)
+- Explicit phases with clear checkpoints
 - Structured result passing between phases
 - Human-in-the-loop checkpoint in Phase 2
 - Module execution layer for reusable module interface
@@ -208,7 +208,7 @@ assert_not_empty(df)
 **MAJOR ARCHITECTURE TRANSITION**
 
 **New Concepts:**
-- Checkpointed phase orchestration (replacing chunk-based model)
+- Checkpointed phase orchestration
 - 3 explicit phases with human-in-the-loop checkpoint
 - Phase result passing (structured result chaining)
 - Module execution layer (callable module interfaces)
@@ -219,22 +219,16 @@ assert_not_empty(df)
 
 **Updated Documents:**
 - ST_architecture_standards.md (v2.5 → v3.0) - Complete rewrite for phases
-- All other documents remain compatible (minor terminology updates recommended)
+- 2026-02-19 harmonization pass updated remaining ST documents toward phase-first examples and terminology
 
-**Terminology Changes:**
-- "Chunk 1/2/3" → "Phase 1/2/3"
-- "Chunk orchestrator" → "Phase orchestrator"  
-- "R/debug/module_runner.R" → "R/modules/module_runner.R" (core infrastructure)
-- "Debug tool" → "Module execution layer"
-
-**Migration:**
-- Old chunk-based functions still work (deprecated)
-- New phase orchestrators recommended for all development
-- See ST_ORCHESTRATION_PHILOSOPHY.md §7 for migration guide
+**Terminology Baseline:**
+- "Phase 1/2/3" for orchestration
+- "Phase orchestrator" for run_phase#_* functions
+- "R/modules/module_runner.R" as module execution layer
+- "Module execution layer" as the preferred classification
 
 ### v2.3 (2026-01-31)
 - Transitioned to Shiny-driven orchestrating functions
-- Chunk model: run_ingest_standardize(), run_cpn_template(), run_finalize_to_report()
 - Documented verbose parameter for Shiny integration
 
 ### v2.2 (2026-01-20)

@@ -470,7 +470,7 @@ last_modified_utc: '2026-01-12T06:34:34Z'
 - Common mistakes identified
 - Best practices evolve
 - New tools/packages adopted
-- Architecture changes (e.g., chunk → phase model)
+- Architecture changes (e.g., phase model updates)
 
 **How to update:**
 - Propose changes via issue/PR

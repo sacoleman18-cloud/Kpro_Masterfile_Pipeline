@@ -9,7 +9,7 @@
 # -------
 # Generates CallsPerNight templates, handles user edits, calculates recording
 # hours and CallsPerHour metrics, and provides template loading for finalization
-# workflows.
+# phase-driven module execution.
 #
 # RECORDING HOURS CONTRACT
 # ------------------------
@@ -167,7 +167,7 @@
 #             - Improves performance for large datasets (no loops required)
 # 2026-02-01: Verified deterministic behavior - all functions follow standards
 # 2026-02-01: Confirmed usage in run_phase2_template_generation() (Phase 2) and run_phase3_analysis_reporting() (Phase 3)
-# 2024-12-29: Added datetime helpers for Workflow 04 template comparison support
+# 2024-12-29: Added datetime helpers for Module 4 template comparison support
 #
 # =============================================================================
 
@@ -277,7 +277,7 @@ HOURS_PER_DAY <- 24
 #' calculate_recording_hours(start_times, end_times)
 #' # [1] 12 13 12
 #' 
-#' # Full datetime - AM/PM format (Workflow 03 generated)
+#' # Full datetime - AM/PM format (Module 3 generated)
 #' calculate_recording_hours("10/25/2025 8:00:00 PM", "10/26/2025 6:00:00 AM")
 #' # [1] 10
 #' 
@@ -428,7 +428,7 @@ calculate_recording_hours <- function(start_time, end_time) {
 #' @section DOES NOT:
 #' - Modify master_data input (non-destructive)
 #' - Validate data quality (use validation/ module)
-#' - Remove NoID calls (done in workflow script)
+#' - Remove NoID calls (done in phase orchestrator logic)
 #' - Save files to disk (caller's responsibility)
 #' - Handle multiple detectors at same location
 #' - Perform statistical analysis
@@ -481,7 +481,7 @@ generate_calls_per_night_template <- function(master_data,
   
   if (!is.data.frame(master_data)) {
     stop(sprintf(
-      "master_data must be a data frame.\n  Received: %s\n  Did you forget to load kpro_master from Workflow 02?",
+      "master_data must be a data frame.\n  Received: %s\n  Did you forget to load kpro_master from Module 2 / Phase 1?",
       paste(class(master_data), collapse = ", ")
     ))
   }
@@ -692,7 +692,7 @@ apply_schedule <- function(template,
 #' Uses auto-incrementing version numbers (v1, v2, v3, ...).
 #'
 #' @param data Data frame containing calls per night data.
-#'   Typically output from Workflow 03 final stage.
+#'   Typically output from Module 3 final stage.
 #' @param base_name Character. Base name for the output file. 
 #'   Default: "CallsPerNight_final".
 #' @param output_dir Character. Directory to save the file. 
@@ -847,7 +847,7 @@ save_callspernight_with_version <- function(data,
 #' EDIT_THIS for user modifications.
 #' 
 #' This function encapsulates the template discovery and loading logic
-#' that was previously scattered across workflow scripts. It provides
+#' that was previously scattered across orchestrator scripts. It provides
 #' consistent error handling and verbose messaging.
 #'
 #' @param type Character. Template type to load: "ORIGINAL" or "EDIT_THIS".

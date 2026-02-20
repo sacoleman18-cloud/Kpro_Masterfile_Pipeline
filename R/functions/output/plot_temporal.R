@@ -345,11 +345,11 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
 #' - Returns a ggplot object
 #' - All 24 hours shown (including zero-activity hours)
 #' - Peak hour annotated
-#' - Hour_local MUST pre-exist (created in Workflow 02)
+#' - Hour_local MUST pre-exist (created in Module 2 / Phase 1)
 #' - DETERMINISTIC: no conditional column creation
 #'
 #' @section DOES NOT:
-#' - Create Hour_local column (expects it pre-created in Workflow 02)
+#' - Create Hour_local column (expects it pre-created in Module 2 / Phase 1)
 #' - Extract hours from DateTime_local (Hour_local must exist)
 #' - Separate by species (use plot_species_hourly_profile)
 #' - Account for sunset/sunrise time variation

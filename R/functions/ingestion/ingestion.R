@@ -4,7 +4,7 @@
 # Classification: Helper/Utility Function Module
 # - Part of R/functions/ → Contains reusable helper functions only
 # - Loads and intro-standardizes raw CSV data
-# - Used by workflows/modules in R/pipeline/
+# - Used by phase orchestrators/modules in R/pipeline/
 # PURPOSE
 # -------
 # File discovery, reading, and intro-standardization. Provides two primary
@@ -263,7 +263,7 @@ apply_intro_standardization <- function(df, file_path, verbose = FALSE) {
   # Step 6: Store row removal count as attribute
   # ----------------------------------------------------------------------------
   
-  # Attach rows_removed as attribute so workflow can access it
+  # Attach rows_removed as attribute so phase orchestrator can access it
   attr(df, "rows_removed") <- n_removed
   
   if (verbose) message(sprintf("  [OK] Intro-standardization complete: %d rows", nrow(df)))

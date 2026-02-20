@@ -51,7 +51,7 @@ generate_analysis <- function(df, verbose = FALSE) {
 }
 ```
 
-**Orchestrating functions** (like `run_finalize_to_report()`) return comprehensive structured lists including:
+**Orchestrating functions** (like `run_phase3_analysis_reporting()`) return comprehensive structured lists including:
 - Primary data outputs
 - Processing metadata
 - Artifact IDs
@@ -64,7 +64,7 @@ generate_analysis <- function(df, verbose = FALSE) {
 Save all plots for Quarto documents:
 
 ```r
-# In Chunk 3 / Workflow 06: Save all plots
+# In Phase 3 (Module 6): Save all plots
 all_plots <- list(
   quality = list(
     recording_status_summary = plot_recording_status_summary(cpn),
@@ -123,9 +123,9 @@ gt_detector_summary(calls_per_night_final)
 
 ---
 
-## 5. CHUNK 3 / WORKFLOW 07 REPORT STANDARDS
+## 5. PHASE 3 REPORT STANDARDS
 
-The report generation stage (part of Chunk 3 or standalone Workflow 07) auto-generates a publication-grade Quarto report from pre-computed objects. It is **read-only** with respect to analytical results—no computation, transformation, or plot generation occurs.
+The report generation stage (Phase 3, Module 7) auto-generates a publication-grade Quarto report from pre-computed objects. It is **read-only** with respect to analytical results—no computation, transformation, or plot generation occurs.
 
 ### 5.1 Directory Structure
 
@@ -343,10 +343,10 @@ tibble::tibble(
 
 ### 5.8 Report Generation in Orchestrating Functions
 
-When using the chunk model, report generation is part of `run_finalize_to_report()`:
+In the phase model, report generation occurs in Phase 3 via `run_phase3_analysis_reporting()`:
 
 ```r
-run_finalize_to_report <- function(verbose = FALSE) {
+run_phase3_analysis_reporting <- function(verbose = FALSE) {
   
   # ... earlier stages (finalize CPN, generate stats, generate plots) ...
   
@@ -371,7 +371,7 @@ run_finalize_to_report <- function(verbose = FALSE) {
 }
 ```
 
-### 5.9 Legacy Workflow 07 Orchestration Script
+### 5.9 Legacy Workflow 07 Orchestration Script (Historical Reference)
 
 For standalone Workflow 07 usage, the `07_generate_report.R` script must:
 
@@ -459,7 +459,7 @@ release_metadata:
     remote_url: "https://github.com/user/repo"
   
   generator:
-    script: "run_finalize_to_report.R"  # Or "07_generate_report.R"
+    script: "run_phase3_analysis_reporting.R"  # Or "07_generate_report.R" for legacy workflow mode
     r_version: "4.3.2"
     platform: "x86_64-w64-mingw32"
     locale: "LC_COLLATE=English_United States.utf8"
@@ -602,13 +602,13 @@ notes_and_warnings:
 manifest_metadata:
   manifest_version: "1.0"
   manifest_schema: "kpro_release_manifest_v1"
-  generated_by: "run_finalize_to_report.R"
+  generated_by: "run_phase3_analysis_reporting.R"
   generated_at_utc: "<YYYY-MM-DDTHH:MM:SSZ>"
   manifest_hash: "<SHA256_HASH>"  # Hash of manifest excluding this field
   
   documentation:
     project_overview: "docs/Project_Overview.md"
-    coding_standards: "CODING_STANDARDS_v2.3.md"
+    coding_standards: "docs/ST_STANDARDS_INDEX.md"
     repository: "https://github.com/user/repo"
 ```
 

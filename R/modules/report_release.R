@@ -3,13 +3,13 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Report & Release Module: Renders Quarto report and creates release bundle (Chunk 3).
+# Report & Release Module: Renders Quarto report and creates release bundle (Phase 3).
 #
 # PHASE ARCHITECTURE: Called by run_phase3_analysis_reporting() orchestrator
 # ORCHESTRATION LAYER: Yes, module runner interface
 #
-# WORKFLOW SEQUENCE
-# -----------------
+# EXECUTION SEQUENCE
+# ------------------
 # This module is called as the FINAL step in Phase 3:
 #   1. run_phase3_analysis_reporting() [phase orchestrator]
 #      └→ run_module_finalize_cpn() — Stages 1-6
@@ -64,7 +64,7 @@
 #   - calls_per_night_final, all_summaries, all_plots from prior modules
 #   - summary_rds_path from module_summary_stats
 #   - plots_rds_path from module_plotting
-#   - Master data and study parameters from Chunk 2
+#   - Master data and study parameters from Phase 2
 #
 # **Internal stages:**
 #   - Stages 22-25 sequentially: 22 → 23 → 24 → 25
@@ -83,7 +83,7 @@
 #' Render Report and Create Release Bundle
 #'
 #' @description
-#' Chunk 3, Stages 22-25: Verifies RDS artifacts, renders Quarto report with
+#' Phase 3, Stages 22-25: Verifies RDS artifacts, renders Quarto report with
 #' embedded summaries and plots, creates portable ZIP release bundle, and
 #' generates final validation report.
 #'
@@ -109,6 +109,8 @@
 #'     - report_html: Path to rendered HTML
 #'     - release_zip: Path to ZIP bundle (or NULL if not created)
 #'     - report_size_kb: File size of report
+#'   - checkpoint_path: Character path to primary module checkpoint/output
+#'   - artifact_ids: Character vector of artifacts registered in this module call
 #'   - validation_html_paths: Character vector with validation report path
 #'   - summary: Metadata list
 #'
@@ -166,6 +168,8 @@ module_report_release <- function(calls_per_night_final,
   if (is.null(registry)) {
     registry <- list()
   }
+
+  artifact_names_before <- names(registry$artifacts %||% list())
   
   result <- list(report_release = list(), validation_html_paths = character())
   
@@ -181,7 +185,7 @@ module_report_release <- function(calls_per_night_final,
   # STAGE 22: VERIFY RDS ARTIFACTS
   # ===========================================================================
   
-  log_stage_start("22", "Verify RDS Artifacts", verbose = verbose, workflow_prefix = "Report & Release")
+  log_stage_start("22", "Verify RDS Artifacts", verbose = verbose, phase_prefix = "Report & Release")
   
   # Load and validate RDS structure
   if (!file.exists(summary_rds_path)) {
@@ -231,7 +235,7 @@ module_report_release <- function(calls_per_night_final,
   # STAGE 23: RENDER QUARTO REPORT
   # ===========================================================================
   
-  log_stage_start("23", "Render Quarto Report", verbose = verbose, workflow_prefix = "Report & Release")
+  log_stage_start("23", "Render Quarto Report", verbose = verbose, phase_prefix = "Report & Release")
   
   qmd_template <- here::here("reports", "bat_activity_report.qmd")
   
@@ -281,7 +285,7 @@ module_report_release <- function(calls_per_night_final,
   # STAGE 24: CREATE RELEASE BUNDLE
   # ===========================================================================
   
-  log_stage_start("24", "Create Release Bundle", verbose = verbose, workflow_prefix = "Report & Release")
+  log_stage_start("24", "Create Release Bundle", verbose = verbose, phase_prefix = "Report & Release")
   
   release_zip_path <- NULL
   
@@ -328,7 +332,7 @@ module_report_release <- function(calls_per_night_final,
   # STAGE 25: FINALIZE VALIDATION
   # ===========================================================================
   
-  log_stage_start("25", "Finalize Validation", verbose = verbose, workflow_prefix = "Report & Release")
+  log_stage_start("25", "Finalize Validation", verbose = verbose, phase_prefix = "Report & Release")
   
   validation_html <- finalize_stage_validation_report(
     validation_context = validation_context,
@@ -350,6 +354,9 @@ module_report_release <- function(calls_per_night_final,
   )
   
   result$validation_html_paths <- c(result$validation_html_paths, validation_html)
+
+  result$checkpoint_path <- report_html_path
+  result$artifact_ids <- setdiff(names(registry$artifacts %||% list()), artifact_names_before)
   
   result$summary <- list(
     report_generated = !is.null(report_html_path),

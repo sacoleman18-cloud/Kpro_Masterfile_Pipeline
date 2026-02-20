@@ -50,9 +50,9 @@
 # ------------------------------------
 # This module MUST NOT:
 #   - Normalize YAML formats (Shiny writes deterministically)
-#   - Prompt users for detector names (handled in workflow scripts)
-#   - Check for placeholder vs real names (workflow validation)
-#   - Check for duplicate detector names (workflow validation)
+#   - Prompt users for detector names (handled in phase orchestrator scripts)
+#   - Check for placeholder vs real names (phase-level validation)
+#   - Check for duplicate detector names (phase-level validation)
 #   - Process or transform data
 #   - Validate external data paths exist on disk
 #   - Validate timezone against OlsonNames()
@@ -141,7 +141,7 @@
 # 2026-02-01: Added get_schedule_config() - moved from utilities.R
 #             - Properly belongs in config module (parses YAML, has domain knowledge)
 #             - Updated to support detector_specific_schedules (renamed from advanced_scheduling)
-#             - Added generate_editable_template parameter for workflow control
+#             - Added generate_editable_template parameter for phase control
 #             - Maintains backward compatibility with advanced_scheduling (deprecated)
 #             - Normalizes boolean values from YAML to logical
 # 2026-01-31: Simplified for Shiny integration
@@ -830,7 +830,7 @@ reconcile_detector_mapping <- function(current_ids, existing_mapping) {
 #'
 #' @description
 #' One-call function to create YAML if missing and reconcile detector_mapping
-#' with current data. This is the main entry point for workflow scripts.
+#' with current data. This is the main entry point for phase orchestrator scripts.
 #'
 #' @param raw_data Data frame containing detector_id column
 #' @param yaml_path Character. Path to YAML file.
@@ -874,7 +874,7 @@ reconcile_detector_mapping <- function(current_ids, existing_mapping) {
 #'
 #' @examples
 #' \dontrun{
-#' # In workflow script 01:
+#' # In phase orchestration script:
 #' ensure_study_parameters(raw_combined, "inst/config/study_parameters.yaml")
 #'
 #' # YAML now exists with all current detector IDs mapped

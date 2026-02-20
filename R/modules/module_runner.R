@@ -77,29 +77,6 @@
 # Load all utilities and modules
 source(file.path("R", "functions", "load_all.R"))
 
-cat("\n")
-cat("===============================================\n")
-cat("  KPro Pipeline Module Execution Layer\n")
-cat("===============================================\n")
-cat("\n")
-cat("Available module runners:\n")
-cat("  1. run_module_ingestion()\n")
-cat("  2. run_module_standardization(ingestion_result)\n")
-cat("  3. run_module_cpn_template(standardization_result)\n")
-cat("  4. run_module_finalize_cpn(cpn_template_result)\n")
-cat("  5. run_module_summary_stats(finalize_result)\n")
-cat("  6. run_module_plotting(summary_stats_result)\n")
-cat("  7. run_module_report_release(plotting_result)\n")
-cat("\n")
-cat("Example workflow:\n")
-cat("  r1 <- run_module_ingestion(verbose = TRUE)\n")
-cat("  r2 <- run_module_standardization(r1, verbose = TRUE)\n")
-cat("  r3 <- run_module_cpn_template(r2, verbose = TRUE)\n")
-cat("  # ... continue with remaining modules\n")
-cat("\n")
-cat("===============================================\n")
-cat("\n")
-
 
 # ==============================================================================
 # MODULE 1: DATA INGESTION
@@ -117,13 +94,15 @@ cat("\n")
 #'
 #' @export
 run_module_ingestion <- function(verbose = FALSE) {
-  cat("\n>>> Running MODULE 1: Data Ingestion\n\n")
+  if (verbose) cat("\n>>> Running MODULE 1: Data Ingestion\n\n")
   
   result <- module_data_ingestion(verbose = verbose)
   
-  cat(sprintf("\n✓ Module complete: %d rows loaded from %d source(s)\n",
-              result$metadata$total_rows,
-              result$metadata$sources_count))
+  if (verbose) {
+    cat(sprintf("\n✓ Module complete: %d rows loaded from %d source(s)\n",
+                result$metadata$total_rows,
+                result$metadata$sources_count))
+  }
   
   return(result)
 }
@@ -142,15 +121,16 @@ run_module_ingestion <- function(verbose = FALSE) {
 #' @param ingestion_result Result from run_module_ingestion() or NULL to use defaults.
 #' @param verbose Logical. Print detailed progress.
 #'
-#' @return Module result with kpro_master
+#' @return Module result with standardized outputs plus top-level
+#'   \code{checkpoint_path} and \code{artifact_ids} for phase orchestration.
 #'
 #' @export
 run_module_standardization <- function(ingestion_result = NULL, verbose = FALSE) {
-  cat("\n>>> Running MODULE 2: Data Standardization\n\n")
+  if (verbose) cat("\n>>> Running MODULE 2: Data Standardization\n\n")
   
   # If no ingestion result provided, run ingestion first
   if (is.null(ingestion_result)) {
-    cat("  [!] No ingestion result provided - running ingestion first...\n\n")
+    if (verbose) cat("  [!] No ingestion result provided - running ingestion first...\n\n")
     ingestion_result <- run_module_ingestion(verbose = verbose)
   }
   
@@ -162,9 +142,15 @@ run_module_standardization <- function(ingestion_result = NULL, verbose = FALSE)
     verbose = verbose
   )
   
-  cat(sprintf("\n✓ Module complete: %d rows, %d detectors\n",
-              result$standardization$metadata$n_rows,
-              result$standardization$metadata$n_detectors))
+  if (verbose) {
+    cat(sprintf("\n✓ Module complete: %d rows, %d detectors\n",
+                result$standardization$metadata$n_rows,
+                result$standardization$metadata$n_detectors))
+  }
+
+  # Normalize top-level fields for phase orchestration contracts
+  result$checkpoint_path <- result$checkpoint_path %||% result$standardization$checkpoint_path %||% NULL
+  result$artifact_ids <- result$artifact_ids %||% unlist(list(result$standardization$artifact_id), use.names = FALSE)
   
   return(result)
 }
@@ -184,13 +170,14 @@ run_module_standardization <- function(ingestion_result = NULL, verbose = FALSE)
 #' @param manual_id_file Character. Path to manual ID file (optional).
 #' @param verbose Logical. Print detailed progress.
 #'
-#' @return Module result with cpn_template
+#' @return Module result with template outputs plus top-level
+#'   \code{checkpoint_path} and \code{artifact_ids} for phase orchestration.
 #'
 #' @export
 run_module_cpn_template <- function(standardization_result = NULL,
                                     manual_id_file = NULL,
                                     verbose = FALSE) {
-  cat("\n>>> Running MODULE 3: CPN Template\n\n")
+  if (verbose) cat("\n>>> Running MODULE 3: CPN Template\n\n")
   
   # Extract kpro_master if provided
   kpro_master <- NULL
@@ -205,10 +192,19 @@ run_module_cpn_template <- function(standardization_result = NULL,
     verbose = verbose
   )
   
-  cat(sprintf("\n✓ Module complete: %d rows, %d nights\n",
-              result$metadata$n_rows,
-              result$metadata$n_nights))
-  cat(sprintf("  EDIT THIS FILE: %s\n", basename(result$template_edit_path)))
+  if (verbose) {
+    cat(sprintf("\n✓ Module complete: %d rows, %d nights\n",
+                result$metadata$n_rows,
+                result$metadata$n_nights))
+    cat(sprintf("  EDIT THIS FILE: %s\n", basename(result$template_edit_path)))
+  }
+
+  # Normalize top-level fields for phase orchestration contracts
+  result$checkpoint_path <- result$checkpoint_path %||% result$template_edit_path %||% NULL
+  result$artifact_ids <- result$artifact_ids %||% character(0)
+  if (is.list(result$artifact_ids)) {
+    result$artifact_ids <- unlist(result$artifact_ids, use.names = TRUE)
+  }
   
   return(result)
 }
@@ -234,7 +230,7 @@ run_module_cpn_template <- function(standardization_result = NULL,
 run_module_finalize_cpn <- function(cpn_template_result = NULL,
                                     edited_template_file = NULL,
                                     verbose = FALSE) {
-  cat("\n>>> Running MODULE 4: Finalize CPN\n\n")
+  if (verbose) cat("\n>>> Running MODULE 4: Finalize CPN\n\n")
   
   # Extract kpro_master from Phase 2 result if provided
   # Phase 2 includes updated kpro_master with species column
@@ -257,8 +253,10 @@ run_module_finalize_cpn <- function(cpn_template_result = NULL,
     verbose = verbose
   )
   
-  cat(sprintf("\n✓ Module complete: %d rows finalized\n",
-              nrow(result$finalize_cpn$calls_per_night_final)))
+  if (verbose) {
+    cat(sprintf("\n✓ Module complete: %d rows finalized\n",
+                nrow(result$finalize_cpn$calls_per_night_final)))
+  }
   
   return(result)
 }
@@ -281,7 +279,7 @@ run_module_finalize_cpn <- function(cpn_template_result = NULL,
 #'
 #' @export
 run_module_summary_stats <- function(finalize_result, verbose = FALSE) {
-  cat("\n>>> Running MODULE 5: Summary Statistics\n\n")
+  if (verbose) cat("\n>>> Running MODULE 5: Summary Statistics\n\n")
   
   # Load study parameters
   study_params <- load_study_parameters(here::here("inst", "config", "study_parameters.yaml"))
@@ -306,8 +304,10 @@ run_module_summary_stats <- function(finalize_result, verbose = FALSE) {
     verbose = verbose
   )
   
-  cat(sprintf("\n✓ Module complete: %d summaries generated\n",
-              length(result$summary_stats$all_summaries)))
+  if (verbose) {
+    cat(sprintf("\n✓ Module complete: %d summaries generated\n",
+                length(result$summary_stats$all_summaries)))
+  }
   
   return(result)
 }
@@ -330,7 +330,7 @@ run_module_summary_stats <- function(finalize_result, verbose = FALSE) {
 #'
 #' @export
 run_module_plotting <- function(summary_stats_result, verbose = FALSE) {
-  cat("\n>>> Running MODULE 6: Plotting\n\n")
+  if (verbose) cat("\n>>> Running MODULE 6: Plotting\n\n")
   
   # Load study parameters
   study_params <- load_study_parameters(here::here("inst", "config", "study_parameters.yaml"))
@@ -372,8 +372,10 @@ run_module_plotting <- function(summary_stats_result, verbose = FALSE) {
     verbose = verbose
   )
   
-  cat(sprintf("\n✓ Module complete: %d total plots generated\n",
-              sum(unlist(result$plotting$plot_counts))))
+  if (verbose) {
+    cat(sprintf("\n✓ Module complete: %d total plots generated\n",
+                sum(unlist(result$plotting$plot_counts))))
+  }
   
   return(result)
 }
@@ -399,7 +401,7 @@ run_module_plotting <- function(summary_stats_result, verbose = FALSE) {
 run_module_report_release <- function(plotting_result,
                                       summary_stats_result,
                                       verbose = FALSE) {
-  cat("\n>>> Running MODULE 7: Report & Release\n\n")
+  if (verbose) cat("\n>>> Running MODULE 7: Report & Release\n\n")
   
   # Load study parameters
   study_params <- load_study_parameters(here::here("inst", "config", "study_parameters.yaml"))
@@ -447,7 +449,7 @@ run_module_report_release <- function(plotting_result,
     verbose = verbose
   )
   
-  cat("\n✓ Module complete: Report and release bundle generated\n")
+  if (verbose) cat("\n✓ Module complete: Report and release bundle generated\n")
   
   return(result)
 }
@@ -469,10 +471,12 @@ run_module_report_release <- function(plotting_result,
 #'
 #' @export
 run_all_modules <- function(verbose = FALSE) {
-  cat("\n")
-  cat("===============================================\n")
-  cat("  Running ALL Pipeline Modules\n")
-  cat("===============================================\n")
+  if (verbose) {
+    cat("\n")
+    cat("===============================================\n")
+    cat("  Running ALL Pipeline Modules\n")
+    cat("===============================================\n")
+  }
   
   # Module 1: Ingestion
   r1 <- run_module_ingestion(verbose = verbose)
@@ -485,12 +489,14 @@ run_all_modules <- function(verbose = FALSE) {
   
   # Module 4: Finalize CPN
   # Note: User may need to edit template before running this
-  cat("\n")
-  cat("==============================================\n")
-  cat("  PAUSE: Edit CPN template before continuing\n")
-  cat("==============================================\n")
-  cat(sprintf("  Edit this file: %s\n", basename(r3$template_edit_path)))
-  cat("  Press ENTER when ready to continue...\n")
+  if (verbose) {
+    cat("\n")
+    cat("==============================================\n")
+    cat("  PAUSE: Edit CPN template before continuing\n")
+    cat("==============================================\n")
+    cat(sprintf("  Edit this file: %s\n", basename(r3$template_edit_path)))
+    cat("  Press ENTER when ready to continue...\n")
+  }
   readline()
   
   r4 <- run_module_finalize_cpn(r3, verbose = verbose)
@@ -504,11 +510,13 @@ run_all_modules <- function(verbose = FALSE) {
   # Module 7: Report & Release
   r7 <- run_module_report_release(r6, r5, verbose = verbose)
   
-  cat("\n")
-  cat("===============================================\n")
-  cat("  ALL MODULES COMPLETE\n")
-  cat("===============================================\n")
-  cat("\n")
+  if (verbose) {
+    cat("\n")
+    cat("===============================================\n")
+    cat("  ALL MODULES COMPLETE\n")
+    cat("===============================================\n")
+    cat("\n")
+  }
   
   list(
     ingestion = r1,

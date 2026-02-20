@@ -67,7 +67,9 @@
 #'     \item \code{cpn_template}: Tibble with CPN template grid
 #'     \item \code{template_edit_path}: Path to EDIT_THIS template (for user editing)
 #'     \item \code{template_original_path}: Path to ORIGINAL template (tracking)
+#'     \item \code{checkpoint_path}: Path to phase checkpoint artifact
 #'     \item \code{metadata}: List with template dimensions
+#'     \item \code{artifact_ids}: Character vector of registered artifact IDs
 #'     \item \code{validation_html_paths}: Character vector of validation reports
 #'     \item \code{next_phase}: Instructions for manual editing and Phase 3
 #'   }
@@ -162,6 +164,11 @@ run_phase2_template_generation <- function(phase1_result = NULL,
   metadata <- module3_result$metadata
   template_edit_path <- module3_result$template_edit_path
   template_original_path <- module3_result$template_original_path
+  checkpoint_path <- module3_result$checkpoint_path %||% template_edit_path
+  phase_artifact_ids <- module3_result$artifact_ids %||% character(0)
+  if (is.list(phase_artifact_ids)) {
+    phase_artifact_ids <- unlist(phase_artifact_ids, use.names = TRUE)
+  }
   
   log_message(sprintf("=== PHASE 2 COMPLETE: %d rows, %d nights ===",
                       metadata$n_rows,
@@ -205,7 +212,9 @@ run_phase2_template_generation <- function(phase1_result = NULL,
     cpn_template = cpn_template,
     template_edit_path = template_edit_path,
     template_original_path = template_original_path,
+    checkpoint_path = checkpoint_path,
     metadata = metadata,
+    artifact_ids = phase_artifact_ids,
     validation_html_paths = module3_result$validation_html_paths,
     next_phase = "Phase 3: Analysis & Reporting (run_phase3_analysis_reporting)",
     human_action_required = TRUE,

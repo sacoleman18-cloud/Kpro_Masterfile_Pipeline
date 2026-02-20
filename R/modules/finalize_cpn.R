@@ -3,7 +3,7 @@
 # ==============================================================================
 # PURPOSE
 # -------
-# Finalize CPN Module: Handles CPN finalization logic (Chunk 3).
+# Finalize CPN Module: Handles CPN finalization logic (Phase 3).
 #
 # PHASE ARCHITECTURE: Called by run_phase3_analysis_reporting() orchestrator
 # ORCHESTRATION LAYER: Yes, module runner interface
@@ -18,19 +18,19 @@
 #   - Eliminates 120 lines of complex POSIXct comparison logic
 #   - Encapsulates 6-type edit detection (changed/added/removed x 2 fields)
 #
-# WORKFLOW SEQUENCE
-# -----------------
+# EXECUTION SEQUENCE
+# ------------------
 # This module is called as the FIRST step in Phase 3:
 #   1. run_phase3_analysis_reporting() [phase orchestrator]
-#      └→ run_module_finalize_cpn() [this module] — Chunk 3, Stages 1-6
-#      └→ run_module_summary_stats() — Chunk 3, Stages 7-16
-#      └→ run_module_plotting() — Chunk 3, Stages 15-21
-#      └→ run_module_report_release() — Chunk 3, Stages 22-25
+#      └→ run_module_finalize_cpn() [this module] — Phase 3, Stages 1-6
+#      └→ run_module_summary_stats() — Phase 3, Stages 7-16
+#      └→ run_module_plotting() — Phase 3, Stages 15-21
+#      └→ run_module_report_release() — Phase 3, Stages 22-25
 #
 # INPUT REQUIREMENTS
 # ------------------
 # Parameters:
-#   - kpro_master: Tibble from Chunk 2 (or NULL to load from checkpoint)
+#   - kpro_master: Tibble from Phase 2 (or NULL to load from checkpoint)
 #   - edited_template_file: Path to EDIT_THIS CPN template (or NULL to auto-discover)
 #   - study_params: List from load_study_parameters(yaml_path)
 #   - registry: Artifact registry from previous modules
@@ -97,13 +97,13 @@
 #' Finalize CallsPerNight Data
 #'
 #' @description
-#' Chunk 3, Stages 1-6: Loads edited CPN template, compares with original,
+#' Phase 3, Stages 1-6: Loads edited CPN template, compares with original,
 #' tracks manual edits, calculates recording hours, classifies recording status,
 #' and saves final CPN data.
 #'
 #' This is the FIRST module in the finalize-to-report pipeline.
 #'
-#' @param kpro_master Tibble. Master dataset from Chunk 2. If NULL, loads from
+#' @param kpro_master Tibble. Master dataset from Phase 2. If NULL, loads from
 #'   most recent checkpoint. Default: NULL.
 #' @param edited_template_file Character. Path to user-edited EDIT_THIS file.
 #'   If NULL, auto-discovers most recent. Default: NULL.
@@ -120,6 +120,8 @@
 #'     - total_edits: Numeric count of manual edits
 #'     - status_distribution: Named numeric vector
 #'     - dead_nights_retained: Count of Fail rows
+#'   - checkpoint_path: Character path to primary module checkpoint/output
+#'   - artifact_ids: Character vector of artifacts registered in this module call
 #'   - validation_html_paths: Character vector with validation report path
 #'   - summary: Metadata list
 #'
@@ -170,6 +172,8 @@ finalize_cpn <- function(kpro_master = NULL,
   if (is.null(registry)) {
     registry <- list()
   }
+
+  artifact_names_before <- names(registry$artifacts %||% list())
   
   result <- list(finalize_cpn = list(), validation_html_paths = character())
   
@@ -181,7 +185,7 @@ finalize_cpn <- function(kpro_master = NULL,
   # STAGE 1: LOAD CONFIGURATION
   # ===========================================================================
   
-  log_stage_start("1", "Load Configuration", verbose = verbose, workflow_prefix = "Finalize CPN")
+  log_stage_start("1", "Load Configuration", verbose = verbose, phase_prefix = "Finalize CPN")
   
   yaml_path <- here::here("inst", "config", "study_parameters.yaml")
   assert_file_exists(yaml_path, hint = "Configure study parameters first.")
@@ -201,11 +205,11 @@ finalize_cpn <- function(kpro_master = NULL,
   # STAGE 2: LOAD DATA AND TEMPLATES (DRY-Refactored)
   # ===========================================================================
   
-  log_stage_start("2", "Load Data and Templates", verbose = verbose, workflow_prefix = "Finalize CPN")
+  log_stage_start("2", "Load Data and Templates", verbose = verbose, phase_prefix = "Finalize CPN")
   
   # Load master data
   if (!is.null(kpro_master)) {
-    if (verbose) message("  [OK] Using kpro_master from Chunk 2")
+    if (verbose) message("  [OK] Using kpro_master from Phase 2")
   } else {
     if (verbose) message("  [!] Loading kpro_master from checkpoint...")
     
@@ -301,7 +305,7 @@ finalize_cpn <- function(kpro_master = NULL,
   # STAGE 3: TRACK MANUAL EDITS (DRY-Refactored)
   # ===========================================================================
   
-  log_stage_start("3", "Track Manual Edits", verbose = verbose, workflow_prefix = "Finalize CPN")
+  log_stage_start("3", "Track Manual Edits", verbose = verbose, phase_prefix = "Finalize CPN")
   
   # Use DRY helper to track edits
   edit_tracking <- track_template_edits(
@@ -328,7 +332,7 @@ finalize_cpn <- function(kpro_master = NULL,
   # STAGE 4: CALCULATE RECORDING HOURS
   # ===========================================================================
   
-  log_stage_start("4", "Calculate Recording Hours", verbose = verbose, workflow_prefix = "Finalize CPN")
+  log_stage_start("4", "Calculate Recording Hours", verbose = verbose, phase_prefix = "Finalize CPN")
   
   # Recalculate RecordingHours from edited times
   if ("StartDateTime" %in% names(template_edited) && 
@@ -356,7 +360,7 @@ finalize_cpn <- function(kpro_master = NULL,
   # STAGE 5: CLASSIFY STATUS AND CALCULATE METRICS
   # ===========================================================================
   
-  log_stage_start("5", "Classify Status & Calculate Metrics", verbose = verbose, workflow_prefix = "Finalize CPN")
+  log_stage_start("5", "Classify Status & Calculate Metrics", verbose = verbose, phase_prefix = "Finalize CPN")
   
   # Classify recording status
   calls_per_night_final <- template_edited %>%
@@ -429,7 +433,7 @@ finalize_cpn <- function(kpro_master = NULL,
   # STAGE 6: SAVE FINAL CPN
   # ===========================================================================
   
-  log_stage_start("6", "Save Final CPN", verbose = verbose, workflow_prefix = "Finalize CPN")
+  log_stage_start("6", "Save Final CPN", verbose = verbose, phase_prefix = "Finalize CPN")
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   
@@ -442,7 +446,7 @@ finalize_cpn <- function(kpro_master = NULL,
     data = calls_per_night_final,
     file_path = cpn_final_path,
     artifact_type = "cpn_final",
-    workflow = "finalize_cpn",
+    phase_id = "finalize_cpn",
     metadata = list(
       n_rows = nrow(calls_per_night_final),
       n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),
@@ -490,6 +494,9 @@ finalize_cpn <- function(kpro_master = NULL,
   )
   
   result$validation_html_paths <- c(result$validation_html_paths, validation_html)
+
+  result$checkpoint_path <- cpn_final_path
+  result$artifact_ids <- setdiff(names(registry$artifacts %||% list()), artifact_names_before)
   
   result$summary <- list(
     n_detectors = dplyr::n_distinct(calls_per_night_final$Detector),

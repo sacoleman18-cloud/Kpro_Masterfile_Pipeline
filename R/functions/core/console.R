@@ -6,7 +6,7 @@
 # PURPOSE
 # -------
 # Console formatting utilities for visual output. Provides consistent
-# stage headers, workflow summaries, and pipeline completion displays.
+# stage headers, phase summaries, and pipeline completion displays.
 # Separated from utilities.R for modularity and reduced file size.
 #
 # CONSOLE CONTRACT
@@ -27,7 +27,7 @@
 #    - ASCII box characters (+-|=)
 #    - Configurable width (default: 65)
 #    - Stage headers: single-line boxes
-#    - Workflow summaries: double-line boxes
+#    - Phase summaries: double-line boxes
 #
 # NON-GOALS (EXPLICITLY OUT OF SCOPE)
 # ------------------------------------
@@ -64,12 +64,12 @@
 #       Calls internal: console.R (center_text)
 #       Purpose: Print stage banner in single-line box with verbose gating
 #
-# Workflow Output - Multi-line workflow summaries:
+# Phase Output - Multi-line phase summaries:
 #
-#   - print_workflow_summary():
+#   - print_phase_summary():
 #       Uses packages: base R (message, sprintf, strrep)
 #       Calls internal: console.R (center_text)
-#       Purpose: Print workflow completion summary in double-line box
+#       Purpose: Print phase completion summary in double-line box
 #
 #   - print_pipeline_complete():
 #       Uses packages: base R (message, strrep, nchar, ceiling, sprintf)
@@ -85,7 +85,7 @@
 #             - Completes console formatting API for run_* orchestrators
 # 2026-02-04: Initial creation - split from utilities.R
 #             - Moved center_text(), print_stage_header()
-#             - Moved print_workflow_summary(), print_pipeline_complete()
+#             - Moved print_phase_summary(), print_pipeline_complete()
 #             - Ensures utilities.R stays under LLM token limits
 #
 # =============================================================================
@@ -142,7 +142,7 @@ center_text <- function(text, width) {
 #' Print Stage Header Box
 #'
 #' @description
-#' Prints a consistently formatted single-line ASCII box for workflow stages.
+#' Prints a consistently formatted single-line ASCII box for phase stages.
 #' Uses ASCII box-drawing characters per CODING_STANDARDS v2.3.
 #'
 #' @param stage_num Character. Stage number (e.g., "7.1", "2.3")
@@ -153,7 +153,7 @@ center_text <- function(text, width) {
 #'
 #' @section CONTRACT:
 #' - Uses single-line ASCII box characters (+-|)
-#' - Consistent width across all workflows
+#' - Consistent width across all phases
 #' - Auto-pads title for centering
 #'
 #' @section DOES NOT:
@@ -265,14 +265,14 @@ print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
 # ==============================================================================
 
 
-#' Print Workflow Completion Summary
+#' Print Phase Completion Summary
 #'
 #' @description
-#' Prints a formatted double-line ASCII box with workflow completion details.
-#' Used at the end of each workflow to summarize outputs.
+#' Prints a formatted double-line ASCII box with phase completion details.
+#' Used at the end of each phase to summarize outputs.
 #'
-#' @param workflow Character. Workflow number (e.g., "07", "05") or chunk
-#'   identifier (e.g., "CHUNK 1", "CHUNK 3")
+#' @param phase_id Character. Phase number/identifier (e.g., "1", "3",
+#'   "MODULE 7") for summary labeling.
 #' @param title Character. Summary title
 #' @param items Named list. Items to display (name = description)
 #' @param width Integer. Total width of box interior. Default: 65
@@ -282,7 +282,7 @@ print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
 #' @section CONTRACT:
 #' - Uses double-line ASCII box characters (+|=)
 #' - Displays each item on its own line
-#' - Consistent width across all workflows
+#' - Consistent width across all phases
 #'
 #' @section DOES NOT:
 #' - Write to log file
@@ -290,8 +290,8 @@ print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
 #'
 #' @examples
 #' \dontrun{
-#' print_workflow_summary(
-#'   workflow = "07",
+#' print_phase_summary(
+#'   phase_id = "3",
 #'   title = "Report Generated",
 #'   items = list(
 #'     "Report" = "bat_activity_report_20260109.html",
@@ -300,14 +300,14 @@ print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
 #' )
 #' # Output:
 #' # +==================================================================+
-#' # ||         WORKFLOW 07 COMPLETE: Report Generated                ||
+#' # ||           PHASE 3 COMPLETE: Report Generated                 ||
 #' # +==================================================================+
 #' #
 #' #   - Report: bat_activity_report_20260109.html
 #' #   - Duration: 12.3 seconds
 #'
-#' print_workflow_summary(
-#'   workflow = "CHUNK 1",
+#' print_phase_summary(
+#'   phase_id = "1",
 #'   title = "Ingest & Standardize Complete",
 #'   items = list(
 #'     "Rows" = "50,000",
@@ -317,10 +317,10 @@ print_stage_banner <- function(stage_name, verbose = FALSE, width = 65) {
 #' }
 #'
 #' @export
-print_workflow_summary <- function(workflow, title, items, width = 65) {
+print_phase_summary <- function(phase_id, title, items, width = 65) {
   
   # Build header text
-  header_text <- sprintf("WORKFLOW %s COMPLETE: %s", workflow, title)
+  header_text <- sprintf("PHASE %s COMPLETE: %s", phase_id, title)
   
   # Center text
   centered <- center_text(header_text, width)
@@ -349,7 +349,7 @@ print_workflow_summary <- function(workflow, title, items, width = 65) {
 #' and next steps guidance. Used only at the end of Phase 3 /
 #' run_phase3_analysis_reporting().
 #'
-#' @param outputs Named list. Output descriptions by workflow
+#' @param outputs Named list. Output descriptions by phase
 #' @param next_steps Character vector. Suggested next steps
 #' @param report_path Character. Path to final report (for browseURL hint)
 #' @param width Integer. Total width of box interior. Default: 65

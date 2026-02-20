@@ -2,7 +2,7 @@
 # ARCHITECTURE STANDARDS
 # ==============================================================================
 # VERSION: 3.0
-# LAST UPDATED: 2026-02-08
+# LAST UPDATED: 2026-02-19
 # PURPOSE: Checkpointed phase orchestration, file organization, and pipeline design
 # ==============================================================================
 
@@ -32,11 +32,6 @@ project_root/
 │   │   ├── run_phase1_data_preparation.R      # Phase 1: Ingestion + Standardization
 │   │   ├── run_phase2_template_generation.R   # Phase 2: CPN Template + human edit
 │   │   └── run_phase3_analysis_reporting.R    # Phase 3: Finalization → Report
-│   │   │
-│   │   ├── [LEGACY - Deprecated]
-│   │   ├── run_ingest_standardize.R           # Deprecated: Use Phase 1
-│   │   ├── run_cpn_template.R                 # Deprecated: Use Phase 2
-│   │   └── run_finalize_to_report.R           # Deprecated: Use Phase 3
 │   │
 │   ├── modules/
 │   │   ├── module_runner.R                    # MODULE EXECUTION LAYER (7 runners)
@@ -72,6 +67,7 @@ project_root/
 │   │   │   └── summarization.R
 │   │   └── output/
 │   │       ├── plot_helpers.R
+│   │       ├── table_helpers.R
 │   │       ├── plot_quality.R
 │   │       ├── plot_detector.R
 │   │       ├── plot_species.R
@@ -218,6 +214,7 @@ Format: `descriptive_name.R` (noun-based, descriptive)
 schema_helpers.R
 datetime_helpers.R
 plot_helpers.R
+table_helpers.R
 validation.R
 validation_reporting.R
 ```
@@ -241,6 +238,7 @@ results/validation/validation_phase2_YYYYMMDD_HHMMSS.html
 **Phase 3 Outputs:**
 ```
 results/csv/CallsPerNight_final_v1.csv
+results/xlsx/summary_stats_YYYYMMDD.xlsx
 results/tables/gt_study_overview_YYYYMMDD.html
 results/figures/png/quality/recording_status_summary_YYYYMMDD.png
 results/rds/summary_data_YYYYMMDD.rds
@@ -893,8 +891,8 @@ summary_table()
 
 | Term | Use | Don't Use |
 |------|-----|-----------|
-| phase | Phases 1-3 in orchestration | chunk, stage |
-| phase orchestrator | run_phase#_*() functions | chunk orchestrator, workflow |
+| phase | Phases 1-3 in orchestration | stage |
+| phase orchestrator | run_phase#_*() functions | workflow |
 | module | Processing modules 1-7 | workflow, orchestrator |
 | module runner | Functions in module_runner.R | debug runner, test runner |
 | detector | Sensors/units in acoustic array | sensor, unit, device |
@@ -981,37 +979,38 @@ run_phase1_data_preparation <- function(verbose = FALSE) {
 The checkpointed phase orchestration architecture guarantees:
 
 1. **Determinism:** Same inputs → same outputs every time
-2. **Reproducibility:** All transformations logged and tracked
-3. **Checkpointing:** Explicit intermediate outputs for validation
-4. **Human Review:** Phase 2 requires manual editing before Phase 3
-5. **Auditability:** All artifacts registered with SHA256 hashes
-6. **Composability:** Phases can be tested independently or chained together
-7. **Shiny Compatibility:** Pure functions with structured returns
-8. **Version Tracking:** Artifact registry tracks all versions
-9. **Validation:** HTML reports at each phase completion
-10. **Forward Data Flow:** Data flows forward through phases, never backward
+2. **Parallel Exports:** CSV, XLSX, RDS, and GT outputs are written from in-memory tibbles (no read-back)
+3. **Reproducibility:** All transformations logged and tracked
+4. **Checkpointing:** Explicit intermediate outputs for validation
+5. **Human Review:** Phase 2 requires manual editing before Phase 3
+6. **Auditability:** All artifacts registered with SHA256 hashes
+7. **Composability:** Phases can be tested independently or chained together
+8. **Shiny Compatibility:** Pure functions with structured returns
+9. **Version Tracking:** Artifact registry tracks all versions
+10. **Validation:** HTML reports at each phase completion
+11. **Forward Data Flow:** Data flows forward through phases, never backward
 
 ---
 
-## 12. DEPRECATION NOTES
+## 12. PHASE ORCHESTRATION ADOPTION NOTES
 
-**Deprecated (still available, not recommended):**
-- `run_ingest_standardize()` → Use `run_phase1_data_preparation()`
-- `run_cpn_template()` → Use `run_phase2_template_generation()`
-- `run_finalize_to_report()` → Use `run_phase3_analysis_reporting()`
-- Legacy workflow scripts 01-07 → Use phase orchestrators
+**Required orchestration model:**
+- Use `run_phase1_data_preparation()` for Phase 1 data preparation
+- Use `run_phase2_template_generation(phase1_result)` for Phase 2 template generation and edit checkpoint
+- Use `run_phase3_analysis_reporting(phase2_result, edited_template_file)` for Phase 3 analysis/reporting
+- Pass structured phase results forward between phases
 
-**Why deprecated:**
-- Chunk-based terminology replaced by phase-based architecture
-- No structured result passing between chunks
-- No human-in-the-loop support
-- Less clear checkpointing
+**Why this model is required:**
+- Explicit phase boundaries and checkpoints
+- Structured result passing between phases
+- Human-in-the-loop support in Phase 2
+- Clear validation and recovery points
 
-**Migration path:**
-1. Replace `run_ingest_standardize()` calls with `run_phase1_data_preparation()`
-2. Replace `run_cpn_template()` calls with `run_phase2_template_generation(phase1_result)`
-3. Replace `run_finalize_to_report()` calls with `run_phase3_analysis_reporting(phase2_result)`
-4. Update to phase result passing pattern
+**Implementation pattern:**
+1. Execute Phase 1 and capture `phase1_result`
+2. Execute Phase 2 with `phase1_result` and capture `phase2_result`
+3. Complete template edit and provide `edited_template_file`
+4. Execute Phase 3 with `phase2_result` and `edited_template_file`
 
 ---
 
@@ -1024,11 +1023,11 @@ The checkpointed phase orchestration architecture guarantees:
 - Documented phase result passing pattern
 - Added human-in-the-loop checkpoint documentation
 - Moved module_runner.R from R/debug/ to R/modules/ as core infrastructure
-- Updated all terminology from "chunks" to "phases"
-- Marked legacy orchestrators as deprecated
+- Standardized terminology to phase-based architecture
+- Consolidated orchestration guidance around phase orchestrators
 - Total rewrite: 787 lines → 600 lines (consolidated)
 - Added new sections: Overview, Phase Orchestration, Module Execution Layer
-- Removed Chunk-specific processing stage definitions
+- Removed obsolete processing stage definitions
 
 **v2.5 (2026-02-05)**
 - Updated to modularized 7-module pipeline
@@ -1039,7 +1038,7 @@ The checkpointed phase orchestration architecture guarantees:
 - Minor updates to orchestrator patterns
 
 **v2.3 (2026-01-31)**
-- Updated chunk-based terminology
+- Updated architecture terminology
 - Added structured return documentation
 
 ---

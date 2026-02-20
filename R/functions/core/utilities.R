@@ -13,7 +13,7 @@
 # NOTE: Related modules have been split out for focused concerns:
 #   - core/logging.R: log_message(), initialize_pipeline_log()
 #   - core/console.R: center_text(), print_stage_header(), 
-#                     print_workflow_summary(), print_pipeline_complete()
+#                     print_phase_summary(), print_pipeline_complete()
 #   - core/orchestration_helpers.R: setup_pipeline_context(), log_stage_start(),
 #                                   save_checkpoint_and_register(), etc.
 #
@@ -128,11 +128,6 @@
 #       Calls internal: none (pure I/O)
 #       Purpose: Save summary table as CSV with timestamped filename
 #
-#   - build_excel_from_csv():
-#       Uses packages: readxl, writexl, dplyr (read operations)
-#       Calls internal: none
-#       Purpose: Convert CSV to Excel workbook format
-#
 #   - verify_rds_artifacts():
 #       Uses packages: base R (file.exists, readRDS)
 #       Calls internal: none
@@ -156,8 +151,8 @@
 #   Console formatting -> console.R:
 #     - center_text()
 #     - print_stage_header()
-#     - print_stage_banner() (deprecated - use print_workflow_summary)
-#     - print_workflow_summary()
+#     - print_stage_banner() (deprecated - use print_phase_summary)
+#     - print_phase_summary()
 #     - print_pipeline_complete()
 #   
 #   Orchestrator helpers -> orchestration_helpers.R:
@@ -466,7 +461,7 @@ convert_empty_to_na <- function(df, columns) {
 #' latest <- find_most_recent_file(
 #'   directory = "outputs/checkpoints",
 #'   pattern = "^02_kpro_master_.*\\.csv$",
-#'   hint = "Run Chunk 1 first"
+#'   hint = "Run Phase 1 first"
 #' )
 #' }
 #'
@@ -533,9 +528,9 @@ find_most_recent_file <- function(directory,
 #' Generate Timestamped Output Path
 #'
 #' @description
-#' Creates an output file path with workflow prefix and timestamp.
+#' Creates an output file path with phase/module prefix and timestamp.
 #'
-#' @param workflow_num Character. Workflow number (e.g., "02", "04").
+#' @param phase_num Character. Phase/module number (e.g., "02", "04").
 #' @param base_name Character. Base name for file.
 #' @param extension Character. File extension. Default: "csv"
 #' @param output_dir Character. Output directory. Default: "outputs"
@@ -543,7 +538,7 @@ find_most_recent_file <- function(directory,
 #' @return Character. Full file path string.
 #'
 #' @section CONTRACT:
-#' - Includes workflow number prefix
+#' - Includes phase/module number prefix
 #' - Adds timestamp (YYYYMMDD_HHMMSS)
 #' - Returns full path (does not create file or directory)
 #'
@@ -559,13 +554,13 @@ find_most_recent_file <- function(directory,
 #' }
 #'
 #' @export
-make_output_path <- function(workflow_num,
+make_output_path <- function(phase_num,
                              base_name,
                              extension = "csv",
                              output_dir = "outputs") {
   
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  filename <- sprintf("%s_%s_%s.%s", workflow_num, base_name, timestamp, extension)
+  filename <- sprintf("%s_%s_%s.%s", phase_num, base_name, timestamp, extension)
   
   file.path(output_dir, filename)
 }
@@ -576,7 +571,7 @@ make_output_path <- function(workflow_num,
 #' @description
 #' Creates output path with auto-incrementing version number.
 #'
-#' @param workflow_num Character. Workflow number.
+#' @param phase_num Character. Phase/module number.
 #' @param base_name Character. Base name for file.
 #' @param extension Character. File extension. Default: "csv"
 #' @param output_dir Character. Output directory. Default: "outputs"
@@ -601,12 +596,12 @@ make_output_path <- function(workflow_num,
 #' }
 #'
 #' @export
-make_versioned_path <- function(workflow_num,
+make_versioned_path <- function(phase_num,
                                 base_name,
                                 extension = "csv",
                                 output_dir = "outputs") {
   
-  pattern <- sprintf("^%s_%s_v(\\d+)\\.%s$", workflow_num, base_name, extension)
+  pattern <- sprintf("^%s_%s_v(\\d+)\\.%s$", phase_num, base_name, extension)
   existing <- list.files(output_dir, pattern = pattern)
   
   if (length(existing) == 0) {
@@ -616,7 +611,7 @@ make_versioned_path <- function(workflow_num,
     next_version <- max(versions) + 1
   }
   
-  filename <- sprintf("%s_%s_v%d.%s", workflow_num, base_name, next_version, extension)
+  filename <- sprintf("%s_%s_v%d.%s", phase_num, base_name, next_version, extension)
   
   file.path(output_dir, filename)
 }
@@ -693,13 +688,13 @@ fill_readme_template <- function(template_path,
 #'
 #' @description
 #' Consolidates stage lifecycle logging by combining print_stage_header() + log_message()
-#' into one call. Reduces boilerplate when starting each orchestrator workflow stage.
+#' into one call. Reduces boilerplate when starting each orchestrator phase stage.
 #'
 #' @param stage_num Character. Stage number (e.g., "1", "2.3", "7.1")
 #' @param title Character. Stage title (e.g., "Load Configuration")
 #' @param verbose Logical. Print to console? Default: FALSE
 #' @param log_path Character. Path to log file. Default: "logs/pipeline_log.txt"
-#' @param workflow_prefix Character. Optional prefix for log messages
+#' @param phase_prefix Character. Optional phase/module prefix for log messages
 #'   (e.g., "Finalize CPN"). Default: ""
 #'
 #' @return Invisible NULL.
@@ -722,9 +717,9 @@ fill_readme_template <- function(template_path,
 #' # Console: +----STAGE 1: Load Configuration----+
 #' # Log:     [2026-02-05 12:34:56] [Stage 1] Load Configuration
 #'
-#' # With workflow prefix
+#' # With phase/module prefix
 #' log_stage_start("2", "Generate Template", verbose = FALSE,
-#'                workflow_prefix = "Finalize CPN")
+#'                phase_prefix = "Finalize CPN")
 #' # Console: (silent)
 #' # Log:     [2026-02-05 12:34:56] [Finalize CPN - Stage 2] Generate Template
 #' }
@@ -734,7 +729,7 @@ log_stage_start <- function(stage_num,
                            title,
                            verbose = FALSE,
                            log_path = "logs/pipeline_log.txt",
-                           workflow_prefix = "") {
+                           phase_prefix = "") {
   
   # Print to console if verbose
   if (verbose) {
@@ -742,8 +737,8 @@ log_stage_start <- function(stage_num,
   }
   
   # Build log message
-  if (nchar(workflow_prefix) > 0) {
-    log_msg <- sprintf("[%s - Stage %s] %s", workflow_prefix, stage_num, title)
+  if (nchar(phase_prefix) > 0) {
+    log_msg <- sprintf("[%s - Stage %s] %s", phase_prefix, stage_num, title)
   } else {
     log_msg <- sprintf("[Stage %s] %s", stage_num, title)
   }
@@ -773,7 +768,7 @@ log_stage_start <- function(stage_num,
 #' @param artifact_name Character. Unique name for artifact registry. If NULL,
 #'   will be generated from checkpoint_name. Default: NULL.
 #' @param artifact_type Character. Type of artifact (e.g., "checkpoint", "masterfile").
-#' @param workflow Character. Workflow that produced this artifact.
+#' @param phase_id Character. Phase/module identifier that produced this artifact.
 #' @param metadata List. Additional metadata for registry entry. Default: list().
 #' @param data_hash Character. Optional data frame hash for reproducibility.
 #'   Default: NULL.
@@ -807,7 +802,7 @@ log_stage_start <- function(stage_num,
 #'   file_path = here::here("outputs", "checkpoints", "02_kpro_master_20260205.csv"),
 #'   artifact_name = "kpro_master_20260205",
 #'   artifact_type = "masterfile",
-#'   workflow = "ingest",
+#'   phase_id = "ingest",
 #'   metadata = list(n_rows = nrow(kpro_master)),
 #'   verbose = TRUE
 #' )
@@ -818,7 +813,7 @@ log_stage_start <- function(stage_num,
 #'   checkpoint_name = "CallsPerNight_final",
 #'   output_dir = here::here("results", "csv"),
 #'   artifact_type = "cpn_final",
-#'   workflow = "finalize_cpn",
+#'   phase_id = "finalize_cpn",
 #'   metadata = list(n_rows = nrow(cpn_final)),
 #'   verbose = TRUE
 #' )
@@ -832,7 +827,7 @@ save_checkpoint_and_register <- function(data,
                                         output_dir = "outputs/checkpoints",
                                         artifact_name = NULL,
                                         artifact_type,
-                                        workflow,
+                                        phase_id,
                                         metadata = list(),
                                         data_hash = NULL,
                                         verbose = FALSE,
@@ -900,7 +895,7 @@ save_checkpoint_and_register <- function(data,
     registry = registry,
     artifact_name = artifact_name,
     artifact_type = artifact_type,
-    workflow = workflow,
+    phase_id = phase_id,
     file_path = file_path,
     metadata = metadata,
     data_hash = data_hash,
@@ -925,7 +920,7 @@ save_checkpoint_and_register <- function(data,
 #'
 #' @param validation_context List. Validation context from create_validation_context().
 #' @param stage_name Character. Optional stage name for display in report.
-#'   Default: NULL (uses workflow from context).
+#'   Default: NULL (uses phase/module identifier from context).
 #' @param verbose Logical. Print confirmation message? Default: FALSE.
 #' @param output_dir Character. Directory for validation HTML.
 #'   Default: "results/validation"
@@ -1058,91 +1053,6 @@ save_summary_csv <- function(data, filename, output_dir = "results/csv/summary_s
   
   # Add path attribute for easy reference
   structure(registry, file_path = file_path)
-}
-
-
-#' Build Excel Workbook from CSV Files
-#'
-#' @description
-#' Compiles multiple CSV files into a single Excel workbook with one
-#' sheet per CSV. Ensures consistency between CSV and Excel formats.
-#'
-#' @param csv_files Named character vector. Names are sheet names, values are file paths.
-#'   Example: c("Detector Summary" = "path/to/detector.csv", ...)
-#' @param output_file Character. Path to output XLSX file.
-#' @param registry List. Artifact registry for registration.
-#' @param artifact_name Character. Name for artifact entry.
-#' @param workflow Character. Workflow name for metadata. Default: "summary_stats".
-#' @param metadata List. Additional metadata for artifact registration.
-#' @param verbose Logical. Print progress. Default: FALSE.
-#'
-#' @return List with registry attribute.
-#'
-#' @section CONTRACT:
-#' - Requires openxlsx package (returns TRUE if unavailable)
-#' - Creates output directory if needed
-#' - Reads CSVs and creates sheets in workbook
-#' - Registers completed Excel file as artifact
-#' - Returns updated registry with file_path attribute
-#'
-#' @keywords internal
-#' @export
-build_excel_from_csv <- function(csv_files, output_file, registry = NULL,
-                                 artifact_name = NULL, workflow = "summary_stats",
-                                 metadata = NULL, verbose = FALSE) {
-  
-  # Check if openxlsx is available
-  if (!requireNamespace("openxlsx", quietly = TRUE)) {
-    if (verbose) message("  [SKIP] openxlsx not installed - Excel export skipped")
-    return(structure(registry, file_path = NA_character_))
-  }
-  
-  # Ensure output directory exists
-  ensure_dir_exists(dirname(output_file))
-  
-  # Create new workbook
-  wb <- openxlsx::createWorkbook()
-  
-  # Add each CSV as a sheet
-  for (sheet_name in names(csv_files)) {
-    csv_path <- csv_files[[sheet_name]]
-    
-    if (!file.exists(csv_path)) {
-      warning(sprintf("CSV file not found: %s", csv_path))
-      next
-    }
-    
-    # Read CSV
-    df <- readr::read_csv(csv_path, show_col_types = FALSE)
-    
-    # Add sheet to workbook
-    openxlsx::addWorksheet(wb, sheet_name)
-    openxlsx::writeData(wb, sheet = sheet_name, df)
-  }
-  
-  # Save workbook
-  openxlsx::saveWorkbook(wb, output_file, overwrite = TRUE)
-  
-  if (verbose) {
-    message(sprintf("  [OK] Compiled Excel: %s (%d sheets)",
-                    basename(output_file), length(csv_files)))
-  }
-  
-  # Register artifact
-  if (!is.null(registry) && !is.null(artifact_name)) {
-    registry <- save_and_register_rds(
-      object = NULL,
-      file_path = output_file,
-      artifact_type = "xlsx",
-      artifact_name = artifact_name,
-      workflow = workflow,
-      registry = registry,
-      metadata = metadata,
-      verbose = FALSE
-    )
-  }
-  
-  structure(registry, file_path = output_file)
 }
 
 

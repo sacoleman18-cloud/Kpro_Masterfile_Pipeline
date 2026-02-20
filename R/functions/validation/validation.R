@@ -4,11 +4,11 @@
 # Classification: Helper/Utility Function Module
 # - Part of R/functions/ → Contains reusable helper functions only
 # - Provides centralized assertion and validation functions
-# - Used by all modules and workflows
+# - Used by modules across all pipeline phases
 # PURPOSE
 # -------
 # Provides comprehensive data validation, input assertion, and schema
-# enforcement for all pipeline workflows. Contains both universal helpers
+# enforcement across the full pipeline phases. Contains both universal helpers
 # (usable across any script) and domain-specific validators for KPro data.
 #
 # This module is the central authority for data quality validation. It focuses
@@ -16,7 +16,7 @@
 # execution tracking or reporting (see validation_reporting.R for that).
 #
 # By centralizing validation logic here, we ensure consistent error messages,
-# reduce code duplication across workflows, and make the codebase easier to
+# reduce code duplication across phases, and make the codebase easier to
 # maintain.
 #
 # VALIDATION CONTRACT
@@ -31,7 +31,7 @@
 #
 # 2. Composite validators (validate_* functions)
 #    - Combine multiple assertions for common patterns
-#    - Reduce boilerplate in workflow scripts
+#    - Reduce boilerplate in phase orchestrator scripts
 #    - Domain-aware where appropriate
 #
 # 3. Schema enforcement (enforce_* functions)
@@ -342,7 +342,7 @@ assert_row_count <- function(df, expected_rows, arg_name = "Data") {
 #'
 #' @description
 #' Validates that all required columns are present in data frame. Provides
-#' helpful hints about which workflow produces the expected data.
+#' helpful hints about which phase/module produces the expected data.
 #'
 #' Standards Reference: 03_code_design_standards.md §2.2
 #'
@@ -734,7 +734,7 @@ assert_scalar_string <- function(x, arg_name = "Value") {
 #'
 #' @description
 #' Performs standard validation: is data frame, not empty, has required columns.
-#' Combines multiple assertions into one call for cleaner workflow code.
+#' Combines multiple assertions into one call for cleaner phase orchestration code.
 #'
 #' Standards Reference: 03_code_design_standards.md §2.5
 #'

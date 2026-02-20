@@ -67,6 +67,7 @@
 #'     \item \code{metadata}: List with template dimensions and configuration
 #'     \item \code{template_edit_path}: Path to EDIT_THIS template file
 #'     \item \code{template_original_path}: Path to ORIGINAL template file
+#'     \item \code{artifact_ids}: Named list of registered artifact IDs (original/edit)
 #'   }
 #'
 #' @examples
@@ -103,7 +104,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("1", "Load Configuration", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   # Setup pipeline context (if not provided)
   if (is.null(study_params)) {
@@ -148,7 +149,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("2", "Load Master Data", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   manual_id_used <- FALSE
   
@@ -222,7 +223,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("3", "Species Column Integration", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   # Add manual_id column if missing (for consistency)
   if (!"manual_id" %in% names(kpro_master)) {
@@ -289,7 +290,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("4", "Calculate Study Nights", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   # Get recording start from YAML
   recording_start <- study_params$processing_options$recording_start %||% "18:00:00"
@@ -323,7 +324,7 @@ module_cpn_template <- function(kpro_master = NULL,
     data = kpro_master,
     file_path = kpro_master_checkpoint,
     artifact_type = "checkpoint",
-    workflow = "cpn_template",
+    phase_id = "cpn_template",
     metadata = list(
       n_rows = nrow(kpro_master),
       n_species = dplyr::n_distinct(kpro_master$species),
@@ -375,7 +376,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("5", "Generate Template Grid", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   # Get recording schedule configuration
   schedule <- get_schedule_config(study_params)
@@ -436,7 +437,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("6", "Verify Recording Schedule", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   if (!is_advanced_scheduling) {
     # Uniform schedule was applied
@@ -466,7 +467,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("7", "Format Template for Excel", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   # Remove Warning column
   if ("Warning" %in% names(cpn_template)) {
@@ -543,7 +544,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("8", "Save Templates & Register", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   # Save ORIGINAL template
   original_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "ORIGINAL")
@@ -555,7 +556,7 @@ module_cpn_template <- function(kpro_master = NULL,
     file_path = original_path,
     artifact_name = artifact_id_original,
     artifact_type = "cpn_template",
-    workflow = "cpn_template",
+    phase_id = "cpn_template",
     metadata = list(
       n_rows = nrow(cpn_template),
       n_detectors = length(detectors),
@@ -577,7 +578,7 @@ module_cpn_template <- function(kpro_master = NULL,
     file_path = edit_path,
     artifact_name = artifact_id_edit,
     artifact_type = "cpn_template",
-    workflow = "cpn_template",
+    phase_id = "cpn_template",
     metadata = list(
       n_rows = nrow(cpn_template),
       n_detectors = length(detectors),
@@ -597,7 +598,7 @@ module_cpn_template <- function(kpro_master = NULL,
   # ===========================================================================
   
   log_stage_start("9", "Render Validation Report", verbose = verbose,
-                  workflow_prefix = "CPN Template")
+                  phase_prefix = "CPN Template")
   
   validation_context$summary$rows_processed <- nrow(cpn_template)
   validation_context$summary$n_detectors <- length(detectors)
