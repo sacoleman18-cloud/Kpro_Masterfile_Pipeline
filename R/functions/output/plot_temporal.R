@@ -22,7 +22,7 @@
 #   - scales: Axis formatting (comma, percent, date labels)
 #
 # Internal Dependencies:
-#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
+#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_detector(),
 #                     format_number()
 #
 # FUNCTIONS PROVIDED
@@ -33,14 +33,14 @@
 #   - plot_activity_over_time():
 #       Uses packages: ggplot2 (ggplot, aes, geom_line, geom_point, facet_wrap)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Line plot of calls per night by detector over study period
 #
 #   - plot_cumulative_calls_over_time():
 #       Uses packages: ggplot2 (ggplot, aes, geom_line, geom_area, facet_wrap),
 #                      dplyr (group_by, mutate, cumsum)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Running total (cumulative sum) of calls over time by detector
 #
 # Within-Night Patterns - Activity by hour of night:
@@ -49,14 +49,14 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
 #                      dplyr (group_by, summarize)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Bar plot of call counts by hour, aggregated across all nights
 #
 #   - plot_callsperhour_distribution():
 #       Uses packages: ggplot2 (ggplot, aes, geom_histogram, facet_wrap),
 #                      dplyr (group_by, mutate)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Histogram of calls per hour (samples one hour per night)
 #
 # Seasonal Patterns - Aggregations over longer time periods:
@@ -65,14 +65,14 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
 #                      dplyr (group_by, summarize), lubridate (week, year)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Bar plot of activity by week across study period
 #
 #   - plot_activity_by_month():
 #       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
 #                      dplyr (group_by, summarize), lubridate (month, year)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Bar plot of activity by month across study period
 # USAGE
 # -----
@@ -117,7 +117,7 @@
 #'
 #' @details
 #' Each detector is shown as a separate colored line. Colors are assigned
-#' from the colorblind-accessible kpro_palette_cat().
+#' from the detector palette via kpro_palette_detector().
 #'
 #' For studies with many detectors (>8), the legend may become crowded.
 #' Consider faceting by detector or using plot_synchrony() instead.
@@ -177,6 +177,9 @@ plot_activity_over_time <- function(calls_per_night, show_points = FALSE) {
   
   n_detectors <- dplyr::n_distinct(plot_data$Detector)
   
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(plot_data$Detector))
+  
   # Build base plot
   p <- ggplot(
     plot_data,
@@ -184,7 +187,7 @@ plot_activity_over_time <- function(calls_per_night, show_points = FALSE) {
   ) +
     geom_line(alpha = 0.8) +
     scale_y_continuous(labels = scales::comma) +
-    scale_color_manual(values = kpro_palette_cat(n_detectors)) +
+    scale_color_manual(values = detector_color_map) +
     labs(
       title = "Bat Activity Over Time",
       x = "Night",
@@ -275,12 +278,15 @@ plot_cumulative_calls_over_time <- function(calls_per_night,
     
     n_detectors <- dplyr::n_distinct(cumulative$Detector)
     
+    # Get stable color mapping for all detectors
+    detector_color_map <- get_detector_color_mapping(unique(cumulative$Detector))
+    
     p <- ggplot(
       cumulative,
       aes(x = Night, y = cumulative_calls, color = Detector)
     ) +
       geom_line(linewidth = 1) +
-      scale_color_manual(values = kpro_palette_cat(n_detectors))
+      scale_color_manual(values = detector_color_map)
     
   } else {
     # Calculate study-wide cumulative
@@ -670,7 +676,7 @@ plot_weekly_activity <- function(calls_per_night, by_detector = FALSE) {
   p <- ggplot(weekly_summary, aes(x = Week, y = total_calls)) +
     geom_col(fill = "#009E73") +
     scale_y_continuous(labels = scales::comma) +
-    scale_x_date(date_labels = "%b %d", date_breaks = "2 weeks") +
+    scale_x_date(date_labels = "%b %d", date_breaks = "1 week") +
     labs(
       title = "Weekly Bat Activity",
       x = "Week Starting",
@@ -760,12 +766,15 @@ plot_activity_by_month <- function(calls_per_night, by_detector = FALSE) {
     
     n_detectors <- dplyr::n_distinct(monthly_summary$Detector)
     
+    # Get stable color mapping for all detectors
+    detector_color_map <- get_detector_color_mapping(unique(monthly_summary$Detector))
+    
     p <- ggplot(
       monthly_summary,
       aes(x = Month, y = total_calls, fill = Detector)
     ) +
       geom_col(position = "stack") +
-      scale_fill_manual(values = kpro_palette_cat(n_detectors))
+      scale_fill_manual(values = detector_color_map)
     
   } else {
     monthly_summary <- monthly_data %>%

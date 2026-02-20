@@ -55,13 +55,13 @@
 #   - plot_effort_by_detector():
 #       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (arrange)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Bar chart of total recording hours per detector
 #
 #   - plot_nights_by_detector():
 #       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (arrange)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Bar chart of recording nights per detector
 #
 # Data Completeness - Missing data visualization:
@@ -241,8 +241,8 @@ plot_recording_status_summary <- function(calls_per_night, show_counts = TRUE) {
 #'
 #' @description
 #' Creates a 100% stacked bar chart showing the proportion of Success/
-#' Partial/Fail nights for each detector. Easier to compare relative data
-#' quality across detectors than raw counts.
+#' Partial/Fail nights for each detector, with count labels inside bars.
+#' Easier to compare relative data quality across detectors than raw counts.
 #'
 #' @param calls_per_night Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
@@ -265,7 +265,7 @@ plot_recording_status_summary <- function(calls_per_night, show_counts = TRUE) {
 #' - 90% threshold line shown for reference
 #'
 #' @section DOES NOT:
-#' - Show raw counts (use plot_recording_status_summary)
+#' - Show a separate raw-count-only view (counts are embedded here)
 #' - Define quality thresholds (90% line is suggestive only)
 #'
 #' @examples
@@ -304,7 +304,7 @@ plot_recording_status_percent <- function(calls_per_night) {
     dplyr::mutate(Detector = factor(Detector, levels = detector_order))
   
   # Build plot
-  ggplot(status_pct, aes(x = Detector, y = pct, fill = Status)) +
+  ggplot(status_pct, aes(x = Detector, y = n_nights, fill = Status)) +
     geom_col(position = "fill") +
     scale_fill_manual(values = kpro_status_colors()) +
     scale_y_continuous(
@@ -312,8 +312,15 @@ plot_recording_status_percent <- function(calls_per_night) {
       expand = expansion(mult = c(0, 0))
     ) +
     geom_hline(yintercept = 0.9, linetype = "dashed", color = "gray30") +
+    geom_text(
+      data = status_pct %>% dplyr::filter(n_nights > 0),
+      aes(label = n_nights),
+      position = position_stack(vjust = 0.5),
+      size = 3,
+      color = "white"
+    ) +
     labs(
-      title = "Recording Status Breakdown by Detector",
+      title = "Recording Status by Detector",
       subtitle = "Dashed line = 90% threshold",
       x = "Detector",
       y = "Percentage",
@@ -488,10 +495,11 @@ plot_effort_by_detector <- function(calls_per_night) {
     dplyr::mutate(Detector = factor(Detector, levels = Detector))
   
   study_mean <- mean(effort_summary$total_hours)
+  detector_color_map <- get_detector_color_mapping(unique(calls_per_night$Detector))
   
   # Build plot
-  ggplot(effort_summary, aes(x = total_hours, y = Detector)) +
-    geom_col(fill = "#0072B2") +
+  ggplot(effort_summary, aes(x = total_hours, y = Detector, fill = Detector)) +
+    geom_col() +
     geom_vline(
       xintercept = study_mean,
       linetype = "dashed",
@@ -506,13 +514,15 @@ plot_effort_by_detector <- function(calls_per_night) {
       expand = expansion(mult = c(0, 0.15)),
       labels = scales::comma
     ) +
+    scale_fill_manual(values = detector_color_map) +
     labs(
       title = "Total Recording Effort by Detector",
       subtitle = sprintf("Dashed line = study mean (%.0f hrs)", study_mean),
       x = "Total Recording Hours",
       y = "Detector"
     ) +
-    theme_kpro()
+    theme_kpro() +
+    theme(legend.position = "none")
 }
 
 
@@ -520,42 +530,58 @@ plot_effort_by_detector <- function(calls_per_night) {
 #'
 #' @description
 #' Creates a horizontal bar chart showing how many nights each detector
-#' was active. Useful for understanding deployment coverage and identifying
-#' detectors with fewer recording nights than expected.
+#' successfully recorded (i.e., had RecordingHours > 0). Useful for
+#' understanding deployment coverage and identifying detectors with fewer
+#' active nights than expected.
 #'
-#' @param calls_per_night Data frame. Must contain column:
+#' A "recording night" is defined as any night where the detector had
+#' RecordingHours > 0. Nights with RecordingHours = 0 or NA are excluded.
+#'
+#' @param calls_per_night Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
+#'   - RecordingHours: Numeric. Hours of recording for each night (can be 0).
 #' @param highlight_threshold Integer or NULL. If specified, detectors with
 #'   fewer nights than this threshold are highlighted in a warning color.
 #'   Default is NULL (no highlighting).
 #'
-#' @return ggplot object showing number of nights by detector.
+#' @return ggplot object showing number of active recording nights by detector.
 #'
 #' @details
-#' Detectors are ordered by ascending number of nights, so detectors with
+#' Data structure: Input typically contains one row per detector × night
+#' combination within the study period. The complete grid may include rows
+#' with RecordingHours = 0 for gaps or non-deployment nights.
+#'
+#' Counting logic: Only rows where `!is.na(RecordingHours) & RecordingHours > 0`
+#' are counted as "nights with data". Rows with RecordingHours = 0 (gaps,
+#' failed equipment, or non-deployment) are correctly excluded.
+#'
+#' Ordering: Detectors are sorted by ascending night count, so detectors with
 #' the fewest nights appear at the top for easy identification.
 #'
-#' If highlight_threshold is set, detectors below the threshold are shown
-#' in orange/vermillion to draw attention to potentially problematic
-#' deployments.
+#' Highlighting: If `highlight_threshold` is set, detectors below the threshold
+#' are shown in orange to draw attention to potentially problematic deployments.
 #'
 #' @section CONTRACT:
-#' - Returns a ggplot object
-#' - Detectors ordered by ascending night count
-#' - Count labels on each bar
-#' - Optional threshold highlighting
+#' - Returns a ggplot object with detector names and night counts
+#' - Detectors ordered by ascending night count (fewest first)
+#' - Count labels on each bar showing exact number of nights
+#' - Only counts nights where RecordingHours > 0
+#' - Optional threshold highlighting with distinct fill colors
+#' - Detector palette applied if no threshold specified
 #'
 #' @section DOES NOT:
-#' - Show recording hours (use plot_effort_by_detector)
-#' - Account for expected deployment length
-#' - Distinguish Success/Partial/Fail nights
+#' - Show total recording hours (use plot_effort_by_detector for that)
+#' - Account for expected deployment length or detector schedules
+#' - Distinguish between Success/Partial/Fail status categories
+#' - Include nights with zero recording hours in the count
+#' - Provide statistical testing for differences in night counts
 #'
 #' @examples
 #' \dontrun{
-#' # Basic usage
+#' # Basic usage - all detectors colored by palette
 #' p <- plot_nights_by_detector(calls_per_night_final)
 #'
-#' # Highlight detectors with fewer than 20 nights
+#' # Highlight detectors with fewer than 20 nights in warning color
 #' p <- plot_nights_by_detector(cpn, highlight_threshold = 20)
 #' }
 #'
@@ -565,13 +591,25 @@ plot_nights_by_detector <- function(calls_per_night, highlight_threshold = NULL)
   # Validate input
   validate_plot_input(
     calls_per_night,
-    required_cols = "Detector",
+    required_cols = c("Detector", "RecordingHours"),
+    numeric_cols = "RecordingHours",
     df_name = "calls_per_night"
   )
   
-  # Count nights per detector
+  # DETERMINISTIC: Data structure validation
+  # Expected: One row per Detector × Night combination within study period
+  #         RecordingHours: numeric values (0, NA, or positive)
+  # Output: Summary per detector showing count of rows where RecordingHours > 0
+  
+  # Count nights with recording present per detector
+  # Only counts rows where RecordingHours > 0 (excludes zeros and NAs)
   nights_summary <- calls_per_night %>%
-    dplyr::count(Detector, name = "n_nights") %>%
+    dplyr::mutate(has_data = !is.na(RecordingHours) & RecordingHours > 0) %>%
+    dplyr::group_by(Detector) %>%
+    dplyr::summarise(
+      n_nights = sum(has_data, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
     dplyr::arrange(n_nights) %>%
     dplyr::mutate(Detector = factor(Detector, levels = Detector))
   
@@ -590,8 +628,11 @@ plot_nights_by_detector <- function(calls_per_night, highlight_threshold = NULL)
         guide = "none"
       )
   } else {
-    p <- ggplot(nights_summary, aes(x = n_nights, y = Detector)) +
-      geom_col(fill = "#0072B2")
+    detector_color_map <- get_detector_color_mapping(unique(nights_summary$Detector))
+    p <- ggplot(nights_summary, aes(x = n_nights, y = Detector, fill = Detector)) +
+      geom_col() +
+      scale_fill_manual(values = detector_color_map) +
+      theme(legend.position = "none")
   }
   
   # Add common elements
@@ -618,37 +659,55 @@ plot_nights_by_detector <- function(calls_per_night, highlight_threshold = NULL)
 #' Data Completeness Calendar
 #'
 #' @description
-#' Creates a calendar-style heatmap showing which nights have data for each
-#' detector. Provides a quick visual for identifying gaps in coverage across
-#' the study period.
+#' Creates a calendar-style heatmap showing which nights have recording data
+#' for each detector. Provides a quick visual for identifying gaps in coverage
+#' across the study period.
+#'
+#' A night is marked as "data present" if that detector × night combination
+#' has RecordingHours > 0. All other rows (including those with RecordingHours = 0)
+#' are marked as "missing".
 #'
 #' @param calls_per_night Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
-#'   - Night: Date. Night of recording.
+#'   - Night: Date. Night of recording (must be valid Date class).
+#'   - RecordingHours: Numeric. Hours of recording (0 = missing data).
 #'
-#' @return ggplot object showing data completeness grid.
+#' @return ggplot object showing data completeness grid by detector and week.
 #'
 #' @details
-#' The plot shows every night in the study period for every detector:
-#' - Green cells: Data present
-#' - Red/pink cells: Data missing
+#' Grid construction: The function expands to a complete Detector × Night grid
+#' for the entire study period, then marks each cell as having data (green) or
+#' missing data (red) based on whether RecordingHours > 0.
 #'
-#' This makes gaps in coverage immediately visible, helping identify:
+#' Time binning: Nights are grouped into weeks for the x-axis to reduce visual
+#' density. Green cells indicate at least one night with RecordingHours > 0
+#' in that week for that detector.
+#'
+#' Visual elements:
+#' - Green cells: Data present (RecordingHours > 0)
+#' - Red/pink cells: Data missing (RecordingHours = 0 or NA)
+#' - White borders: Week boundaries
+#'
+#' Use cases: Helps identify:
 #' - Equipment failures mid-study
 #' - Delayed deployments
-#' - Early retrievals
-#' - Systematic gaps (e.g., weekly maintenance)
+#' - Early retrievals  
+#' - Systematic gaps (e.g., weekly maintenance windows)
+#' - Detectors with incomplete coverage
 #'
 #' @section CONTRACT:
 #' - Returns a ggplot object
-#' - All dates from study start to end shown
-#' - All detectors shown
-#' - Binary (present/missing) visualization
+#' - Complete detector × week grid shown for study period
+#' - Binary coloring (green = has data, red = missing)
+#' - Data presence defined by RecordingHours > 0
+#' - Accurate representation of input data structure
 #'
 #' @section DOES NOT:
-#' - Show recording hours or quality
-#' - Distinguish partial from complete nights
+#' - Show recording hours or quality metrics
+#' - Distinguish partial from complete coverage nights
 #' - Account for intentional non-deployment periods
+#' - Provide statistical summaries of completeness
+#' - Include row labels on y-axis if detector count is very high
 #'
 #' @examples
 #' \dontrun{
@@ -662,13 +721,46 @@ plot_data_completeness_calendar <- function(calls_per_night) {
   # Validate input
   validate_plot_input(
     calls_per_night,
-    required_cols = c("Detector", "Night"),
+    required_cols = c("Detector", "Night", "RecordingHours"),
     date_cols = "Night",
+    numeric_cols = "RecordingHours",
+    df_name = "calls_per_night"
+  )
+  
+  # DETERMINISTIC: Complete grid construction
+  # Step 1: Identify study period date range from all valid Night values
+  # Step 2: Expand to full Detector × Night grid (all combinations)
+  # Step 3: Left-join with input data, marking has_data = RecordingHours > 0
+  # Step 4: Group nights into weeks for display
+  # Output: Binary heatmap (presence/absence of data)
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Detector", "Night", "RecordingHours"),
+    date_cols = "Night",
+    numeric_cols = "RecordingHours",
     df_name = "calls_per_night"
   )
   
   # Create complete grid for study period
-  date_range <- range(calls_per_night$Night)
+  valid_nights <- calls_per_night$Night[!is.na(calls_per_night$Night)]
+  if (length(valid_nights) == 0) {
+    warning("No valid Night values available for completeness calendar")
+    return(
+      ggplot() +
+        annotate(
+          "text",
+          x = 0.5,
+          y = 0.5,
+          label = "No valid date data\nfor completeness calendar",
+          size = 5,
+          hjust = 0.5
+        ) +
+        theme_void() +
+        labs(title = "Data Completeness by Detector")
+    )
+  }
+
+  date_range <- range(valid_nights)
   all_nights <- seq(date_range[1], date_range[2], by = 1)
   all_detectors <- unique(calls_per_night$Detector)
   
@@ -681,9 +773,11 @@ plot_data_completeness_calendar <- function(calls_per_night) {
   completeness <- complete_grid %>%
     dplyr::left_join(
       calls_per_night %>%
-        dplyr::select(Detector, Night) %>%
-        dplyr::distinct() %>%
-        dplyr::mutate(has_data = TRUE),
+        dplyr::group_by(Detector, Night) %>%
+        dplyr::summarise(
+          has_data = any(!is.na(RecordingHours) & RecordingHours > 0),
+          .groups = "drop"
+        ),
       by = c("Detector", "Night")
     ) %>%
     dplyr::mutate(has_data = ifelse(is.na(has_data), FALSE, has_data))
@@ -719,37 +813,56 @@ plot_data_completeness_calendar <- function(calls_per_night) {
 #' Missing Recording Nights by Detector
 #'
 #' @description
-#' Creates a bar chart showing the number of missing nights per detector.
-#' Missing nights are calculated as the difference between expected nights
-#' (study date range) and actual recorded nights.
+#' Creates a bar chart showing the number of missing nights per detector,
+#' calculated as the difference between expected nights (full study period)
+#' and actual recording nights (nights where RecordingHours > 0).
+#'
+#' Important: "Expected nights" is defined as the global study date range
+#' (first Night to last Night across ALL detectors), not per-detector
+#' deployment schedules. All detectors are held to the same expected window.
 #'
 #' @param calls_per_night Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
-#'   - Night: Date. Night of recording.
+#'   - Night: Date. Night of recording (must be valid Date class).
+#'   - RecordingHours: Numeric. Hours of recording (0 = missing data).
 #'
-#' @return ggplot object showing missing night counts.
+#' @return ggplot object showing missing night counts and completion percentages.
 #'
 #' @details
-#' Expected nights are calculated from the overall study date range
-#' (first night to last night across all detectors). Detectors deployed
-#' for the full study should have zero missing nights.
+#' Expected nights calculation:
+#'   All unique Night values (across all detectors) define range_min to range_max.
+#'   expected_nights = (range_max - range_min + 1) day
+#'   This applies uniformly to all detectors.
 #'
-#' Each bar is labeled with both the missing count and the percentage
-#' complete, making it easy to assess both absolute and relative gaps.
+#' Actual nights calculation:
+#'   Per detector: count rows where RecordingHours > 0
+#'   Excludes rows with RecordingHours = 0 or NA
 #'
-#' Detectors are ordered by descending missing nights (most missing first),
-#' so problematic deployments are immediately visible.
+#' Missing nights calculation:
+#'   missing = max(0, expected - actual)
+#'   Percentage complete = (actual / expected) × 100%
+#'
+#' Ordering: Detectors ordered by descending missing count, so detectors
+#' with the most problems appear first (most missing count at top).
+#'
+#' Labels: Each bar shows both absolute missing count and percentage
+#' complete, making it easy to assess both size and relative impact.
 #'
 #' @section CONTRACT:
 #' - Returns a ggplot object
-#' - Expected nights based on study date range
-#' - Shows both count and percentage complete
+#' - Expected nights derived from global study date range (min/max Night)
+#' - Actual nights counted per detector (RecordingHours > 0)
+#' - Missing = max(0, expected - actual)
+#' - Percentage complete calculated and displayed
 #' - Detectors ordered by descending missing count
+#' - Detector palette applied to bar fills
 #'
 #' @section DOES NOT:
-#' - Account for intentional staggered deployments
-#' - Distinguish "no recording" from "no detections"
-#' - Show which specific dates are missing
+#' - Account for intentional staggered deployments or partial schedules
+#' - Distinguish "RecordingHours = 0" from "no detections"
+#' - Show which specific dates/nights are missing
+#' - Provide per-detector expected night configurability
+#' - Test statistical significance of differences
 #'
 #' @examples
 #' \dontrun{
@@ -763,35 +876,84 @@ plot_missing_nights <- function(calls_per_night) {
   # Validate input
   validate_plot_input(
     calls_per_night,
-    required_cols = c("Detector", "Night"),
+    required_cols = c("Detector", "Night", "RecordingHours"),
     date_cols = "Night",
+    numeric_cols = "RecordingHours",
     df_name = "calls_per_night"
   )
   
-  # Calculate expected vs actual nights
-  date_range <- range(calls_per_night$Night)
-  expected_nights <- as.numeric(diff(date_range)) + 1
+  # DETERMINISTIC: Expected vs Actual calculation
+  # Step 1: Determine global study date range from ALL valid Night values
+  # Step 2: Calculate expected_nights = full date range
+  # Step 3: Per detector: count rows where RecordingHours > 0
+  # Step 4: Calculate missing = expected - actual (never negative)
+  # Step 5: Calculate pct_complete for display labels
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Detector", "Night", "RecordingHours"),
+    date_cols = "Night",
+    numeric_cols = "RecordingHours",
+    df_name = "calls_per_night"
+  )
   
+  # Normalize key types for deterministic counting
+  calls_per_night <- calls_per_night %>%
+    dplyr::mutate(
+      Night = as.Date(Night),
+      RecordingHours = as.numeric(RecordingHours)
+    )
+
+  # Calculate expected vs actual nights
+  valid_nights <- calls_per_night$Night[!is.na(calls_per_night$Night)]
+  if (length(valid_nights) == 0) {
+    warning("No valid Night values available for missing nights plot")
+    return(
+      ggplot() +
+        annotate(
+          "text",
+          x = 0.5,
+          y = 0.5,
+          label = "No valid date data\nfor missing nights plot",
+          size = 5,
+          hjust = 0.5
+        ) +
+        theme_void() +
+        labs(title = "Missing Recording Nights by Detector")
+    )
+  }
+
+  expected_nights <- dplyr::n_distinct(valid_nights)
+  
+  # Calculate actual nights with corrected filtering logic
   missing_summary <- calls_per_night %>%
+    dplyr::mutate(has_data = !is.na(RecordingHours) & RecordingHours > 0) %>%
+    dplyr::filter(has_data) %>%
     dplyr::group_by(Detector) %>%
     dplyr::summarise(
       actual_nights = dplyr::n_distinct(Night),
       .groups = "drop"
-    ) %>%
+    )
+  
+  # Store expected_nights as local variable to avoid scoping issues
+  total_expected <- expected_nights
+  
+  missing_summary <- missing_summary %>%
     dplyr::mutate(
-      missing_nights = expected_nights - actual_nights,
-      pct_complete = actual_nights / expected_nights * 100
+      missing_nights = pmax(0, total_expected - actual_nights),
+      pct_complete = (actual_nights / total_expected) * 100
     ) %>%
     dplyr::arrange(dplyr::desc(missing_nights)) %>%
     dplyr::mutate(Detector = factor(Detector, levels = Detector))
   
   # Build plot
-  ggplot(missing_summary, aes(x = Detector, y = missing_nights)) +
-    geom_col(fill = "#D55E00") +
+  detector_color_map <- get_detector_color_mapping(unique(missing_summary$Detector))
+
+  ggplot(missing_summary, aes(x = Detector, y = missing_nights, fill = Detector)) +
+    geom_col() +
     geom_text(
       aes(
         label = sprintf(
-          "%d\n(%.0f%% complete)",
+          "%d\n(%.1f%% complete)",
           missing_nights,
           pct_complete
         )
@@ -799,6 +961,7 @@ plot_missing_nights <- function(calls_per_night) {
       vjust = -0.2,
       size = 3
     ) +
+    scale_fill_manual(values = detector_color_map) +
     scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
     labs(
       title = "Missing Recording Nights by Detector",
@@ -806,47 +969,54 @@ plot_missing_nights <- function(calls_per_night) {
       x = "Detector",
       y = "Missing Nights"
     ) +
-    theme_kpro(rotate_x = TRUE)
+    theme_kpro(rotate_x = TRUE) +
+    theme(legend.position = "none")
 }
 
 #' Recording Effort Heatmap
 #'
 #' @description
-#' Creates a heatmap showing recording effort (hours) across detectors and
-#' nights. Helps identify deployment gaps, partial nights, and equipment
-#' failures that affect data quality.
+#' Creates a heatmap showing recording effort (RecordingHours) across detectors
+#' and nights. Provides spatial-temporal visualization of deployment coverage
+#' and helps identify deployment gaps, partial nights, and equipment failures
+#' that affect data quality.
 #'
 #' @param calls_per_night Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
-#'   - Night: Date. Night of recording.
-#'   - RecordingHours: Numeric. Hours of recording per night.
+#'   - Night: Date. Night of recording (must be valid Date class).
+#'   - RecordingHours: Numeric. Hours of recording per night (0, NA, or positive).
 #'
-#' @return ggplot object showing effort heatmap.
+#' @return ggplot object showing recording effort (hours) heatmap by detector × night.
 #'
 #' @details
-#' The heatmap uses a viridis color scale where:
-#' - Darker colors = more recording hours
-#' - Lighter colors = fewer recording hours
-#' - Gray = no data (detector not active or data missing)
+#' Color scale: Professional red-yellow-green gradient
+#'   - Red     (#d73027): Little/no recording hours (poor effort)
+#'   - Yellow  (#fee08b): Moderate recording hours (partial nights)
+#'   - Green   (#1a9850): Full recording hours (complete coverage)
+#'   - Gray    : No data (detector not deployed or data missing)
 #'
-#' The plot automatically fills in missing detector × night combinations
+#' Grid structure: Automatically fills in missing detector × night combinations
 #' with NA (shown as gray), making gaps in coverage visually apparent.
 #'
-#' Typical use cases:
-#' - Identify nights when detectors failed
-#' - Spot partial recording nights (equipment issues, battery)
-#' - Verify consistent deployment across all sites
+#' Use cases:
+#' - Identify nights when detectors failed or were inactive
+#' - Spot partial recording nights (battery issues, equipment problems)
+#' - Verify consistent deployment across all detectors
+#' - Visualize effort patterns over time (e.g., seasonal deployments)
 #'
 #' @section CONTRACT:
 #' - Returns a ggplot object
-#' - All dates in study period shown (including gaps)
-#' - Missing data shown as gray (NA)
-#' - Uses viridis color scale for accessibility
+#' - Complete detector × date grid shown for study period
+#' - Professional red-yellow-green gradient for effort visualization
+#' - Missing data shown as gray (NA values)
+#' - Accurate representation of RecordingHours values
 #'
 #' @section DOES NOT:
-#' - Flag specific thresholds (e.g., "partial" nights)
-#' - Calculate expected recording hours
+#' - Flag specific threshold values (e.g., "partial" nights)
+#' - Calculate expected recording hours per deployment
 #' - Interpolate missing values
+#' - Show per-night call counts (use detector plots for activity)
+#' - Distinguish between zero hours and missing data in color
 #'
 #' @examples
 #' \dontrun{
@@ -858,6 +1028,17 @@ plot_missing_nights <- function(calls_per_night) {
 plot_recording_effort_heatmap <- function(calls_per_night) {
   
   # Validate input
+  validate_plot_input(
+    calls_per_night,
+    required_cols = c("Detector", "Night", "RecordingHours"),
+    date_cols = "Night",
+    numeric_cols = "RecordingHours",
+    df_name = "calls_per_night"
+  )
+  
+  # DETERMINISTIC: Red-yellow-green gradient color scale
+  # Red = low/no effort, Yellow = moderate, Green = full effort
+  # Gray = missing/no data (NA values)
   validate_plot_input(
     calls_per_night,
     required_cols = c("Detector", "Night", "RecordingHours"),

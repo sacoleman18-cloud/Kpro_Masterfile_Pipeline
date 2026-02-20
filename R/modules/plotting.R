@@ -30,9 +30,9 @@
 # -------------------
 # Returns a list {plotting, validation_html_paths, summary}:
 #   - plotting$all_plots: Nested list with 4 categories:
-#     - quality: 8 plots (recording status, completeness, effort)
-#     - detector: 7 plots (activity, correlations, synchrony)
-#     - species: 5 plots (composition, diversity, accumulation)
+#     - quality: 7 plots (recording status, completeness, effort)
+#     - detector: 6 plots (activity, correlations, ranking)
+#     - species: 11 plots (composition, diversity, accumulation, phenology, turnover)
 #     - temporal: 6 plots (trends, hourly, weekly, monthly)
 #   - plotting$plots_rds: Path to RDS file with all plot objects
 #   - plotting$files_created: Character vector of PNG file paths
@@ -42,17 +42,16 @@
 #
 # WRITES FILES
 # -----------
-#   - results/figures/png/quality/*.png — 8 quality plots
-#   - results/figures/png/detector/*.png — 7 detector plots
-#   - results/figures/png/species/*.png — 5 species plots
+#   - results/figures/png/quality/*.png — 7 quality plots
+#   - results/figures/png/detector/*.png — 6 detector plots
+#   - results/figures/png/species/*.png — 11 species plots
 #   - results/figures/png/temporal/*.png — 6 temporal plots
 #   - results/rds/plot_objects_*.rds — All ggplot object archive
 #   - results/validation/*.html — Validation report
 #
 # PLOT COUNTS & CATEGORIES
 # -------------------------
-# **Quality (8):** Recording status summaries, assessment heatmaps
-#   - plot_recording_status_summary()
+# **Quality (7):** Recording status summaries, assessment heatmaps
 #   - plot_recording_status_percent()
 #   - plot_recording_status_overall()
 #   - plot_effort_by_detector()
@@ -61,21 +60,26 @@
 #   - plot_missing_nights()
 #   - plot_recording_effort_heatmap()
 #
-# **Detector (7):** Activity comparisons and correlations
+# **Detector (6):** Activity comparisons and correlations
 #   - plot_total_calls_by_detector()
 #   - plot_detector_activity_caterpillar()
 #   - plot_detector_boxplots()
 #   - plot_activity_with_without_outliers()
-#   - plot_synchrony()
 #   - plot_correlation_heatmap()
 #   - plot_detector_rank_over_time()
 #
-# **Species (5):** Composition and diversity (conditional on species data)
+# **Species (11):** Composition, diversity, and advanced detail plots
 #   - plot_species_composition_bar()
 #   - plot_species_by_detector_heatmap()
 #   - plot_species_accumulation_curve()
 #   - plot_species_hourly_profile()
 #   - plot_noid_proportion()
+#   - plot_species_nightly_activity()
+#   - plot_species_phenology_heatmap()
+#   - plot_species_turnover()
+#   - plot_noid_richness_over_time()
+#   - plot_species_by_detector_composition()
+#   - plot_species_rank_abundance()
 #
 # **Temporal (6):** Time-based patterns
 #   - plot_activity_over_time()
@@ -97,7 +101,8 @@
 # **Depends on:**
 #   - functions/output/plot_quality.R: all quality plot functions
 #   - functions/output/plot_detector.R: all detector plot functions
-#   - functions/output/plot_species.R: all species plot functions
+#   - functions/output/plot_species.R: 5 basic species plot functions
+#   - functions/output/plot_species2.R: 6 advanced species plot functions
 #   - functions/output/plot_temporal.R: all temporal plot functions
 #   - functions/output/plot_helpers.R: theme_kpro, create_plot_directories, export_plots_png
 #   - functions/core/utilities.R: logging, artifact registration
@@ -110,7 +115,7 @@
 #' Generate Exploratory Plots
 #'
 #' @description
-#' Phase 3, Stages 15-21: Generates 26 exploratory visualizations across
+#' Phase 3, Stages 15-21: Generates 31 exploratory visualizations across
 #' quality, detector, species, and temporal categories. Exports PNG files
 #' and RDS object archive.
 #'
@@ -139,7 +144,7 @@
 #' @details
 #' **Stages executed:**
 #'   - Stage 15: Configure plot settings and directories
-#'   - Stage 16: Generate quality plots (8 total)
+#'   - Stage 16: Generate quality plots (7 total)
 #'   - Stage 17: Generate detector plots (7 total)
 #'   - Stage 18: Generate species plots (5 total)
 #'   - Stage 19: Generate temporal plots (6 total)
@@ -159,7 +164,7 @@
 #'   - Used by Report & Release module for report embedding
 #'
 #' @section CONTRACT:
-#' - Generates 26+ exploratory plots (number may vary by species availability)
+#' - Generates 25+ exploratory plots (number may vary by species availability)
 #' - Skips species plots gracefully if species column unavailable
 #' - Each plot is a complete ggplot2 object (not modified by export)
 #' - PNG exports use consistent 300 DPI quality
@@ -192,13 +197,16 @@ module_plotting <- function(calls_per_night_final,
   # Create validation context
   validation_context <- init_stage_validation("exploratory_plots", study_params)
   
-  # Initialize plots structure
+  # Initialize plots structure and failure tracking
   all_plots <- list(
     quality = list(),
     detector = list(),
     species = list(),
     temporal = list()
   )
+  
+  # Initialize per-plot failure ledger for non-fatal error tracking
+  plot_ledger <- create_failure_ledger()
   
   files_created <- character()
   
@@ -214,104 +222,399 @@ module_plotting <- function(calls_per_night_final,
   if (verbose) message("  [OK] Plot directories ready")
   
   # ===========================================================================
-  # STAGE 16: GENERATE QUALITY PLOTS (8)
+  # STAGE 16: GENERATE QUALITY PLOTS (7 - with per-plot error isolation)
   # ===========================================================================
   
   log_stage_start("16", "Generate Quality Plots", verbose = verbose, phase_prefix = "Plots")
   
   quality_plots <- list()
   
-  tryCatch({
-    quality_plots$recording_status_summary <- plot_recording_status_summary(calls_per_night_final)
-    quality_plots$recording_status_percent <- plot_recording_status_percent(calls_per_night_final)
-    quality_plots$recording_status_overall <- plot_recording_status_overall(calls_per_night_final)
-    quality_plots$effort_by_detector <- plot_effort_by_detector(calls_per_night_final)
-    quality_plots$nights_by_detector <- plot_nights_by_detector(calls_per_night_final)
-    quality_plots$data_completeness_calendar <- plot_data_completeness_calendar(calls_per_night_final)
-    quality_plots$missing_nights <- plot_missing_nights(calls_per_night_final)
-    quality_plots$recording_effort_heatmap <- plot_recording_effort_heatmap(calls_per_night_final)
-    
-    if (verbose) message(sprintf("  [OK] Generated %d quality plots", length(quality_plots)))
-  }, error = function(e) {
-    warning(sprintf("Quality plots failed: %s", e$message))
-    quality_plots <<- list()
-  })
+  # Generate each quality plot with individual error isolation
+  # If a plot fails, it logs to ledger and continues to next plot
+  quality_plots$recording_status_percent <- generate_plot_safely(
+    plot_function = plot_recording_status_percent,
+    data = calls_per_night_final,
+    plot_name = "recording_status_percent",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  quality_plots$recording_status_overall <- generate_plot_safely(
+    plot_function = plot_recording_status_overall,
+    data = calls_per_night_final,
+    plot_name = "recording_status_overall",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  quality_plots$effort_by_detector <- generate_plot_safely(
+    plot_function = plot_effort_by_detector,
+    data = calls_per_night_final,
+    plot_name = "effort_by_detector",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  quality_plots$nights_by_detector <- generate_plot_safely(
+    plot_function = plot_nights_by_detector,
+    data = calls_per_night_final,
+    plot_name = "nights_by_detector",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  quality_plots$data_completeness_calendar <- generate_plot_safely(
+    plot_function = plot_data_completeness_calendar,
+    data = calls_per_night_final,
+    plot_name = "data_completeness_calendar",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  quality_plots$missing_nights <- generate_plot_safely(
+    plot_function = plot_missing_nights,
+    data = calls_per_night_final,
+    plot_name = "missing_nights",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  quality_plots$recording_effort_heatmap <- generate_plot_safely(
+    plot_function = plot_recording_effort_heatmap,
+    data = calls_per_night_final,
+    plot_name = "recording_effort_heatmap",
+    category = "quality",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  # Remove NULL values (failed plots) from list for clean export
+  quality_plots <- Filter(Negate(is.null), quality_plots)
+  
+  if (verbose) {
+    message(sprintf("  [OK] Generated %d quality plots", length(quality_plots)))
+    if (plot_ledger$failure_count > 0) {
+      message(sprintf("  [!] %d quality plot(s) failed - see ledger", 
+                     sum(sapply(plot_ledger$failures, function(f) f$category == "quality"))))
+    }
+  }
   
   all_plots$quality <- quality_plots
   
   # ===========================================================================
-  # STAGE 17: GENERATE DETECTOR PLOTS (7)
+  # STAGE 17: GENERATE DETECTOR PLOTS (7 - with per-plot error isolation)
   # ===========================================================================
   
   log_stage_start("17", "Generate Detector Plots", verbose = verbose, phase_prefix = "Plots")
   
   detector_plots <- list()
   
-  tryCatch({
-    detector_plots$total_calls_by_detector <- plot_total_calls_by_detector(kpro_master)
-    detector_plots$detector_activity_caterpillar <- plot_detector_activity_caterpillar(calls_per_night_final)
-    detector_plots$detector_boxplots <- plot_detector_boxplots(calls_per_night_final)
-    detector_plots$activity_with_without_outliers <- plot_activity_with_without_outliers(calls_per_night_final)
-    detector_plots$synchrony <- plot_synchrony(calls_per_night_final)
-    detector_plots$correlation_heatmap <- plot_correlation_heatmap(calls_per_night_final)
-    detector_plots$detector_rank_over_time <- plot_detector_rank_over_time(calls_per_night_final)
-    
-    if (verbose) message(sprintf("  [OK] Generated %d detector plots", length(detector_plots)))
-  }, error = function(e) {
-    warning(sprintf("Detector plots failed: %s", e$message))
-    detector_plots <<- list()
-  })
+  # Generate each detector plot with individual error isolation
+  detector_plots$total_calls_by_detector <- generate_plot_safely(
+    plot_function = plot_total_calls_by_detector,
+    data = kpro_master,
+    plot_name = "total_calls_by_detector",
+    category = "detector",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  detector_plots$detector_activity_caterpillar <- generate_plot_safely(
+    plot_function = plot_detector_activity_caterpillar,
+    data = calls_per_night_final,
+    plot_name = "detector_activity_caterpillar",
+    category = "detector",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  detector_plots$detector_boxplots <- generate_plot_safely(
+    plot_function = plot_detector_boxplots,
+    data = calls_per_night_final,
+    plot_name = "detector_boxplots",
+    category = "detector",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  detector_plots$activity_with_without_outliers <- generate_plot_safely(
+    plot_function = plot_activity_with_without_outliers,
+    data = calls_per_night_final,
+    plot_name = "activity_with_without_outliers",
+    category = "detector",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  detector_plots$correlation_heatmap <- generate_plot_safely(
+    plot_function = plot_correlation_heatmap,
+    data = calls_per_night_final,
+    plot_name = "correlation_heatmap",
+    category = "detector",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  detector_plots$detector_rank_over_time <- generate_plot_safely(
+    plot_function = plot_detector_rank_over_time,
+    data = calls_per_night_final,
+    plot_name = "detector_rank_over_time",
+    category = "detector",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  # Remove NULL values (failed plots) from list for clean export
+  detector_plots <- Filter(Negate(is.null), detector_plots)
+  
+  if (verbose) {
+    message(sprintf("  [OK] Generated %d detector plots", length(detector_plots)))
+    if (plot_ledger$failure_count > 0) {
+      message(sprintf("  [!] %d detector plot(s) failed - see ledger",
+                     sum(sapply(plot_ledger$failures, function(f) f$category == "detector"))))
+    }
+  }
   
   all_plots$detector <- detector_plots
   
   # ===========================================================================
-  # STAGE 18: GENERATE SPECIES PLOTS (5)
+  # STAGE 18: GENERATE SPECIES PLOTS (11 - with per-plot error isolation)
   # ===========================================================================
+  # Includes: 5 basic composition/diversity plots + 6 advanced detail plots
   
   log_stage_start("18", "Generate Species Plots", verbose = verbose, phase_prefix = "Plots")
   
   species_plots <- list()
   
-  tryCatch({
-    species_plots$species_composition_bar <- plot_species_composition_bar(kpro_master)
-    species_plots$species_by_detector_heatmap <- plot_species_by_detector_heatmap(kpro_master)
-    species_plots$species_accumulation_curve <- plot_species_accumulation_curve(kpro_master)
-    species_plots$species_hourly_profile <- plot_species_hourly_profile(kpro_master)
-    species_plots$noid_proportion <- plot_noid_proportion(kpro_master)
-    
-    if (verbose) message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
-  }, error = function(e) {
-    stop(sprintf(
-      "Failed to generate species plots.\n  Species column was validated in Stage 2, but plot generation failed.\n  Original error: %s\n  Check that kpro_master has valid species data for visualization.",
-      e$message
-    ))
-  })
+  # Generate each species plot with individual error isolation
+  # Basic species plots
+  species_plots$species_composition_bar <- generate_plot_safely(
+    plot_function = plot_species_composition_bar,
+    data = kpro_master,
+    plot_name = "species_composition_bar",
+    category = "species",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  species_plots$species_by_detector_heatmap <- generate_plot_safely(
+    plot_function = plot_species_by_detector_heatmap,
+    data = kpro_master,
+    plot_name = "species_by_detector_heatmap",
+    category = "species",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  species_plots$species_accumulation_curve <- generate_plot_safely(
+    plot_function = plot_species_accumulation_curve,
+    data = kpro_master,
+    plot_name = "species_accumulation_curve",
+    category = "species",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  species_plots$species_hourly_profile <- generate_plot_safely(
+    plot_function = plot_species_hourly_profile,
+    data = kpro_master,
+    plot_name = "species_hourly_profile",
+    category = "species",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  species_plots$noid_proportion <- generate_plot_safely(
+    plot_function = plot_noid_proportion,
+    data = kpro_master,
+    plot_name = "noid_proportion",
+    category = "species",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  # Advanced species detail plots
+  species_plots$species_nightly_activity <- generate_plot_safely(
+    plot_function = plot_species_nightly_activity,
+    data = kpro_master,
+    plot_name = "species_nightly_activity",
+    category = "species",
+    ledger = plot_ledger,
+    top_n = NULL,
+    verbose = verbose
+  )
+  
+  species_plots$species_phenology_heatmap <- generate_plot_safely(
+    plot_function = plot_species_phenology_heatmap,
+    data = kpro_master,
+    plot_name = "species_phenology_heatmap",
+    category = "species",
+    ledger = plot_ledger,
+    time_bin = "night",
+    verbose = verbose
+  )
+  
+  species_plots$species_turnover <- generate_plot_safely(
+    plot_function = plot_species_turnover,
+    data = kpro_master,
+    plot_name = "species_turnover",
+    category = "species",
+    ledger = plot_ledger,
+    time_bin = "night",
+    verbose = verbose
+  )
+  
+  species_plots$noid_richness_over_time <- generate_plot_safely(
+    plot_function = plot_noid_richness_over_time,
+    data = kpro_master,
+    plot_name = "noid_richness_over_time",
+    category = "species",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  species_plots$species_by_detector_composition <- generate_plot_safely(
+    plot_function = plot_species_by_detector_composition,
+    data = kpro_master,
+    plot_name = "species_by_detector_composition",
+    category = "species",
+    ledger = plot_ledger,
+    normalize = FALSE,
+    verbose = verbose
+  )
+  
+  species_plots$species_rank_abundance <- generate_plot_safely(
+    plot_function = plot_species_rank_abundance,
+    data = kpro_master,
+    plot_name = "species_rank_abundance",
+    category = "species",
+    ledger = plot_ledger,
+    log_scale = TRUE,
+    verbose = verbose
+  )
+  
+  # Remove NULL values (failed plots) from list for clean export
+  species_plots <- Filter(Negate(is.null), species_plots)
+  
+  if (verbose) {
+    message(sprintf("  [OK] Generated %d species plots", length(species_plots)))
+    if (plot_ledger$failure_count > 0) {
+      message(sprintf("  [!] %d species plot(s) failed - see ledger",
+                     sum(sapply(plot_ledger$failures, function(f) f$category == "species"))))
+    }
+  }
   
   all_plots$species <- species_plots
   
   # ===========================================================================
-  # STAGE 19: GENERATE TEMPORAL PLOTS (6)
+  # STAGE 19: GENERATE TEMPORAL PLOTS (6 - with per-plot error isolation)
   # ===========================================================================
   
   log_stage_start("19", "Generate Temporal Plots", verbose = verbose, phase_prefix = "Plots")
   
   temporal_plots <- list()
   
-  tryCatch({
-    temporal_plots$activity_over_time <- plot_activity_over_time(calls_per_night_final)
-    temporal_plots$cumulative_calls_over_time <- plot_cumulative_calls_over_time(calls_per_night_final)
-    temporal_plots$hourly_activity_profile <- plot_hourly_activity_profile(kpro_master)
-    temporal_plots$callsperhour_distribution <- plot_callsperhour_distribution(calls_per_night_final)
-    temporal_plots$weekly_activity <- plot_weekly_activity(calls_per_night_final)
-    temporal_plots$activity_by_month <- plot_activity_by_month(calls_per_night_final)
-    
-    if (verbose) message(sprintf("  [OK] Generated %d temporal plots", length(temporal_plots)))
-  }, error = function(e) {
-    warning(sprintf("Temporal plots failed: %s", e$message))
-    temporal_plots <<- list()
-  })
+  # Generate each temporal plot with individual error isolation
+  temporal_plots$activity_over_time <- generate_plot_safely(
+    plot_function = plot_activity_over_time,
+    data = calls_per_night_final,
+    plot_name = "activity_over_time",
+    category = "temporal",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  temporal_plots$cumulative_calls_over_time <- generate_plot_safely(
+    plot_function = plot_cumulative_calls_over_time,
+    data = calls_per_night_final,
+    plot_name = "cumulative_calls_over_time",
+    category = "temporal",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  temporal_plots$hourly_activity_profile <- generate_plot_safely(
+    plot_function = plot_hourly_activity_profile,
+    data = kpro_master,
+    plot_name = "hourly_activity_profile",
+    category = "temporal",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  temporal_plots$callsperhour_distribution <- generate_plot_safely(
+    plot_function = plot_callsperhour_distribution,
+    data = calls_per_night_final,
+    plot_name = "callsperhour_distribution",
+    category = "temporal",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  temporal_plots$weekly_activity <- generate_plot_safely(
+    plot_function = plot_weekly_activity,
+    data = calls_per_night_final,
+    plot_name = "weekly_activity",
+    category = "temporal",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  temporal_plots$activity_by_month <- generate_plot_safely(
+    plot_function = plot_activity_by_month,
+    data = calls_per_night_final,
+    plot_name = "activity_by_month",
+    category = "temporal",
+    ledger = plot_ledger,
+    verbose = verbose
+  )
+  
+  # Remove NULL values (failed plots) from list for clean export
+  temporal_plots <- Filter(Negate(is.null), temporal_plots)
+  
+  if (verbose) {
+    message(sprintf("  [OK] Generated %d temporal plots", length(temporal_plots)))
+    if (plot_ledger$failure_count > 0) {
+      message(sprintf("  [!] %d temporal plot(s) failed - see ledger",
+                     sum(sapply(plot_ledger$failures, function(f) f$category == "temporal"))))
+    }
+  }
   
   all_plots$temporal <- temporal_plots
+  
+  # ===========================================================================
+  # FAILURE LEDGER SUMMARY (Per-Plot Error Tracking)
+  # ===========================================================================
+  
+  if (verbose && plot_ledger$failure_count > 0) {
+    message(sprintf("\n  Plot Generation Failures: %d total", plot_ledger$failure_count))
+    
+    failure_summary <- summarize_plot_failures(plot_ledger, verbose = FALSE)
+    for (i in seq_len(nrow(failure_summary))) {
+      row <- failure_summary[i,]
+      message(sprintf("    - %s (%s): %s",
+                     row$plot_name,
+                     row$category,
+                     row$error_message))
+    }
+    
+    # Log failures to validation context
+    validation_context <- log_validation_event(
+      validation_context,
+      event_type = "warning",
+      description = sprintf("%d plots failed to generate", plot_ledger$failure_count),
+      count = plot_ledger$failure_count,
+      details = failure_summary
+    )
+  } else if (plot_ledger$failure_count == 0) {
+    if (verbose) message("  [OK] All plots generated successfully (no failures)")
+  }
   
   # ===========================================================================
   # STAGE 20: EXPORT PLOTS AS PNG
@@ -383,7 +686,8 @@ module_plotting <- function(calls_per_night_final,
       detector = length(detector_plots),
       species = length(species_plots),
       temporal = length(temporal_plots)
-    )
+    ),
+    failure_ledger = plot_ledger
   )
   
   result$validation_html_paths <- c(result$validation_html_paths, validation_html)
@@ -399,7 +703,8 @@ module_plotting <- function(calls_per_night_final,
       species = length(species_plots),
       temporal = length(temporal_plots)
     ),
-    png_files_created = length(files_created)
+    png_files_created = length(files_created),
+    plot_generation_failures = plot_ledger$failure_count
   )
   
   return(result)

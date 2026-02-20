@@ -31,6 +31,45 @@ output_preferences:
   save_directory: results/csv
   
 # ==============================================================================
+# PLOT-SPECIFIC CONFIGURATION
+# ==============================================================================
+# Control plot generation behavior, visualization settings, and what data
+# is included in specific visualizations.
+# ==============================================================================
+
+plot_configuration:
+  # NoID Species Handling in Plots
+  # ────────────────────────────────
+  # Determines whether "NoID" (unidentified species) are included or
+  # excluded from species composition visualizations.
+  # 
+  # Options:
+  #   - "keep": Include NoID in all species plots (shows separate NoID bar)
+  #   - "remove": Exclude NoID from species plots (total heights reflect identified species only)
+  #   - "show_separate": Include NoID but on separate subfigure/axis
+  #
+  # Default: "keep" (maintains data completeness and shows true unidentified fraction)
+  # 
+  # Note: This setting does NOT affect the NoID proportion plot (plot_noid_proportion),
+  # which always shows NoID to help assess data quality.
+  noid_handling: "keep"
+  
+  # Detector Performance Threshold
+  # ──────────────────────────────
+  # Threshold for highlighting detectors in "Recording Nights" plot.
+  # Detectors with fewer nights than this threshold are highlighted in warning color.
+  # Set to NULL or negative number to disable highlighting.
+  detector_nights_threshold: 20
+  
+  # Outlier Percentile for Detector Activity
+  # ─────────────────────────────────────────
+  # Percentile cutoff for identifying and filtering outlier nights
+  # in plots showing activity with/without outliers.
+  # 
+  # Default: 95 (identifies top 5% as outliers)
+  outlier_percentile: 95
+  
+# ==============================================================================
 # ARTIFACT OUTPUT CONTROLS
 # ==============================================================================
 # Control which artifacts are generated and exported.

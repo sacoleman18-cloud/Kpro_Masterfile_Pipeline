@@ -21,7 +21,7 @@
 #   - lubridate: Hour extraction from DateTime
 #
 # Internal Dependencies:
-#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
+#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_species(),
 #                     format_number()
 #
 # FUNCTIONS PROVIDED
@@ -33,7 +33,7 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_col, coord_flip),
 #                      dplyr (count, arrange, mutate)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_species, format_number)
 #       Purpose: Horizontal bar chart of total calls by species (ordered high to low)
 #
 #   - plot_species_by_detector_heatmap():
@@ -49,7 +49,7 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_line, geom_point),
 #                      dplyr (group_by, mutate, cumsum)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_species, format_number)
 #       Purpose: Line plot of cumulative unique species over study period
 #
 # Activity Patterns - Species-specific temporal patterns:
@@ -58,7 +58,7 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
 #                      dplyr (group_by, summarize, slice_max)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_species, format_number)
 #       Purpose: Activity by hour for top N species (subset to prevent crowding)
 #
 # Data Quality - Identification rates:
@@ -206,14 +206,17 @@ plot_species_composition_bar <- function(master_data,
   species_counts <- species_counts %>%
     dplyr::mutate(pct = TotalCalls / total * 100)
   
+  n_species <- dplyr::n_distinct(species_counts$species)
+
   # Build plot
-  ggplot(species_counts, aes(x = species, y = TotalCalls)) +
-    geom_col(fill = "#009E73") +
+  ggplot(species_counts, aes(x = species, y = TotalCalls, fill = species)) +
+    geom_col() +
     geom_text(
       aes(label = sprintf("%s\n(%.1f%%)", format_number(TotalCalls), pct)),
       vjust = -0.2,
       size = 3
     ) +
+    scale_fill_manual(values = kpro_palette_species(n_species)) +
     scale_y_continuous(
       labels = scales::comma,
       expand = expansion(mult = c(0, 0.15))
@@ -224,7 +227,8 @@ plot_species_composition_bar <- function(master_data,
       x = "Species",
       y = "Total Calls"
     ) +
-    theme_kpro(rotate_x = TRUE)
+    theme_kpro(rotate_x = TRUE) +
+    theme(legend.position = "none")
 }
 
 
@@ -386,8 +390,8 @@ plot_species_by_detector_heatmap <- function(master_data,
 #' - Plateau: Species pool likely well-sampled
 #' - Continued rise: More sampling would likely yield more species
 #'
-#' Points mark nights when new species were first detected, helping
-#' identify when key species entered the study.
+#' Points mark nights when new species were first detected, labeled
+#' with the date and the species added.
 #'
 #' @section CONTRACT:
 #' - Returns a ggplot object
@@ -461,15 +465,42 @@ plot_species_accumulation_curve <- function(master_data, exclude_noid = TRUE) {
   
   final_richness <- max(accumulation$cumulative_species)
   
+  label_dates <- first_detections %>%
+    dplyr::group_by(first_night) %>%
+    dplyr::summarise(
+      species_added = paste(species, collapse = ", "),
+      .groups = "drop"
+    ) %>%
+    dplyr::left_join(
+      accumulation,
+      by = c("first_night" = "Night")
+    ) %>%
+    dplyr::transmute(
+      Night = first_night,
+      cumulative_species,
+      label = sprintf(
+        "%s\n%s",
+        format(first_night, "%b %d"),
+        species_added
+      )
+    )
+
   # Build plot
   ggplot(accumulation, aes(x = Night, y = cumulative_species)) +
     geom_line(color = "#009E73", linewidth = 1.2) +
     # Mark nights when new species were detected
     geom_point(
-      data = accumulation %>%
-        dplyr::filter(Night %in% first_detections$first_night),
+      data = label_dates,
       color = "#009E73",
       size = 2
+    ) +
+    geom_text(
+      data = label_dates,
+      aes(label = label),
+      angle = 45,
+      hjust = -0.1,
+      vjust = -0.5,
+      size = 3
     ) +
     geom_hline(
       yintercept = final_richness,
@@ -608,7 +639,7 @@ plot_species_hourly_profile <- function(master_data,
     geom_line(linewidth = 1, alpha = 0.8) +
     geom_point(size = 1.5) +
     scale_x_continuous(breaks = seq(0, 23, by = 2)) +
-    scale_color_manual(values = kpro_palette_cat(top_n)) +
+    scale_color_manual(values = kpro_palette_species(top_n)) +
     labs(
       title = "Hourly Activity by Species",
       subtitle = sprintf("Top %d species by total calls", top_n),
@@ -701,8 +732,11 @@ plot_noid_proportion <- function(master_data) {
   overall_pct <- sum(noid_summary$noid_calls) / sum(noid_summary$total_calls) * 100
   
   # Build plot
-  ggplot(noid_summary, aes(x = Detector, y = pct_noid)) +
-    geom_col(fill = "#D55E00") +
+  n_detectors <- dplyr::n_distinct(noid_summary$Detector)
+
+  ggplot(noid_summary, aes(x = Detector, y = pct_noid, fill = Detector)) +
+    geom_col() +
+    kpro_scale_detector_fill(n_detectors) +
     geom_hline(
       yintercept = overall_pct,
       linetype = "dashed",
@@ -733,5 +767,6 @@ plot_noid_proportion <- function(master_data) {
       x = "Detector",
       y = "% Unidentified"
     ) +
-    theme_kpro(rotate_x = TRUE)
+    theme_kpro(rotate_x = TRUE) +
+    theme(legend.position = "none")
 }

@@ -493,7 +493,7 @@ list(
 
 6. `run_module_plotting(summary_stats_result, verbose = FALSE)`
    - Input: calls_per_night_final, summary_stats
-   - Output: all_plots (ggplot objects)
+   - Output: all_plots (ggplot objects) + failure_ledger (per-plot error isolation tracking)
 
 7. `run_module_report_release(plotting_result, summary_stats_result, verbose = FALSE)`
    - Input: all_plots, summary_stats
@@ -558,6 +558,51 @@ list(
   # ... module-specific components ...
 )
 ```
+
+### 4.4 Module 6 (Plotting) Result Structure
+
+**Special Note:** Module 6 implements per-plot error isolation (§3.6 ST_code_design_standards.md). The result includes failure tracking for resilience reporting.
+
+```r
+# Module 6: run_module_plotting()
+list(
+  plotting = list(
+    all_plots = list(
+      quality = list(...),        # 7 ggplot2 objects (or NULL if failed)
+      detector = list(...),       # 7 ggplot2 objects (or NULL if failed)
+      species = list(...),        # 11 ggplot2 objects (or NULL if failed)
+      temporal = list(...)        # 6 ggplot2 objects (or NULL if failed)
+    ),
+    plots_rds = character,        # Path to archived RDS file
+    files_created = character_vector, # PNG file paths successfully written
+    plot_counts = list(           # Actual count of successfully generated plots
+      quality = integer,
+      detector = integer,
+      species = integer,
+      temporal = integer
+    ),
+    failure_ledger = list(
+      failures = data.frame(plot_name, category, error_message),
+      failure_count = integer
+    )
+  ),
+  summary = list(
+    total_plots_exported = integer,   # Number of PNG files written
+    plot_counts = list(...),          # Breakdown by category
+    png_files_created = integer,
+    plot_generation_failures = integer # Count of failed plots
+  ),
+  validation_html_paths = character_vector,
+  checkpoint_path = character,
+  artifact_ids = character_vector
+)
+```
+
+**Key Fields:**
+- `failure_ledger`: Tracks individual plot generation failures with error details
+- `plot_generation_failures`: Total failure count in summary metadata
+- `files_created`: Only contains paths for plots that successfully generated (NULL failures filtered)
+- `plot_counts`: Reflects actual count of generated plots (may be less than 31 if failures occurred)
 
 ---
 

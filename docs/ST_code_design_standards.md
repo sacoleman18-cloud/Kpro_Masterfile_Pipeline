@@ -489,6 +489,45 @@ my_function <- function(df, config_path) {
 | `assert_date_range(start, end)` | Validate date order | `assert_date_range(start_date, end_date)` |
 | `assert_column_type(df, col, type)` | Validate column class | `assert_column_type(df, "Night", "Date")` |
 
+### 3.6 Per-Plot Error Isolation (Phase 3 Plotting)
+
+For plotting modules (Phase 3), use per-plot error isolation to allow individual plot failures without stopping category-level generation. This enables robust visualization pipelines where individual plots can fail gracefully while tracking errors.
+
+**Pattern: Safe Plot Generation with Failure Ledger**
+
+```r
+# Initialize failure ledger at module start
+plot_ledger <- create_failure_ledger()
+
+# Generate each plot with individual error isolation
+species_plots$composition <- generate_plot_safely(
+  plot_function = plot_species_composition_bar,
+  data = kpro_master,
+  plot_name = "composition_bar",
+  category = "species",
+  ledger = plot_ledger,
+  verbose = verbose
+)
+
+# Clean up NULL values (failed plots)
+species_plots <- Filter(Negate(is.null), species_plots)
+
+# Report failures
+if (verbose && plot_ledger$failure_count > 0) {
+  message(sprintf("%d plots failed (see ledger)", plot_ledger$failure_count))
+}
+```
+
+**Key Rules:**
+
+| Aspect | Rule | Enforcement |
+|--------|------|-------------|
+| Per-plot isolation | Each plot wrapped in `generate_plot_safely()` | Returns NULL on failure |
+| Failure tracking | All failures logged to ledger | Full error context maintained |
+| Category continuation | Failed plot doesn't stop Category | Other plots continue generating |
+| Cleanup | Remove NULL values before export | NULL non-existent in PNG output |
+| Error messages | Always include plot_name + category + error | Ledger provides full context |
+
 ---
 
 ## 4. CONSOLE OUTPUT AND LOGGING HELPERS

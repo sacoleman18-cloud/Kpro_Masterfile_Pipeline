@@ -303,6 +303,210 @@ kpro_palette_cat <- function(n = 8) {
 }
 
 
+#' Detector Color Palette (16+ Professional Colors)
+#'
+#' @description
+#' Returns a professional palette of distinct, muted colors for detector plots.
+#' Suitable for 8-16 categories. Uses professional color scheme optimized for
+#' scientific visualization and presentation. Avoids bright/neon colors.
+#'
+#' @param n Integer. Number of colors needed. Default is 16.
+#'
+#' @return Character vector of hex color codes.
+#'
+#' @section CONTRACT:
+#' - Returns exactly n colors
+#' - Colors are always in the same order
+#' - Colors are professional, muted, non-bright for presentations
+#' - Works consistently across all detector plots
+#'
+#' @export
+kpro_palette_detector <- function(n = 16) {
+  # Professional color palette: distinct, muted, non-bright
+  # Colors selected for visual distinction and professional presentation
+  colors <- c(
+    "#1B4965", # Deep blue
+    "#5FA8D3", # Steel blue
+    "#0F7938", # Deep green
+    "#6FA876", # Sage green
+    "#8B4513", # Saddle brown
+    "#CD853F", # Peru (warm brown)
+    "#704214", # Dark brown
+    "#A0522D", # Sienna
+    "#556B2F", # Dark khaki/olive
+    "#6B5B4F", # Taupe
+    "#483D8B", # Dark slate blue
+    "#2F4F7F", # Slate blue
+    "#8B7355", # Burlywood
+    "#696969", # Dim gray
+    "#4F5464", # Dark grayish blue
+    "#5A6B5B"  # Dark gray-green
+  )
+
+  if (n > length(colors)) {
+    warning(
+      sprintf(
+        "Requested %d colors but detector palette has %d. Colors will recycle.",
+        n, length(colors)
+      )
+    )
+  }
+
+  rep_len(colors, n)
+}
+
+
+#' Get Stable Detector Color Mapping
+#'
+#' @description
+#' Creates a stable, universal detector-to-color mapping based on detector names.
+#' Ensures each detector always gets the same color across all plots, regardless
+#' of plot-specific sorting or data ordering.
+#'
+#' Use this function to guarantee consistent detector colors across your entire
+#' visualization suite. Detector colors are assigned alphabetically, ensuring
+#' reproducible, deterministic mapping.
+#'
+#' @param detector_names Character vector. Unique detector identifiers (IDs or names).
+#'
+#' @return Named character vector where names are detector identifiers and values
+#'   are hex color codes from the professional palette. Mapping is based on
+#'   alphabetical ordering for consistency.
+#'
+#' @details
+#' This function creates a stable mapping where:
+#' - Detectors are sorted alphabetically (case-sensitive)
+#' - Each gets assigned a color from kpro_palette_detector()
+#' - The same detector names always produce identical mappings
+#' - Colors persist across all plots, facets, and subsets
+#'
+#' Use this to color multiple plots consistently:
+#' ```r
+#' color_map <- get_detector_color_mapping(unique(master_data$Detector))
+#' ggplot(data, aes(x = Night, y = Calls, color = Detector)) +
+#'   geom_line() +
+#'   scale_color_manual(values = color_map)
+#' ```
+#'
+#' @section CONTRACT:
+#' - Returns a named character vector
+#' - Names are detectors from input, values are hex colors
+#' - Mapping is deterministic based on alphabetical order
+#' - Works with any number of detectors (from 1 to 16+)
+#' - NA and empty string detectors are automatically excluded
+#' - Duplicate detector names in input are deduplicated
+#'
+#' @section DOES NOT:
+#' - Modify input data frame
+#' - Perform case conversion on detector names
+#' - Handle NA or empty string detectors (filters them out)
+#' - Support duplicates in the mapping (uses unique())
+#'
+#' @examples
+#' \\dontrun{
+#' # Create stable color mapping for your detectors
+#' detectors <- unique(master_data$Detector)
+#' color_map <- get_detector_color_mapping(detectors)
+#'
+#' # Use consistently across all plots
+#' p1 <- ggplot(data1, aes(color = Detector)) +
+#'   scale_color_manual(values = color_map)
+#' p2 <- ggplot(data2, aes(color = Detector)) +
+#'   scale_color_manual(values = color_map)
+#' # Detector A will be the same color in both p1 and p2
+#' }
+#'
+#' @export
+get_detector_color_mapping <- function(detector_names) {
+  # Validate and clean input
+  detector_names <- as.character(detector_names)
+  detector_names <- unique(detector_names[!is.na(detector_names) & detector_names != ""])
+  
+  if (length(detector_names) == 0) {
+    stop("No valid detector names provided")
+  }
+  
+  # Sort alphabetically for stable, reproducible mapping
+  detector_names <- sort(detector_names)
+  
+  # Get palette with enough colors
+  palette <- kpro_palette_detector(length(detector_names))
+  
+  # Create named vector mapping
+  structure(
+    palette,
+    names = detector_names
+  )
+}
+
+
+#' Species Color Palette
+#'
+#' @description
+#' Returns a consistent palette for species plots. Uses the categorical
+#' palette for high contrast and accessibility.
+#'
+#' @param n Integer. Number of colors needed. Default is 8.
+#'
+#' @return Character vector of hex color codes.
+#'
+#' @export
+kpro_palette_species <- function(n = 8) {
+  kpro_palette_cat(n)
+}
+
+
+#' Detector Color Scale Helpers (Use get_detector_color_mapping() for consistency)
+#'
+#' @description
+#' Convenience wrappers for detector-based manual scales using positional color mapping.
+#'
+#' **NOTE**: These functions create positional color scales (position-based mapping).
+#' If detectors are ordered differently in different plots, they may receive different
+#' colors. **For consistent colors across all plots, use `get_detector_color_mapping()`
+#' with `scale_color_manual(values = color_map)` instead.**
+#'
+#' @param n Integer. Number of detector colors needed.
+#'
+#' @return ggplot2 scale object.
+#'
+#' @section CONTRACT:
+#' - Returns a ggplot2 scale object
+#' - Colors cycle from kpro_palette_detector() in positional order
+#' - First unique value gets color 1, second gets color 2, etc.
+#' - **Warning**: Detector colors may vary across plots if detectors are ordered differently
+#'
+#' @section DOES NOT:
+#' - Guarantee color consistency across multiple plots
+#' - Provide stable detector-to-color mapping
+#' - Handle detector name-based color assignment
+#'
+#' @details
+#' **PREFER**: `get_detector_color_mapping()` for universal color consistency
+#'
+#' ```r
+#' # OLD (positional - colors may vary between plots):
+#' ggplot(data, aes(color = Detector)) +
+#'   kpro_scale_detector_color(n_detectors)
+#'
+#' # NEW (stable - consistent colors across all plots):
+#' color_map <- get_detector_color_mapping(unique(data$Detector))
+#' ggplot(data, aes(color = Detector)) +
+#'   scale_color_manual(values = color_map)
+#' ```
+#'
+#' @export
+kpro_scale_detector_color <- function(n) {
+  scale_color_manual(values = kpro_palette_detector(n))
+}
+
+#' @rdname kpro_scale_detector_color
+#' @export
+kpro_scale_detector_fill <- function(n) {
+  scale_fill_manual(values = kpro_palette_detector(n))
+}
+
+
 #' Sequential Color Palette Option
 #'
 #' @description
@@ -736,5 +940,193 @@ export_plots_png <- function(all_plots, base_dir = "results/figures/png",
     total_exported = total_exported,
     files_created = files_created,
     failed_plots = failed_plots
+  )
+}
+
+
+# =============================================================================
+# PLOT CONFIGURATION HELPERS
+# =============================================================================
+
+#' Get Plot Configuration Settings
+#'
+#' @description
+#' Retrieves plot-specific configuration options from study parameters.
+#' Validates and provides sensible defaults for all plot configuration values.
+#'
+#' Used by plot functions to respect study-wide preferences for NoID handling,
+#' detector thresholds, outlier detection, and other visualization settings.
+#'
+#' @param study_params List. Study parameters (typically from load_study_parameters).
+#' @param setting Character. Specific setting name (e.g., "noid_handling").
+#'   If NULL, returns entire plot configuration list.
+#' @param default Varies. Default value if setting not found or NULL.
+#'
+#' @return Varies. Requested configuration value or entire list if setting = NULL.
+#'
+#' @details
+#' Available settings:
+#'   - noid_handling: "keep", "remove", or "show_separate" (default: "keep")
+#'   - detector_nights_threshold: positive integer (default: 20)
+#'   - outlier_percentile: 0-100 (default: 95)
+#'
+#' All values are validated and coerced to appropriate types.
+#' Invalid values trigger warnings and fall back to defaults.
+#'
+#' @section CONTRACT:
+#' - Always returns valid, type-safe values
+#' - Never returns NULL (uses defaults instead)
+#' - Validates ranges and allowed values
+#' - Issues warnings for invalid settings
+#'
+#' @examples
+#' \dontrun{
+#' study_params <- load_study_parameters()
+#' 
+#' # Get entire plot configuration
+#' plot_config <- get_plot_configuration(study_params)
+#'
+#' # Get specific setting with default
+#' noid_mode <- get_plot_configuration(study_params, "noid_handling", "keep")
+#' 
+#' # Use in plot function
+#' if (get_plot_configuration(study_params, "noid_handling") == "remove") {
+#'   # Exclude NoID from composition plot
+#' }
+#' }
+#'
+#' @export
+get_plot_configuration <- function(study_params, setting = NULL, default = NULL) {
+  
+  # Extract plot configuration section
+  plot_config <- study_params$plot_configuration
+  
+  if (is.null(plot_config)) {
+    plot_config <- list()  # Use empty list if not defined
+  }
+  
+  # Return entire config if no specific setting requested
+  if (is.null(setting)) {
+    return(structure(
+      list(
+        noid_handling = plot_config$noid_handling %||% "keep",
+        detector_nights_threshold = as.numeric(plot_config$detector_nights_threshold %||% 20),
+        outlier_percentile = as.numeric(plot_config$outlier_percentile %||% 95)
+      ),
+      class = "plot_configuration"
+    ))
+  }
+  
+  # Return specific setting with validation
+  switch(setting,
+    noid_handling = {
+      val <- plot_config$noid_handling %||% default %||% "keep"
+      if (!val %in% c("keep", "remove", "show_separate")) {
+        warning(sprintf("Invalid noid_handling value '%s', using 'keep'", val))
+        "keep"
+      } else {
+        val
+      }
+    },
+    detector_nights_threshold = {
+      val <- as.numeric(plot_config$detector_nights_threshold %||% default %||% 20)
+      if (is.na(val) || val < 0) {
+        warning("Invalid detector_nights_threshold, using 20")
+        20
+      } else {
+        val
+      }
+    },
+    outlier_percentile = {
+      val <- as.numeric(plot_config$outlier_percentile %||% default %||% 95)
+      if (is.na(val) || val < 0 || val > 100) {
+        warning("Invalid outlier_percentile (must be 0-100), using 95")
+        95
+      } else {
+        val
+      }
+    },
+    {
+      # Unknown setting
+      warning(sprintf("Unknown plot configuration setting: '%s'", setting))
+      default
+    }
+  )
+}
+
+
+#' Filter Species Data Respecting NoID Configuration
+#'
+#' @description
+#' Applies plot-wide NoID handling policy to species data. Can keep NoID
+#' (default), remove it, or prepare it for separate display.
+#'
+#' Uses the study's plot configuration setting to determine behavior,
+#' ensuring consistent NoID treatment across all species visualizations.
+#'
+#' @param data Data frame. Species data with 'species' column.
+#' @param noid_handling Character. How to handle NoID ("keep", "remove", "show_separate").
+#'   If NULL, uses study configuration.
+#' @param study_params List. Study parameters (used if noid_handling = NULL).
+#'
+#' @return Data frame with NoID handling applied as specified.
+#'
+#' @section CONTRACT:
+#' - Returns data frame (never NULL)
+#' - Replaces with defaults if noid_handling is invalid
+#' - Logs warnings for unusual patterns
+#' - Does not modify input data frame
+#'
+#' @examples
+#' \dontrun{
+#' # Apply configuration from study parameters
+#' filtered_data <- apply_noid_handling(kpro_master, study_params = study_params)
+#'
+#' # Explicit handling
+#' no_noid_data <- apply_noid_handling(kpro_master, noid_handling = "remove")
+#' }
+#'
+#' @export
+apply_noid_handling <- function(data, noid_handling = NULL, study_params = NULL) {
+  
+  # Validate input
+  if (!is.data.frame(data)) {
+    stop("data must be a data frame")
+  }
+  
+  # Determine handling mode
+  if (is.null(noid_handling)) {
+    if (!is.null(study_params)) {
+      noid_handling <- get_plot_configuration(study_params, "noid_handling")
+    } else {
+      noid_handling <- "keep"
+    }
+  }
+  
+  # Apply handling
+  switch(noid_handling,
+    keep = {
+      # Include all species, including NoID (no action needed)
+      data
+    },
+    remove = {
+      # Exclude NoID species using standard filter
+      data %>%
+        dplyr::filter(!is.na(species) & species != "" & 
+                     tolower(species) != "noid" & 
+                     tolower(species) != "unknown")
+    },
+    show_separate = {
+      # Add column for separate display (leaves all data intact)
+      data %>%
+        dplyr::mutate(
+          is_noid = is.na(species) | species == "" | 
+                   tolower(species) %in% c("noid", "unknown")
+        )
+    },
+    {
+      warning(sprintf("Unknown noid_handling: '%s', using 'keep'", noid_handling))
+      data
+    }
   )
 }

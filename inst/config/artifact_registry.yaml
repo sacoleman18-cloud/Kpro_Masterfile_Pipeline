@@ -1,18 +1,18 @@
 artifacts:
-  kpro_release_SchmeeckleBatStudy_20260220_011626:
-    name: kpro_release_SchmeeckleBatStudy_20260220_011626
+  kpro_release_SchmeeckleBatStudy_20260220_154434:
+    name: kpro_release_SchmeeckleBatStudy_20260220_154434
     type: release_bundle
     phase_id: release
-    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260220_011626.zip
-    file_hash_sha256: 77a8af11a91a6df133a07f9669c1e111ecbab781ccaeef71c8675de0ab649605
-    file_size_bytes: 5069045.0
-    created_utc: '2026-02-20T07:16:31Z'
+    file_path: C:/Users/Triad/OneDrive/Documents/R Projects/Kpro_Masterfile_Pipeline/results/releases/kpro_release_SchmeeckleBatStudy_20260220_154434.zip
+    file_hash_sha256: 9c68a9f188776a4be5b34ce14032d29b3a08abce26fde8dd6e5850f933486b1c
+    file_size_bytes: 6351468.0
+    created_utc: '2026-02-20T21:44:45Z'
     pipeline_version: '2.1'
     input_artifacts:
     - kpro_master
     - cpn_final
     metadata:
       study_id: SchmeeckleBatStudy
-      n_files: 35
-      zip_size_bytes: 5069045.0
-last_modified_utc: '2026-02-20T07:16:31Z'
+      n_files: 39
+      zip_size_bytes: 6351468.0
+last_modified_utc: '2026-02-20T21:44:45Z'

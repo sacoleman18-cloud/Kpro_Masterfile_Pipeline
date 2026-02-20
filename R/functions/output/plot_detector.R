@@ -23,7 +23,7 @@
 #   - zoo: Rolling means (plot_detector_rank_over_time only)
 #
 # Internal Dependencies:
-#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_cat(),
+#   - plot_helpers.R: theme_kpro(), validate_plot_input(), kpro_palette_detector(),
 #                     format_number()
 #
 # FUNCTIONS PROVIDED
@@ -34,30 +34,30 @@
 #   - plot_total_calls_by_detector():
 #       Uses packages: ggplot2 (ggplot, aes, geom_col), dplyr (count, arrange)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Bar chart of cumulative calls per detector (ordered high to low)
 #
 #   - plot_detector_activity_caterpillar():
 #       Uses packages: ggplot2 (ggplot, aes, geom_point, geom_errorbarh),
 #                      dplyr (group_by, summarize), stats (mean, sd, qt)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Ordered dot plot with 95% CI whiskers (mean ± CI calls per night)
 #
 #   - plot_detector_boxplots():
 #       Uses packages: ggplot2 (ggplot, aes, geom_boxplot, facet_wrap)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Boxplots of nightly call distribution per detector
 #
 # Outlier Analysis - Impact of extreme nights:
 #
 #   - plot_activity_with_without_outliers():
-#       Uses packages: ggplot2 (ggplot, aes, geom_col, facet_wrap),
+#       Uses packages: ggplot2 (ggplot, aes, geom_boxplot),
 #                      dplyr (filter, mutate, group_by)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
-#       Purpose: Side-by-side bars comparing mean with/without high-activity nights
+#                       kpro_palette_detector, format_number)
+#       Purpose: Boxplots with outliers removed (>95th percentile per detector)
 #
 # Cross-Detector Patterns - Comparing activity across sites:
 #
@@ -65,7 +65,7 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_line, scale_color_manual),
 #                      dplyr (select, pivot_longer)
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Overlaid time series comparing nightly activity patterns
 #
 #   - plot_correlation_heatmap():
@@ -79,7 +79,7 @@
 #       Uses packages: ggplot2 (ggplot, aes, geom_line, facet_wrap),
 #                      dplyr (group_by, mutate, rank), zoo (rollmean),
 #       Calls internal: plot_helpers.R (theme_kpro, validate_plot_input,
-#                       kpro_palette_cat, format_number)
+#                       kpro_palette_detector, format_number)
 #       Purpose: Rank stability visualization (which detectors rank highest over time)
 # USAGE
 # -----
@@ -166,20 +166,24 @@ plot_total_calls_by_detector <- function(master_data) {
     df_name = "master_data"
   )
   
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(master_data$Detector))
+  
   # Calculate totals and order by descending counts
   totals <- master_data %>%
     dplyr::count(Detector, name = "TotalCalls") %>%
     dplyr::arrange(dplyr::desc(TotalCalls)) %>%
     dplyr::mutate(Detector = factor(Detector, levels = Detector))
-  
+
   # Build plot
-  ggplot(totals, aes(x = Detector, y = TotalCalls)) +
-    geom_col(fill = "#0072B2") +
+  ggplot(totals, aes(x = Detector, y = TotalCalls, fill = Detector)) +
+    geom_col() +
     geom_text(
       aes(label = format_number(TotalCalls)),
       vjust = -0.5,
       size = 3
     ) +
+    scale_fill_manual(values = detector_color_map) +
     scale_y_continuous(
       labels = scales::comma,
       expand = expansion(mult = c(0, 0.1))
@@ -189,7 +193,8 @@ plot_total_calls_by_detector <- function(master_data) {
       x = "Detector",
       y = "Total Calls"
     ) +
-    theme_kpro(rotate_x = TRUE)
+    theme_kpro(rotate_x = TRUE) +
+    theme(legend.position = "none")
 }
 
 
@@ -272,19 +277,23 @@ plot_detector_activity_caterpillar <- function(calls_per_night) {
   # Calculate overall mean for reference line
   overall_mean <- mean(summary_df$mean_calls, na.rm = TRUE)
   
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(calls_per_night$Detector))
+
   # Build plot
-  ggplot(summary_df, aes(x = mean_calls, y = Detector)) +
-    geom_point(size = 3, color = "#0072B2") +
+  ggplot(summary_df, aes(x = mean_calls, y = Detector, color = Detector)) +
+    geom_point(size = 3) +
     geom_errorbarh(
       aes(xmin = lower, xmax = upper),
       height = 0.2,
-      color = "#0072B2"
+      linewidth = 0.8
     ) +
     geom_vline(
       xintercept = overall_mean,
       linetype = "dashed",
       color = "gray50"
     ) +
+    scale_color_manual(values = detector_color_map) +
     scale_x_continuous(labels = scales::comma) +
     labs(
       title = "Relative Detector Activity",
@@ -292,7 +301,8 @@ plot_detector_activity_caterpillar <- function(calls_per_night) {
       x = "Mean Calls Per Night",
       y = "Detector"
     ) +
-    theme_kpro()
+    theme_kpro() +
+    theme(legend.position = "none")
 }
 
 
@@ -362,9 +372,14 @@ plot_detector_boxplots <- function(calls_per_night) {
   calls_per_night <- calls_per_night %>%
     dplyr::mutate(Detector = factor(Detector, levels = detector_order))
   
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(calls_per_night$Detector))
+
   # Build plot
-  ggplot(calls_per_night, aes(x = Detector, y = CallsPerNight)) +
-    geom_boxplot(fill = "#56B4E9", outlier.alpha = 0.5) +
+  ggplot(calls_per_night, aes(x = Detector, y = CallsPerNight, fill = Detector, color = Detector)) +
+    geom_boxplot(outlier.alpha = 0.5, color = "gray30", linewidth = 0.4) +
+    scale_fill_manual(values = detector_color_map) +
+    scale_color_manual(values = detector_color_map) +
     scale_y_continuous(labels = scales::comma) +
     labs(
       title = "Distribution of Nightly Activity by Detector",
@@ -372,7 +387,8 @@ plot_detector_boxplots <- function(calls_per_night) {
       x = "Detector",
       y = "Calls Per Night"
     ) +
-    theme_kpro(rotate_x = TRUE)
+    theme_kpro(rotate_x = TRUE) +
+    theme(legend.position = "none")
 }
 
 
@@ -383,20 +399,19 @@ plot_detector_boxplots <- function(calls_per_night) {
 #' Compare Activity With and Without Outliers
 #'
 #' @description
-#' Creates side-by-side boxplots comparing CallsPerNight distributions
-#' with all data versus with outliers removed. Outliers are defined as
-#' values above the 95th percentile within each detector.
+#' Creates boxplots of CallsPerNight distributions with outliers removed.
+#' Outliers are defined as values above the 95th percentile within each detector.
 #'
 #' @param calls_per_night Data frame. Must contain columns:
 #'   - Detector: Character. Unique detector identifier.
 #'   - CallsPerNight: Numeric. Number of calls per night.
 #'
-#' @return ggplot object showing paired boxplots (all data vs. filtered).
+#' @return ggplot object showing boxplots with outliers removed.
 #'
 #' @details
-#' This plot helps assess whether summary statistics are unduly influenced
-#' by a few high-activity nights. Each detector has its own 95th percentile
-#' threshold, so outlier detection is relative to each site's typical range.
+#' This plot helps assess typical activity patterns without extreme nights.
+#' Each detector has its own 95th percentile threshold, so outlier detection
+#' is relative to each site's typical range.
 #'
 #' The subtitle reports the total number of outlier nights removed, helping
 #' contextualize how much data is affected.
@@ -407,7 +422,6 @@ plot_detector_boxplots <- function(calls_per_night) {
 #' @section CONTRACT:
 #' - Returns a ggplot object
 #' - Outliers defined as > 95th percentile per detector
-#' - Both datasets shown side-by-side for each detector
 #' - Reports count of removed outliers in subtitle
 #'
 #' @section DOES NOT:
@@ -444,27 +458,21 @@ plot_activity_with_without_outliers <- function(calls_per_night) {
   
   n_outliers <- sum(calls_flagged$is_outlier, na.rm = TRUE)
   
-  # Create combined dataset with both versions
-  calls_combined <- dplyr::bind_rows(
-    calls_flagged %>% dplyr::mutate(DataType = "All Data"),
-    calls_flagged %>%
-      dplyr::filter(!is_outlier) %>%
-      dplyr::mutate(DataType = "Without Outliers (>95th %ile)")
-  ) %>%
-    dplyr::mutate(
-      DataType = factor(
-        DataType,
-        levels = c("All Data", "Without Outliers (>95th %ile)")
-      )
-    )
-  
+  # Keep only non-outlier data for final plot
+  calls_filtered <- calls_flagged %>%
+    dplyr::filter(!is_outlier)
+
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(calls_per_night$Detector))
+
   # Build plot
-  ggplot(calls_combined, aes(x = Detector, y = CallsPerNight, fill = DataType)) +
-    geom_boxplot(position = position_dodge(width = 0.8), outlier.alpha = 0.3) +
-    scale_fill_manual(values = c("#0072B2", "#56B4E9")) +
+  ggplot(calls_filtered, aes(x = Detector, y = CallsPerNight, fill = Detector, color = Detector)) +
+    geom_boxplot(outlier.alpha = 0.3, color = "gray30", linewidth = 0.4) +
+    scale_fill_manual(values = detector_color_map) +
+    scale_color_manual(values = detector_color_map) +
     scale_y_continuous(labels = scales::comma) +
     labs(
-      title = "Effect of Outlier Removal on Activity Distributions",
+      title = "Nightly Activity by Detector (Outliers Removed)",
       subtitle = sprintf(
         "%s outlier nights removed (>95th percentile per detector)",
         format_number(n_outliers)
@@ -474,7 +482,7 @@ plot_activity_with_without_outliers <- function(calls_per_night) {
       fill = NULL
     ) +
     theme_kpro(rotate_x = TRUE) +
-    theme(legend.position = "top")
+    theme(legend.position = "none")
 }
 
 
@@ -518,7 +526,7 @@ plot_activity_with_without_outliers <- function(calls_per_night) {
 #' @section DOES NOT:
 #' - Calculate synchrony metrics
 #' - Statistically test for correlation
-#' - Color-code individual detectors (use plot_activity_over_time for that)
+#' - Hide detector identity (colors map to detectors with a legend)
 #'
 #' @examples
 #' \dontrun{
@@ -538,17 +546,23 @@ plot_synchrony <- function(calls_per_night) {
     df_name = "calls_per_night"
   )
   
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(calls_per_night$Detector))
+
   # Build plot with overlaid transparent lines
-  ggplot(calls_per_night, aes(x = Night, y = CallsPerNight, group = Detector)) +
-    geom_line(alpha = 0.4, color = "#0072B2") +
+  ggplot(calls_per_night, aes(x = Night, y = CallsPerNight, color = Detector)) +
+    geom_line(alpha = 0.5) +
+    scale_color_manual(values = detector_color_map) +
     scale_y_continuous(labels = scales::comma) +
     labs(
       title = "Synchrony of Bat Activity Across Detectors",
       subtitle = "Overlapping patterns suggest shared environmental drivers",
       x = "Night",
-      y = "Calls Per Night"
+      y = "Calls Per Night",
+      color = "Detector"
     ) +
-    theme_kpro()
+    theme_kpro() +
+    theme(legend.position = "top")
 }
 
 
@@ -766,11 +780,14 @@ plot_detector_rank_over_time <- function(calls_per_night, window = 7) {
   
   n_detectors <- dplyr::n_distinct(ranked$Detector)
   
+  # Get stable color mapping for all detectors
+  detector_color_map <- get_detector_color_mapping(unique(calls_per_night$Detector))
+  
   # Build plot with reversed y-axis (rank 1 at top)
   ggplot(ranked, aes(x = Night, y = rank, color = Detector, group = Detector)) +
     geom_line(linewidth = 1, alpha = 0.8) +
     scale_y_reverse(breaks = 1:n_detectors) +
-    scale_color_manual(values = kpro_palette_cat(n_detectors)) +
+    scale_color_manual(values = detector_color_map) +
     labs(
       title = "Detector Activity Rankings Over Time",
       subtitle = sprintf("%d-day rolling average", window),

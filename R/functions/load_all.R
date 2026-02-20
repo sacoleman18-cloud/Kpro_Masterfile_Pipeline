@@ -130,12 +130,14 @@ message("[6/9] Loading Layer 6: output/")
 
 # Plot helpers FIRST
 source_module(file.path("R", "functions", "output", "plot_helpers.R"), "plot_helpers.R (shared plotting utilities)")
+source_module(file.path("R", "functions", "output", "plot_error_isolation.R"), "plot_error_isolation.R (per-plot error safety)")
 source_module(file.path("R", "functions", "output", "table_helpers.R"), "table_helpers.R (shared GT table utilities)")
 
 # Plot modules
 source_module(file.path("R", "functions", "output", "plot_quality.R"),   "plot_quality.R   (data quality visualizations)")
 source_module(file.path("R", "functions", "output", "plot_detector.R"),  "plot_detector.R  (detector performance plots)")
 source_module(file.path("R", "functions", "output", "plot_species.R"),   "plot_species.R   (species composition plots)")
+source_module(file.path("R", "functions", "output", "plot_species2.R"),  "plot_species2.R  (species advanced plots)")
 source_module(file.path("R", "functions", "output", "plot_temporal.R"),  "plot_temporal.R  (temporal activity plots)")
 
 # Tables + report
@@ -292,6 +294,8 @@ message("
           │                            (7 functions)
           ├─ plot_species.R .........  Species composition plots
           │                            (5 functions)
+          ├─ plot_species2.R ........  Species advanced plots
+          │                            (6 functions)
           ├─ plot_temporal.R ........  Temporal pattern plots
           │                            (6 functions)
           ├─ table_helpers.R ........  Shared GT table utilities
