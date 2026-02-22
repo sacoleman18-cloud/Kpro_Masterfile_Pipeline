@@ -1,8 +1,8 @@
 # ==============================================================================
 # KPro MASTERFILE PIPELINE: CODING STANDARDS INDEX
 # ==============================================================================
-# VERSION: 3.0
-# LAST UPDATED: 2026-02-08
+# VERSION: 3.1
+# LAST UPDATED: 2026-02-21
 # PURPOSE: Navigation hub for modular coding standards and checkpointed phase orchestration
 # ==============================================================================
 
@@ -56,6 +56,7 @@ The coding standards are organized into focused documents for targeted reference
 | `ST_architecture_standards.md` | v3.0 | Project structure, phases, file naming, paths | Organizing files, understanding phase flow, adding directories |
 | `ST_documentation_standards.md` | v2.3 | Headers, Roxygen2, comments, collaboration | Documenting functions, writing phase orchestrator headers |
 | `ST_code_design_standards.md` | v2.4 | Function design, error handling, style, assertions | Writing functions, handling errors, code review |
+| **[ST_module_result_contract.md](ST_module_result_contract.md)** | **NEW v1.0** | **Canonical module/phase result structure and handoff rules** | **Standardizing module payloads, checkpoint semantics, validation prominence, deterministic in-memory handoff** |
 | `ST_data_standards.md` | v2.4 | Data handling, quality, validation, hashing, filters | Validating data, adding quality checks, fingerprinting |
 | `ST_logging_console_standards.md` | v2.4 | Logging, console output, progress indicators, verbose gating | Adding logging, formatting console messages |
 | `ST_quarto_reporting_standards.md` | v2.3 | Quarto integration, reports, manifest | Working with Quarto, generating reports |
@@ -163,6 +164,7 @@ assert_not_empty(df)
 ### Level 2: Implementation Standards
 - **[ST_documentation_standards.md](ST_documentation_standards.md)** - How to document
 - **[ST_code_design_standards.md](ST_code_design_standards.md)** - How to design functions
+- **[ST_module_result_contract.md](ST_module_result_contract.md)** - Module and phase return contracts
 - **[ST_data_standards.md](ST_data_standards.md)** - Data handling and validation
 - **[ST_logging_console_standards.md](ST_logging_console_standards.md)** - Logging and output
 
@@ -216,6 +218,11 @@ assert_not_empty(df)
 
 **New Documents:**
 - ✨ ST_ORCHESTRATION_PHILOSOPHY.md (v1.0) - Authoritative orchestration reference
+
+### v3.1 (2026-02-21) - MODULE RESULT CONTRACT STANDARD
+
+**New Documents:**
+- ✨ ST_module_result_contract.md (v1.0) - Canonical result payload/handoff contract
 
 **Updated Documents:**
 - ST_architecture_standards.md (v2.5 → v3.0) - Complete rewrite for phases

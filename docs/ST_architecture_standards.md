@@ -230,10 +230,10 @@ results/validation/validation_phase1_YYYYMMDD_HHMMSS.html
 
 **Phase 2 Checkpoints:**
 ```
-outputs/03_CallsPerNight_Template_ORIGINAL_YYYYMMDD_HHMMSS.csv
 outputs/03_CallsPerNight_Template_EDIT_THIS_YYYYMMDD_HHMMSS.csv
 results/validation/validation_phase2_YYYYMMDD_HHMMSS.html
 ```
+Note: Original template is passed in-memory to Phase 3 (deterministic handoff)
 
 **Phase 3 Outputs:**
 ```
@@ -386,18 +386,24 @@ list(
 
 ### 3.5 Phase 2: Template Generation (Module 3)
 
-**Function:** `run_phase2_template_generation(phase1_result = NULL, manual_id_file = NULL, verbose = FALSE)`
+**Function:** `run_phase2_template_generation(phase1_result = NULL, verbose = FALSE)`
 
 **Purpose:** Generate CallsPerNight template with recording schedules and prepare for human review.
+Manual ID configuration controlled via YAML (`processing_options.use_manual_ids`).
 
 **Input:** phase1_result from Phase 1 (contains kpro_master)
+
+**Configuration:** Reads `processing_options.use_manual_ids` from study_parameters.yaml
+  - If `yes/true`: Loads user-edited `kpro_master.csv` from Phase 1 checkpoint
+  - If `no/false` (default): Uses in-memory `kpro_master` from Phase 1
 
 **Module Execution:**
 1. `run_module_cpn_template()` - Generate CPN template with recording hours
 
 **Checkpoints:** 
-- `outputs/03_CallsPerNight_Template_ORIGINAL_*.csv` (template before editing)
 - `outputs/03_CallsPerNight_Template_EDIT_THIS_*.csv` (template for user to edit)
+
+**In-Memory Original:** Original template is passed to Phase 3 via phase result for edit comparison (deterministic handoff, no disk file).
 
 **Human-in-the-Loop:** User MUST edit the EDIT_THIS file before Phase 3 can proceed
 
@@ -406,7 +412,7 @@ list(
 list(
   phase = 2,
   phase_name = "Template Generation",
-  cpn_template = tibble,
+  cpn_template = tibble,  # In-memory original passed to Phase 3
   metadata = list(
     n_detectors = integer,
     n_nights = integer,
@@ -479,8 +485,9 @@ list(
    - Input: ingestion_result
    - Output: kpro_master (standardized dataset)
 
-3. `run_module_cpn_template(standardization_result, manual_id_file = NULL, verbose = FALSE)`
-   - Input: kpro_master
+3. `run_module_cpn_template(standardization_result, verbose = FALSE)`
+   - Input: kpro_master (via standardization_result)
+   - YAML-driven: Checks `processing_options.use_manual_ids` for conditional master data loading
    - Output: cpn_template (template pair)
 
 4. `run_module_finalize_cpn(cpn_template_result, edited_template_file = NULL, verbose = FALSE)`

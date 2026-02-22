@@ -232,12 +232,20 @@ run_module_finalize_cpn <- function(cpn_template_result = NULL,
                                     verbose = FALSE) {
   if (verbose) cat("\n>>> Running MODULE 4: Finalize CPN\n\n")
   
-  # Extract kpro_master from Phase 2 result if provided
-  # Phase 2 includes updated kpro_master with species column
+  # Extract kpro_master and cpn_template from Phase 2 result if provided
+  # Phase 2 includes updated kpro_master with species column and in-memory cpn_template
   kpro_master <- NULL
-  if (!is.null(cpn_template_result) && "kpro_master" %in% names(cpn_template_result)) {
-    kpro_master <- cpn_template_result$kpro_master
-    if (verbose) cat("  [OK] Using kpro_master from Phase 2 (with species column)\n")
+  cpn_template_original <- NULL
+  
+  if (!is.null(cpn_template_result)) {
+    if ("kpro_master" %in% names(cpn_template_result)) {
+      kpro_master <- cpn_template_result$kpro_master
+      if (verbose) cat("  [OK] Using kpro_master from Phase 2 (with species column)\n")
+    }
+    if ("cpn_template" %in% names(cpn_template_result)) {
+      cpn_template_original <- cpn_template_result$cpn_template
+      if (verbose) cat("  [OK] Using cpn_template from Phase 2 (for edit comparison)\n")
+    }
   }
   # If not provided, finalize_cpn module will load from checkpoint
   
@@ -247,6 +255,7 @@ run_module_finalize_cpn <- function(cpn_template_result = NULL,
   
   result <- finalize_cpn(
     kpro_master = kpro_master,
+    cpn_template_original = cpn_template_original,
     edited_template_file = edited_template_file,
     study_params = study_params,
     registry = registry,

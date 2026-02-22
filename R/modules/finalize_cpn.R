@@ -10,9 +10,10 @@
 #
 # DRY REFACTORING APPLIED (Phase 1)
 # ----------------------------------
-# **Template Loading** (Stage 2): Uses load_and_normalize_template() helper
-#   - Eliminates 80 lines of duplicated loading/parsing logic
-#   - Handles both ORIGINAL and EDIT_THIS templates consistently
+# **Template Loading** (Stage 2): Uses in-memory cpn_template from Phase 2
+#   - Eliminates need for persistent ORIGINAL.csv file
+#   - ORIGINAL is passed through phase result for deterministic handoff
+#   - Fallback: load from disk if run standalone (testing only)
 #
 # **Edit Tracking** (Stage 3): Uses track_template_edits() helper
 #   - Eliminates 120 lines of complex POSIXct comparison logic
@@ -31,14 +32,15 @@
 # ------------------
 # Parameters:
 #   - kpro_master: Tibble from Phase 2 (or NULL to load from checkpoint)
+#   - cpn_template_original: In-memory template from Phase 2 (for edit comparison)
 #   - edited_template_file: Path to EDIT_THIS CPN template (or NULL to auto-discover)
 #   - study_params: List from load_study_parameters(yaml_path)
 #   - registry: Artifact registry from previous modules
 #   - verbose: Boolean for console output
 #
 # FILES (Read):
-#   - ORIGINAL CPN template (auto-discovered)
-#   - EDIT_THIS CPN template (parameter or auto-discovered)
+#   - EDIT_THIS CPN template (from disk, requires user editing in Phase 2)
+#   - No ORIGINAL file read (in-memory from Phase 2)
 #   - Study parameters YAML
 #
 # OUTPUT GUARANTEES
@@ -105,6 +107,10 @@
 #'
 #' @param kpro_master Tibble. Master dataset from Phase 2. If NULL, loads from
 #'   most recent checkpoint. Default: NULL.
+#' @param cpn_template_original Tibble. The in-memory ORIGINAL template from Phase 2.
+#'   Used for edit comparison (deterministic handoff, not disk-discovered).
+#'   If NULL, falls back to loading ORIGINAL from disk (standalone testing only).
+#'   Default: NULL.
 #' @param edited_template_file Character. Path to user-edited EDIT_THIS file.
 #'   If NULL, auto-discovers most recent. Default: NULL.
 #' @param study_params List. Study parameters from load_study_parameters().
@@ -156,6 +162,7 @@
 #'
 #' @export
 finalize_cpn <- function(kpro_master = NULL,
+                         cpn_template_original = NULL,
                          edited_template_file = NULL,
                          study_params,
                          registry = NULL,
@@ -241,17 +248,31 @@ finalize_cpn <- function(kpro_master = NULL,
   message(sprintf("  [OK] Schema validation passed: all required columns present (%s)", 
                   paste(required_columns, collapse = ", ")))
   
-  # Load ORIGINAL template using DRY helper
-  template_original <- load_and_normalize_template(
-    template_type = "ORIGINAL",
-    output_dir = outputs_dir,
-    verbose = verbose
-  )
-  template_original_file <- attr(template_original, "source_file") %||% NA_character_
+  # Load or use ORIGINAL template
+  # ORIGINAL is passed in-memory from Phase 2 (deterministic handoff, not disk-discovered)
+  if (!is.null(cpn_template_original)) {
+    # Use in-memory original from Phase 2 result
+    template_original <- cpn_template_original
+    if (verbose) {
+      message(sprintf("  [OK] Using in-memory ORIGINAL template from Phase 2 (%d rows)", 
+                      nrow(template_original)))
+    }
+  } else {
+    # Fallback: load from disk (for standalone testing)
+    template_original <- load_and_normalize_template(
+      template_type = "ORIGINAL",
+      output_dir = outputs_dir,
+      verbose = verbose
+    )
+    if (verbose) {
+      message(sprintf("  [!] Loaded ORIGINAL template from disk (fallback mode): %d rows", 
+                      nrow(template_original)))
+    }
+  }
+  
+  template_original_file <- attr(template_original, "source_file") %||% "in-memory (Phase 2)"
   
   if (verbose) {
-    message(sprintf("  [OK] Loaded ORIGINAL template: %s (%d rows)", 
-                    basename(template_original_file), nrow(template_original)))
     message(sprintf("  [OK] Date range: %s to %s", 
                     min(template_original$Night, na.rm = TRUE),
                     max(template_original$Night, na.rm = TRUE)))

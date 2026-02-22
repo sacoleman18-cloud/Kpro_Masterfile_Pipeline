@@ -605,6 +605,62 @@ intended_hours: 4
 
 ---
 
+### use_manual_ids
+
+**Type:** Boolean  
+**Required:** NO  
+**Valid Values:** `yes`, `no`, `true`, `false`  
+**Default:** `no`  
+**Recommended:** `no` (unless manually editing kpro_master data)
+
+```yaml
+processing_options:
+  use_manual_ids: no
+```
+
+**Purpose:**  
+Controls whether Phase 2 (Template Generation) loads a user-edited version of the standardized kpro_master dataset from Phase 1.
+
+**What This Controls:**
+
+**Option: `no` (Default - Most Common)**
+- Phase 2 uses the in-memory kpro_master from Phase 1 (no changes)
+- No re-reading of Phase 1 output files
+- Standard deterministic pipeline behavior
+
+**Option: `yes` (User Edits Applied)**
+- Phase 2 loads the user-edited `kpro_master.csv` file from Phase 1
+- Allows corrections to standardized data before template generation
+- Useful for fixing edge cases or data quality issues
+
+**When To Use `yes`:**
+- ✅ You found errors in the standardized master data
+- ✅ You manually corrected species IDs in outputs/checkpoints/
+- ✅ You need to add/remove rows from the master dataset
+- ✅ You're re-running Phase 2 with manual corrections to Phase 1 output
+
+**When To Use `no` (Recommended):**
+- ✅ First run of Phase 1 → Phase 2 pipeline
+- ✅ No manual edits to Phase 1 outputs
+- ✅ Trust the automated standardization
+- ✅ Standard workflow without manual interventions
+
+**Workflow with `yes`:**
+1. Run Phase 1 (Data Preparation) and save results
+2. Review output: `outputs/checkpoints/02_kpro_master_*.csv`
+3. If you find errors, edit the CSV file directly
+4. Set `use_manual_ids: yes` in study_parameters.yaml
+5. Run Phase 2 (Template Generation) - it will load your edited file
+6. Continue to Phase 3
+
+**File Location:**
+When `use_manual_ids: yes`, Phase 2 looks for: `outputs/checkpoints/02_kpro_master_*.csv`
+
+**Shiny App Integration:**
+This setting is controlled via the Shiny app UI. Users select whether to use edited master data without editing R code.
+
+---
+
 ## SECTION 4: OUTPUT_PREFERENCES
 
 Controls file naming and output locations.

@@ -377,6 +377,7 @@ plot_detector_boxplots <- function(calls_per_night) {
 
   # Build plot
   ggplot(calls_per_night, aes(x = Detector, y = CallsPerNight, fill = Detector, color = Detector)) +
+    geom_point(alpha = 0.4, size = 2) +
     geom_boxplot(outlier.alpha = 0.5, color = "gray30", linewidth = 0.4) +
     scale_fill_manual(values = detector_color_map) +
     scale_color_manual(values = detector_color_map) +
@@ -467,6 +468,7 @@ plot_activity_with_without_outliers <- function(calls_per_night) {
 
   # Build plot
   ggplot(calls_filtered, aes(x = Detector, y = CallsPerNight, fill = Detector, color = Detector)) +
+    geom_point(alpha = 0.4, size = 2) +
     geom_boxplot(outlier.alpha = 0.3, color = "gray30", linewidth = 0.4) +
     scale_fill_manual(values = detector_color_map) +
     scale_color_manual(values = detector_color_map) +

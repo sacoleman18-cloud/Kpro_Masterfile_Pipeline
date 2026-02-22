@@ -23,19 +23,31 @@
 #   file to adjust recording hours before proceeding to Phase 3.
 #
 # Data Flow (This Phase):
-#   Input:  kpro_master from Phase 1 (or manual ID file or checkpoint)
+#   Input:  kpro_master from Phase 1 
+#           ├─→ If use_manual_ids (YAML): reads Phase 1 checkpoint kpro_master.csv
+#           └─→ If not use_manual_ids (YAML): uses in-memory from Phase 1 result
 #   ├─→ Module 3: CPN Template → CPN template grid
-#   Output: CPN_Template_EDIT_THIS.csv + CPN_Template_ORIGINAL.csv
+#   Output: CPN_Template_EDIT_THIS.csv (for user editing)
+#           In-memory original for Phase 3 edit tracking
+#
+# Manual ID Configuration (Shiny App Control):
+#   - YAML key: processing_options.use_manual_ids
+#   - yes/true  → Load user-edited kpro_master.csv from Phase 1 checkpoint
+#   - no/false  → Use in-memory kpro_master from Phase 1 result (default)
+#   - Users control this via Shiny app UI (no R code editing)
 #
 # Module Execution:
 #   - Calls run_module_cpn_template() from module_runner
-#   - Accepts kpro_master from Phase 1 or loads from checkpoint
-#   - Supports optional Manual ID file integration
+#   - YAML-driven conditional master file re-entry
+#   - Checkpoint path determines manual ID behavior
 #
 # Checkpoint Output:
-#   - outputs/03_CallsPerNight_Template_YYYYMMDD_HHMMSS_EDIT_THIS.csv
-#   - outputs/03_CallsPerNight_Template_YYYYMMDD_HHMMSS_ORIGINAL.csv
+#   - outputs/03_CallsPerNight_Template_YYYYMMDD_HHMMSS_EDIT_THIS.csv (user edits this)
 #   - results/validation/validation_*.html
+#
+# Edit Tracking:
+#   - In-memory template passed to Phase 3 for comparison with user-edited version
+#   - No persistent ORIGINAL file (deterministic in-memory handoff)
 #
 # Dependencies:
 #   - R/functions/load_all.R (master loader)
@@ -53,10 +65,15 @@
 #' by calling module runner. Produces CPN template checkpoint requiring manual
 #' editing before Phase 3.
 #'
+#' **Manual ID Configuration (YAML-Driven):**
+#' Module 3 checks `use_manual_ids` setting in study_parameters.yaml:
+#'   - If `yes/true` → Loads user-edited kpro_master.csv from Phase 1 checkpoint
+#'   - If `no/false` → Uses in-memory kpro_master from Phase 1 result
+#' This enables Shiny app users to control whether to use edited master data
+#' without modifying R code.
+#'
 #' @param phase1_result Result from run_phase1_data_preparation() (or NULL to load
 #'   from checkpoint).
-#' @param manual_id_file Character. Path to manually-ID'd CSV file (optional).
-#'   If provided, overrides kpro_master from Phase 1.
 #' @param verbose Logical. Whether to print detailed progress messages.
 #'   Default FALSE (silent operation).
 #'
@@ -64,9 +81,8 @@
 #'   \itemize{
 #'     \item \code{phase}: Phase number (2)
 #'     \item \code{phase_name}: "Template Generation"
-#'     \item \code{cpn_template}: Tibble with CPN template grid
+#'     \item \code{cpn_template}: Tibble with CPN template grid (passed to Phase 3 for edit comparison)
 #'     \item \code{template_edit_path}: Path to EDIT_THIS template (for user editing)
-#'     \item \code{template_original_path}: Path to ORIGINAL template (tracking)
 #'     \item \code{checkpoint_path}: Path to phase checkpoint artifact
 #'     \item \code{metadata}: List with template dimensions
 #'     \item \code{artifact_ids}: Character vector of registered artifact IDs
@@ -95,7 +111,6 @@
 #'
 #' @export
 run_phase2_template_generation <- function(phase1_result = NULL,
-                                           manual_id_file = NULL,
                                            verbose = FALSE) {
   
   # ===========================================================================
@@ -127,6 +142,60 @@ run_phase2_template_generation <- function(phase1_result = NULL,
   # ===========================================================================
   
   if (verbose) cat("\n>>> [Phase 2 - Module 3/3] CPN Template Generation\n")
+  
+  # Load study parameters to check manual ID configuration
+  study_params <- load_study_parameters(here::here("inst", "config", "study_parameters.yaml"))
+  
+  # Determine manual_id_file from YAML config
+  use_manual_ids <- study_params$processing_options$use_manual_ids %||% FALSE
+  
+  # Convert yes/no/true/false to boolean
+  if (is.character(use_manual_ids)) {
+    use_manual_ids <- tolower(use_manual_ids) %in% c("yes", "true")
+  } else {
+    use_manual_ids <- as.logical(use_manual_ids)
+  }
+  
+  # Determine which kpro_master to use based on YAML config
+  manual_id_file <- NULL
+  
+  if (use_manual_ids) {
+    # Look for most recent kpro_master checkpoint
+    checkpoint_dir <- here::here("outputs", "checkpoints")
+    
+    if (dir.exists(checkpoint_dir)) {
+      checkpoint_files <- list.files(
+        checkpoint_dir,
+        pattern = "^02_kpro_master_.*\\.csv$",
+        full.names = TRUE,
+        sort = TRUE
+      )
+      
+      if (length(checkpoint_files) > 0) {
+        # Use the most recent file
+        manual_id_file <- tail(checkpoint_files, 1)
+        if (verbose) {
+          cat(sprintf("  [YAML Config] use_manual_ids: enabled\n"))
+          cat(sprintf("  [YAML Config] Loading manual ID file: %s\n", basename(manual_id_file)))
+        }
+      } else {
+        if (verbose) {
+          cat(sprintf("  [YAML Config] use_manual_ids: enabled\n"))
+          cat(sprintf("  [YAML Config] No kpro_master checkpoint found - will use in-memory\n"))
+        }
+      }
+    } else {
+      if (verbose) {
+        cat(sprintf("  [YAML Config] use_manual_ids: enabled\n"))
+        cat(sprintf("  [YAML Config] Checkpoint directory missing - will use in-memory\n"))
+      }
+    }
+  } else {
+    if (verbose) {
+      cat(sprintf("  [YAML Config] use_manual_ids: disabled\n"))
+      cat(sprintf("  [YAML Config] Using in-memory kpro_master from Phase 1\n"))
+    }
+  }
   
   # Extract kpro_master from Phase 1 result if provided
   standardization_result <- NULL
@@ -163,7 +232,6 @@ run_phase2_template_generation <- function(phase1_result = NULL,
   kpro_master <- module3_result$kpro_master  # Updated with species column for Phase 3
   metadata <- module3_result$metadata
   template_edit_path <- module3_result$template_edit_path
-  template_original_path <- module3_result$template_original_path
   checkpoint_path <- module3_result$checkpoint_path %||% template_edit_path
   phase_artifact_ids <- module3_result$artifact_ids %||% character(0)
   if (is.list(phase_artifact_ids)) {
@@ -209,9 +277,8 @@ run_phase2_template_generation <- function(phase1_result = NULL,
     phase = 2,
     phase_name = "Template Generation",
     kpro_master = kpro_master,  # Updated with species column for Phase 3
-    cpn_template = cpn_template,
+    cpn_template = cpn_template,  # Passed in-memory to Phase 3 for edit comparison
     template_edit_path = template_edit_path,
-    template_original_path = template_original_path,
     checkpoint_path = checkpoint_path,
     metadata = metadata,
     artifact_ids = phase_artifact_ids,

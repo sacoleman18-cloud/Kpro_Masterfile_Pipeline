@@ -44,12 +44,13 @@ R/pipeline/
 │   ├─ Executes: Module 3 (CPN Template)
 │   ├─ Input: result1 from Phase 1
 │   ├─ Output: CPN_Template_EDIT_THIS.csv (requires human editing)
-│   ├─ Output: CPN_Template_ORIGINAL.csv (tracking)
+│   ├─ In-Memory: Original template passed to Phase 3 (edit comparison)
 │   └─ Returns: result2 (passed to Phase 3)
 │
 └── run_phase3_analysis_reporting.R
     ├─ Executes: Modules 4-7 (Finalize, Stats, Plotting, Report)
     ├─ Input: result2 from Phase 2 (assumes template was edited)
+    ├─ Input: In-memory original from Phase 2 (for edit tracking)
     ├─ Output: HTML report, plots, release bundle
     └─ Returns: result3 (pipeline complete)
 ```
@@ -123,7 +124,7 @@ result3 <- run_phase3_analysis_reporting(result2, verbose = TRUE)
 
 **Outputs:**
 - Phase 1: kpro_master checkpoint + validation
-- Phase 2: CPN templates (EDIT_THIS and ORIGINAL)
+- Phase 2: CPN_Template_EDIT_THIS.csv + in-memory original for Phase 3
 - Phase 3: Final report, plots, release bundle
 
 #### Section 2: Module-Level Testing

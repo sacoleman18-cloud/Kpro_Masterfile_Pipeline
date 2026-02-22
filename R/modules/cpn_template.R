@@ -19,7 +19,7 @@
 #   Stage 5: Generate detector × night template grid (with schedule)
 #   Stage 6: Verify recording schedule configuration
 #   Stage 7: Format template for Excel (sort, datetime, formulas)
-#   Stage 8: Save templates (ORIGINAL + EDIT_THIS), register artifacts
+#   Stage 8: Save template (EDIT_THIS), register artifacts
 #   Stage 9: Render validation HTML
 #
 # Data Flow:
@@ -62,12 +62,12 @@
 #'
 #' @return Named list containing:
 #'   \itemize{
-#'     \item \code{cpn_template}: Tibble with CPN template grid
+#'     \item \code{cpn_template}: Tibble with CPN template grid (passed in-memory to Phase 3)
+#'     \item \code{kpro_master}: Updated master data with species column
 #'     \item \code{validation_html_paths}: Character vector of validation HTML paths
 #'     \item \code{metadata}: List with template dimensions and configuration
-#'     \item \code{template_edit_path}: Path to EDIT_THIS template file
-#'     \item \code{template_original_path}: Path to ORIGINAL template file
-#'     \item \code{artifact_ids}: Named list of registered artifact IDs (original/edit)
+#'     \item \code{template_edit_path}: Path to EDIT_THIS template file for user editing
+#'     \item \code{artifact_ids}: Named list of registered artifact ID (edit only)
 #'   }
 #'
 #' @examples
@@ -543,32 +543,12 @@ module_cpn_template <- function(kpro_master = NULL,
   # STAGE 8: SAVE TEMPLATES & REGISTER
   # ===========================================================================
   
-  log_stage_start("8", "Save Templates & Register", verbose = verbose,
+  log_stage_start("8", "Save Template & Register", verbose = verbose,
                   phase_prefix = "CPN Template")
   
-  # Save ORIGINAL template
-  original_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "ORIGINAL")
-  original_path <- here::here("outputs", original_filename)
-  
-  artifact_id_original <- sub("\\.csv$", "", generate_timestamped_filename("cpn_template_original"))
-  registry <- save_checkpoint_and_register(
-    data = cpn_template,
-    file_path = original_path,
-    artifact_name = artifact_id_original,
-    artifact_type = "cpn_template",
-    phase_id = "cpn_template",
-    metadata = list(
-      n_rows = nrow(cpn_template),
-      n_detectors = length(detectors),
-      n_nights = n_nights,
-      template_type = "ORIGINAL"
-    ),
-    verbose = verbose
-  )
-  
-  if (verbose) message(sprintf("  [OK] Saved ORIGINAL: %s", basename(original_path)))
-  
   # Save EDIT_THIS template
+  # NOTE: ORIGINAL template is NOT saved to disk. Instead, the in-memory cpn_template
+  # is passed to Phase 3 for edit comparison (deterministic handoff, no disk discovery)
   edit_filename <- generate_timestamped_filename("03_CallsPerNight_Template", suffix = "EDIT_THIS")
   edit_path <- here::here("outputs", edit_filename)
   
@@ -591,7 +571,7 @@ module_cpn_template <- function(kpro_master = NULL,
   
   if (verbose) message(sprintf("  [OK] Saved EDIT_THIS: %s", basename(edit_path)))
   
-  log_message("[Stage 8] Templates saved and registered")
+  log_message("[Stage 8] Template saved and registered")
   
   # ===========================================================================
   # STAGE 9: RENDER VALIDATION HTML
@@ -646,10 +626,8 @@ module_cpn_template <- function(kpro_master = NULL,
     rows_removed_noid = n_noid_removed,
     species_source = species_source
   )
-  result$template_original_path <- original_path
   result$template_edit_path <- edit_path
   result$artifact_ids <- list(
-    original = artifact_id_original,
     edit = artifact_id_edit
   )
   

@@ -43,7 +43,8 @@ The KPro Masterfile Pipeline uses **checkpointed phase orchestration** as the au
 
 **Phase 2: Template Generation (Module 3)**
 - Generates CallsPerNight template with recording schedules
-- Produces: CPN_Template_ORIGINAL & CPN_Template_EDIT_THIS.csv
+- Produces: CPN_Template_EDIT_THIS.csv (for user editing)
+- Passes in-memory original to Phase 3 for edit comparison (deterministic handoff)
 - **Requires human editing before proceeding**
 - Function: `run_phase2_template_generation(phase1_result)`
 
@@ -139,8 +140,9 @@ Located in: `R/modules/module_runner.R`
    - Produces: kpro_master
    - Called by: Phase 1
 
-3. `run_module_cpn_template(standardization_result, manual_id_file = NULL, verbose = FALSE)`
-   - Generates CPN template
+3. `run_module_cpn_template(standardization_result, verbose = FALSE)`
+   - Generates CPN template (YAML-configured manual ID re-entry)
+   - Reads `processing_options.use_manual_ids` from study_parameters.yaml
    - Produces: cpn_template pair
    - Called by: Phase 2
 

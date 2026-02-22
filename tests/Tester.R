@@ -55,7 +55,7 @@ cat("\n")
 cat(">>> Running Phase 2: Template Generation...\n")
 cat("    Modules: 3 (CPN Template Generation)\n")
 cat("    Input: result1 from Phase 1\n")
-cat("    Output: CPN_Template_EDIT_THIS.csv and ORIGINAL\n\n")
+cat("    Output: CPN_Template_EDIT_THIS.csv (in-memory original for edit comparison)\n\n")
 
 result2 <- run_phase2_template_generation(
   phase1_result = result1,
@@ -64,7 +64,7 @@ result2 <- run_phase2_template_generation(
 
 cat("\n✓ Phase 2 complete\n")
 cat(sprintf("  Template (EDIT): %s\n", result2$template_edit_path))
-cat(sprintf("  Template (ORIGINAL): %s\n", result2$template_original_path))
+cat("  Template (ORIGINAL): In-memory, passed to Phase 3 for edit tracking\n")
 cat("  ⚠ USER ACTION REQUIRED: Edit the CPN_Template_EDIT_THIS.csv file before Phase 3\n")
 cat("\n")
 
